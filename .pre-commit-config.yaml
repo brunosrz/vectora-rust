@@ -1,0 +1,273 @@
+default_language_version:
+  python: python3
+  node: "26.13.0"
+
+default_stages: [pre-commit]
+minimum_pre_commit_version: 4.0.0
+
+exclude: |
+  (?x)^(
+    \.git/.*|
+    .*\.pdf$|
+    .*\.lock$|
+    package-lock\.json|
+    .*pnpm-lock\.yaml|
+    yarn\.lock|
+    coverage\..*|
+    \.env.*|
+    \.venv/.*|
+    graphify.*|
+    backend/services/context_graph/.*|
+    # `\.mjs.*` (sem `.*` no início) só batia com caminho começando
+    # literalmente em ".mjs" — nunca excluía nada de verdade. O prettier
+    # vinha reformatando frontend/public/pdf.worker.min.mjs (vendor
+    # minificado, licença do PDF.js) toda vez que alguém rodava o hook com
+    # uma versão/config diferente de prettier — regex corrigida pra bater
+    # em qualquer .mjs, casado com a intenção original (excluir tudo).
+    .*\.mjs$|
+    ^chrome-devtools-mcp-main/.*|
+    ^hermes-agent/.*|
+    ^paperclip-master/.*|
+    ^omskills-main/.*|
+    ^ragflow-main/.*|
+    ^graphify-8/.*|
+    ^\.claude/worktrees/.*|
+    (^|/)node_modules/.*|
+    (^|/)\.venv/.*|
+    (^|/)dist/.*|
+    (^|/)build/.*|
+    (^|/)coverage/.*|
+    (^|/)\.pytest_cache/.*|
+    (^|/)__pycache__/.*
+  )$
+
+# Velocidade dos hooks: `uv run` sem `--no-project` reconstrói e sincroniza o
+# ambiente do projeto inteiro a cada chamada (mais de 10 s). Os hooks que só
+# usam a stdlib rodam com `--no-project`; os que precisam das ferramentas do
+# projeto (bandit, ty) usam `--no-sync` e exigem `uv sync` feito antes. Os que
+# analisam código recebem só os arquivos do commit.
+
+repos:
+  - repo: local
+    hooks:
+      - id: environment
+        name: Detectar ambiente (Linux, Windows, macOS)
+        entry: uv run --no-project python utils/checks.py environment
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  # ==========================================================================
+  # Base compartilhada: idêntica nos repositórios do app, do services e da
+  # company. Mudou aqui, mude nos três. Tudo que é Python roda via `uv run`; o
+  # Node dos hooks vem de default_language_version.
+  # ==========================================================================
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.13.9
+    hooks:
+      - id: uv-lock
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+        name: Fix End of File
+      - id: check-yaml
+        name: Validate YAML
+        args: ["--allow-multiple-documents", "--unsafe"]
+      - id: check-json
+        name: Validate JSON
+        exclude: tsconfig.*\.json$
+      - id: check-toml
+        name: Validate TOML
+      - id: check-merge-conflict
+        name: Check for Merge Conflicts
+      - id: check-added-large-files
+        name: Check for Large Files
+        args: ["--maxkb=5000"]
+      - id: detect-private-key
+        name: Detect Private Keys
+
+  - repo: local
+    hooks:
+      - id: compileall
+        name: Python Syntax (compileall)
+        entry: uv run --no-project python -m compileall -q -j0
+        language: system
+        types: [python]
+      - id: removed-path-references
+        name: Check references to removed or renamed paths
+        entry: uv run --no-project python utils/checks.py removed-paths
+        language: system
+        always_run: true
+        pass_filenames: false
+      - id: no-plan-comments
+        name: Sem Sprint/Bloco/Fase ou menção a ferramenta de IA em código
+        entry: uv run --no-project python utils/checks.py no-plan --changed
+        language: system
+        files: \.(py|ts|tsx|js|jsx|mts)$
+        exclude: ^utils/(checks|test_checks)\.py$
+      - id: release-lines-config
+        name: Validate release line configuration
+        entry: uv run --no-project --with "pydantic>=2.13.4" python utils/release.py line master
+        language: system
+        files: ^\.github/release-lines\.json$
+        pass_filenames: false
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+        name: Gitleaks (segredos)
+        args: ["--redact"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.6
+    hooks:
+      - id: ruff
+        name: Ruff Lint (Python)
+        args: [--fix, --select, I]
+        files: \.py$
+      - id: ruff-format
+        name: Ruff Format (Python)
+        files: \.py$
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Prettier
+        entry: prettier --write
+        # `language: node` com versão fixa: o pre-commit cria um ambiente
+        # isolado com esse prettier exato (o mesmo do package.json), igual
+        # para qualquer cliente git (terminal, GitHub Desktop, VS Code, CI).
+        language: node
+        additional_dependencies: ["prettier@3.9.9"]
+        files: \.(ts|tsx|js|jsx|mjs|mts|cjs|json|md|yaml|yml|css)$
+        types_or: [text]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+        name: Lint GitHub Actions workflows
+        files: ^\.github/workflows/.*\.ya?ml$
+
+  # ==========================================================================
+  # Específicos deste repositório
+  # ==========================================================================
+  # ==========================================
+  # Security & Vulnerability Scans
+  # ==========================================
+  - repo: local
+    hooks:
+      - id: bandit
+        name: Bandit Security Scan
+        # Invoca via `python -m bandit` (spawna python.exe) em vez do launcher
+        # `bandit.exe`: o stub de console-script gerado pelo pip/uv não é
+        # assinado e o Smart App Control / WDAC do Windows o bloqueia ao spawn
+        # (os error 4551). `python -m` importa o mesmo módulo sem o stub.
+        # --exclude aqui espelha o mesmo skip do `scons lint` (SConstruct) —
+        # backend/context_graph é código portado do graphify (MIT) com
+        # exceções já documentadas em pyproject.toml per-file-ignores.
+        entry: uv run --no-sync python -m bandit -s B110,B101 -c pyproject.toml --exclude backend/context_graph
+        language: system
+        types: [python]
+
+  # ==========================================
+  # Type Checking — Python (Astral `ty`, full repo)
+  # ==========================================
+  # Substitui o antigo Pyright limitado a 2 pastas. `ty` é um type checker
+  # em Rust ~10x mais rápido que pyright/mypy e cobre tudo de uma vez.
+  - repo: local
+    hooks:
+      - id: ty
+        name: Type Check — Python (ty)
+        entry: uv run --no-sync ty check
+        language: system
+        files: ^(backend|tests)/.*\.py$
+
+  # ==========================================
+  # Contratos HTTP/SSE/tools — regenerados a partir do código
+  # ==========================================
+  # Reexporta `backend/contracts/` e `frontend/lib/contracts/index.ts`. Se algo
+  # mudar, o hook falha e deixa os arquivos atualizados para o `git add`.
+  - repo: local
+    hooks:
+      - id: contracts
+        name: Regenera os contratos (backend/contracts)
+        entry: uv run --no-sync python -m backend.contracts export
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+
+  # ==========================================
+  # JS/TS Lint — oxlint (Rust, OXC toolchain)
+  # ==========================================
+  # ~50–100x mais rapido que ESLint; config em chat/.oxlintrc.json.
+  - repo: local
+    hooks:
+      - id: translation-key-order
+        name: Ordenação das chaves de tradução
+        entry: uv run --no-project python utils/checks.py translation-keys --check
+        language: system
+        files: ^frontend/messages/.*\.json$
+
+      - id: oxlint
+        name: JS/TS Lint (oxlint)
+        entry: uv run --no-project python utils/checks.py frontend-lint
+        language: system
+        files: ^frontend/.*\.(ts|tsx|js|jsx|mjs|cjs)$
+
+      - id: frontend-unused
+        name: Frontend sem uso (knip contra o baseline)
+        entry: uv run --no-project python utils/unused_code.py frontend
+        language: system
+        files: ^(frontend/.*\.(ts|tsx|mts|json|jsonc)|utils/(unused_code\.py|unused_frontend_baseline\.json))$
+        pass_filenames: false
+
+      - id: unused-routes
+        name: Páginas sem navegação (rotas do frontend)
+        entry: uv run --no-project python utils/unused_code.py routes
+        language: system
+        files: ^(frontend/(src|components|lib|hooks|electron/src)/.*\.(ts|tsx)|backend/.*\.py|utils/(unused_code\.py|route_entrypoints\.json))$
+        pass_filenames: false
+
+      - id: unused-python
+        name: Python sem uso (vulture)
+        entry: uv run --no-project --with vulture python utils/unused_code.py python
+        language: system
+        files: ^(backend/.*\.py|utils/(unused_code\.py|unused_python_baseline\.json))$
+        pass_filenames: false
+
+      - id: i18n
+        name: Frontend i18n lint
+        entry: uv run --no-project python utils/checks.py frontend-i18n
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
+  # ==========================================
+  # Type Checking — TypeScript (tsc)
+  # ==========================================
+  # `pnpm --dir chat exec tsc` é cross-platform (Windows/Linux/macOS) e
+  # não depende de `bash` — sem dependência de WSL no Windows.
+  - repo: local
+    hooks:
+      - id: tsc
+        name: Type Check — TypeScript (tsc)
+        # `typecheck` gera o routeTree.gen.ts (TanStack Router, gitignored) antes
+        # do tsc --noEmit; tsc puro falharia sem o route tree.
+        entry: uv run --no-project python utils/checks.py frontend-typecheck
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+
+ci:
+  autofix_commit_msg: "chore: auto fixes from pre-commit hooks"
+  autofix_prs: false
+  autoupdate_branch: ""
+  skip: []
+  submodules: false

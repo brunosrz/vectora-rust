@@ -1,0 +1,330 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import { formatTokens, usageBarColor, usageLevel } from "@/lib/utils/usage";
+import {
+  getContextWindow,
+  type ModelOption,
+} from "@/lib/config/deployment-config";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { m } from "@/lib/paraglide/messages";
+
+interface ProviderUsage {
+  provider: string;
+  label: string;
+  used: number | null;
+  limit: number | null;
+  remaining: number | null;
+  plan: string | null;
+  unit: string;
+  error: string | null;
+}
+
+interface MediaQuota {
+  period: string;
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+function formatAmount(value: number, unit: string): string {
+  return unit === "usd"
+    ? `$${value.toFixed(2)}`
+    : value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function ProviderRow({ item }: { item: ProviderUsage }) {
+  // Falha aparece como falha: mostrar 0 faria o usuário achar que não gastou
+  // nada quando a consulta é que não respondeu.
+  if (item.error) {
+    return (
+      <div className="space-y-0.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">{item.label}</span>
+          <span className="text-destructive text-[11px]">
+            {m.meter_provider_error()}
+          </span>
+        </div>
+        <p className="text-[10px] text-muted-foreground truncate">
+          {item.error}
+        </p>
+      </div>
+    );
+  }
+
+  const pct =
+    item.limit && item.limit > 0 && item.used !== null
+      ? (item.used / item.limit) * 100
+      : 0;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">
+          {item.label}
+          {item.plan ? ` · ${item.plan}` : ""}
+        </span>
+        <span className="font-mono text-foreground/90">
+          {item.used !== null ? formatAmount(item.used, item.unit) : "—"}
+          {item.limit !== null
+            ? ` / ${formatAmount(item.limit, item.unit)}`
+            : ""}
+        </span>
+      </div>
+      {item.limit !== null && <UsageBar pct={pct} />}
+    </div>
+  );
+}
+
+interface UsagePopoverProps {
+  tokensUsed: number;
+  modelId: string;
+  threadId?: string;
+}
+
+interface ThreadUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cached_input_tokens?: number;
+  cache_write_tokens?: number;
+  runs: number;
+}
+
+function UsageBar({ pct }: { pct: number }) {
+  const color = usageBarColor(usageLevel(pct));
+  return (
+    <div className="h-1 rounded-full bg-muted/60 overflow-hidden">
+      <div
+        className={`h-full ${color} transition-all duration-300`}
+        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+      />
+    </div>
+  );
+}
+
+const RING_RADIUS = 8;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+function UsageRing({ pct }: { pct: number }) {
+  const clamped = Math.min(100, Math.max(0, pct));
+  const offset = RING_CIRCUMFERENCE * (1 - clamped / 100);
+  // Anel de progresso do uso da janela de contexto: sempre azul; o nível
+  // (verde/âmbar/vermelho) aparece na barra dentro do popover.
+  return (
+    <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 -rotate-90" aria-hidden>
+      <circle
+        cx="10"
+        cy="10"
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth="2.5"
+        stroke="currentColor"
+        className="text-muted-foreground/20"
+      />
+      <circle
+        cx="10"
+        cy="10"
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        stroke="currentColor"
+        strokeDasharray={RING_CIRCUMFERENCE}
+        strokeDashoffset={offset}
+        className="text-blue-500 transition-all duration-300"
+      />
+    </svg>
+  );
+}
+
+export function UsagePopover({
+  tokensUsed,
+  modelId,
+  threadId,
+}: UsagePopoverProps) {
+  const contextWindow = getContextWindow(modelId as ModelOption);
+  const pct = contextWindow > 0 ? (tokensUsed / contextWindow) * 100 : 0;
+  const [open, setOpen] = useState(false);
+  const [providers, setProviders] = useState<ProviderUsage[]>([]);
+  const [mediaQuota, setMediaQuota] = useState<MediaQuota | null>(null);
+  const [threadUsage, setThreadUsage] = useState<ThreadUsage | null>(null);
+
+  // Só busca ao abrir: o consumo dos providers é dado remoto, e o backend
+  // cacheia — não faz sentido consultar a cada render do composer.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void fetch("/usage/providers", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : { providers: [] }))
+      .then((data) => {
+        if (!cancelled) setProviders(data.providers ?? []);
+      })
+      .catch(() => {
+        // Sem consumo remoto o popover ainda mostra a janela de contexto.
+      });
+    // The opened popover synchronizes its remote snapshot with local state.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setMediaQuota(null);
+    void fetch("/usage/media", { credentials: "include", cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setMediaQuota(data as MediaQuota);
+        else if (!cancelled) setMediaQuota(null);
+      })
+      .catch(() => {
+        if (!cancelled) setMediaQuota(null);
+      });
+    if (threadId) {
+      void fetch(`/threads/${encodeURIComponent(threadId)}/usage`, {
+        credentials: "include",
+        cache: "no-store",
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!cancelled) setThreadUsage((data as ThreadUsage | null) ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setThreadUsage(null);
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [open, threadId]);
+
+  const valueLabel = `${formatTokens(tokensUsed)} / ${formatTokens(
+    contextWindow,
+  )} (${pct.toFixed(0)}%)`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs leading-4 font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label={`${m.meter_context_window()}: ${valueLabel}`}
+          title={valueLabel}
+        >
+          <UsageRing pct={pct} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={6}
+        className="z-[100] w-72 rounded-lg border border-border/60 bg-background p-3 shadow-xl"
+      >
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">
+              {m.meter_context_window()}
+            </span>
+            <span className="font-mono text-foreground/90">
+              {formatTokens(tokensUsed)} / {formatTokens(contextWindow)} (
+              {pct.toFixed(0)}%)
+            </span>
+          </div>
+          <UsageBar pct={pct} />
+          <p className="text-[11px] text-muted-foreground pt-1">{modelId}</p>
+
+          {threadUsage && threadUsage.runs > 0 && (
+            <div
+              className="space-y-1 pt-2 mt-1 border-t border-border/60"
+              data-testid="thread-usage"
+            >
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {m.meter_thread_usage()}
+              </p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_thread_input()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {formatTokens(threadUsage.input_tokens)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_thread_output()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {formatTokens(threadUsage.output_tokens)}
+                </span>
+              </div>
+              {(threadUsage.cached_input_tokens ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {m.meter_thread_cached()}
+                  </span>
+                  <span className="font-mono text-foreground/90">
+                    {formatTokens(threadUsage.cached_input_tokens ?? 0)}
+                  </span>
+                </div>
+              )}
+              {(threadUsage.cache_write_tokens ?? 0) > 0 && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {m.meter_thread_cache_write()}
+                  </span>
+                  <span className="font-mono text-foreground/90">
+                    {formatTokens(threadUsage.cache_write_tokens ?? 0)}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_thread_total()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {formatTokens(threadUsage.total_tokens)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {mediaQuota && (
+            <div className="space-y-1 pt-2 mt-1 border-t border-border/60">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">
+                  {m.meter_media_quota()}
+                </span>
+                <span className="font-mono text-foreground/90">
+                  {mediaQuota.used} / {mediaQuota.limit}
+                </span>
+              </div>
+              <UsageBar
+                pct={
+                  mediaQuota.limit > 0
+                    ? (mediaQuota.used / mediaQuota.limit) * 100
+                    : 0
+                }
+              />
+              <p className="text-[10px] text-muted-foreground">
+                {m.meter_media_remaining({ count: mediaQuota.remaining })}
+              </p>
+            </div>
+          )}
+
+          {providers.length > 0 && (
+            <div className="space-y-2 pt-2 mt-1 border-t border-border/60">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {m.meter_provider_usage()}
+              </p>
+              {providers.map((item) => (
+                <ProviderRow key={item.provider} item={item} />
+              ))}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}

@@ -1,0 +1,381 @@
+# <img src="backend/assets/vectora.png" width="32" height="32"> Vectora
+
+**Vectora** é um assistente de IA self-hosted para equipes de desenvolvimento — roda inteiramente no seu servidor, com um workbench completo (arquivos, git, terminal, RAG, Context Graph, browser) compartilhado entre você e o agente, e vem com um chat web multi-usuário.
+
+No seu núcleo, o Vectora resolve o **problema do abismo de conhecimento**: os LLMs não conhecem sua base de código, sua documentação ou as versões mais recentes da sua stack. O Vectora preenche essa lacuna por dois caminhos complementares: **RAG híbrido** (BM25 + embeddings + reranking opcional) para recuperação por similaridade, e o **Context Graph** — um grafo de conhecimento nativo do workspace (funções, classes, conceitos e suas relações, via tree-sitter + extração semântica por LLM) para contexto estrutural.
+
+---
+
+## Por que o Vectora?
+
+- **Motor nativo** — o loop de execução (`backend/engine/conversation_loop.py::run_conversation`) é um `while` imperativo, não um grafo compilado. Isso dá HITL configurável por modo de permissão, backends de filesystem pluggable e um supervisor que delega para 2 subagentes especializados com instruções explícitas — sem hops de roteamento desnecessários.
+- **Pipeline RAG híbrido** — cada recuperação roda BM25 + busca vetorial densa + reranker antes de voltar para o supervisor sintetizar a resposta.
+- **Context Graph nativo** — analisa o workspace (AST via tree-sitter para Python/JS/TS/Go/Rust/Java/C/C++, + extração semântica por LLM) e gera um grafo de conhecimento com god nodes, comunidades e perguntas sugeridas. Configurável por tipo de arquivo (ex.: só markdown, deixando o código para o RAG).
+- **70+ ferramentas nativas** — filesystem, git (14 operações), GitHub (`gh`), terminal (PTY real), web, RAG, memória, integrações opcionais (Jira, Slack, Linear, Google Drive, Gmail, Notion) e utilitárias (hash, JWT, regex, HTTP) — sempre disponíveis, sem instalar plugins.
+- **Seleção explícita de providers** — LLM e cada capacidade de IA podem ser configurados separadamente; uma falha não troca silenciosamente de provider nem de modelo.
+- **Embeddings curados** — resultados da busca web passam por um gate de curadoria (reranker + LLM judge) antes de serem indexados. Sua base de conhecimento nunca é contaminada.
+- **Chat web multi-usuário** — interface React 19 (Vite + TanStack Router) com autenticação, RBAC, workspaces e a workbench (terminal, git, arquivos, context graph, memória, planos — ver abaixo).
+- **Memória persistente entre sessões** — memória isolada por usuário, com checkpoint nativo (`SessionStore`) por thread.
+- **Infraestrutura zero no modo lite** — SQLite + LanceDB. Sem Docker ou Postgres para uso local ou times pequenos. O modo **complete** (Postgres + Qdrant + Redis) já existe como caminho alternativo para quem precisa de mais escala.
+- **Múltiplos providers de IA** — provedores diretos, serviços locais e roteadores são selecionados conforme a capacidade; veja a matriz abaixo.
+
+## Providers e tipos de IA
+
+O Vectora configura cada capacidade de IA de forma independente. Os nomes nesta tabela são famílias de serviço ou integração, não uma lista de modelos. Um provider aparecer aqui não significa que toda rota, conta ou modelo dele ofereça todas as capacidades: o endpoint e o modelo configurados precisam implementar o protocolo correspondente.
+
+| Tipo de IA                     | Para que serve no Vectora                                                                                                                          | Providers e integrações disponíveis                                                                                                                                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Geração de linguagem (LLM)** | Conversa, síntese, geração de código e uso de ferramentas pelo agente.                                                                             | Google Gemini, OpenAI, Anthropic, Cohere, Ollama, OpenRouter, 9Router, llama.cpp e Docker Model Runner.                                                                                                                                   |
+| **Decision Models**            | Decisões estruturadas do harness, como escolher entre opções, avaliar critérios e produzir scores; é uma configuração separada do LLM de conversa. | Clef local, Laya local, Clef API e JEV API; o catálogo também identifica Google Gemini Decision 1 quando a API Google está configurada (o endpoint especializado ainda não é um adapter de execução do harness).                          |
+| **Embeddings**                 | Converter documentos e consultas em vetores para busca semântica e RAG.                                                                            | OpenAI, Google Gemini, Cohere e Voyage por APIs próprias; Ollama local; OpenRouter; 9Router; Docker Model Runner; llama.cpp local com endpoint compatível. O catálogo do OpenRouter possui descoberta específica de modelos de embedding. |
+| **Reranking**                  | Reordenar candidatos recuperados por relevância para a consulta antes de passá-los ao agente.                                                      | Cohere, Voyage, OpenRouter e llama.cpp local com endpoint habilitado; modelos expostos por roteadores compatíveis são classificados conforme metadados e endpoint de rerank.                                                              |
+| **Entrada visual (visão)**     | Interpretar imagens anexadas ou imagens usadas por ferramentas multimodais.                                                                        | OpenAI, Google Gemini e Anthropic; Ollama e OpenRouter dependem do modelo e da rota configurados.                                                                                                                                         |
+| **Geração de imagem**          | Criar imagens por meio das ferramentas de mídia.                                                                                                   | Google Gemini e OpenAI; Ollama e OpenRouter quando configurados com modelo e rota compatíveis.                                                                                                                                            |
+| **Áudio: transcrição (STT)**   | Converter fala gravada em texto.                                                                                                                   | Google Gemini, OpenAI e OpenRouter; outros serviços só quando o adapter e a rota de transcrição estiverem disponíveis.                                                                                                                    |
+| **Áudio: síntese (TTS)**       | Gerar fala a partir de texto.                                                                                                                      | Google Gemini e OpenAI; Ollama e OpenRouter quando configurados com modelo e rota compatíveis; helper local de fala nas plataformas suportadas.                                                                                           |
+| **Vídeo**                      | Analisar ou gerar conteúdo de vídeo pelas ferramentas de mídia.                                                                                    | Análise via Google Gemini; geração via Ollama ou OpenRouter quando a rota estiver configurada e aceitar essa capacidade.                                                                                                                  |
+
+Embeddings e reranking são selecionados pelo modelo na tela **IA Models**. O catálogo busca modelos nos providers configurados e classifica capacidades por metadados oficiais, endpoints específicos e uma lista curada; na tela **Provider Routing**, a detecção pode ser atualizada e modelos sem evidência suficiente ficam marcados como não identificados. Roteadores só executam uma capacidade quando oferecem o endpoint correspondente e encaminham para um modelo compatível. Trocar o modelo de embedding exige reindexar a coleção para não misturar vetores incompatíveis. Credenciais e endpoints são configurados em **Integrações** e **Provider Routing**, nunca junto à seleção do modelo.
+
+---
+
+## Arquitetura
+
+### Supervisor + Subagentes (motor nativo)
+
+O agente principal (`backend/services/agent_factory.py`) roda sobre o motor nativo (`backend/engine/conversation_loop.py::run_conversation`) — um loop `while` imperativo, não um grafo compilado. O supervisor responde direto para consultas simples ou delega, via a tool nativa `delegate_to_subagent`, para um dos 2 subagentes especializados:
+
+| Agente           | Papel                                                            | Ferramentas principais                                                               |
+| ---------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **orchestrator** | Supervisor — responde direto OU delega para coder/search         | `create_artifact`, `save_memory`, `get_memory`, `delete_memory`, RAG                 |
+| **coder**        | Filesystem, terminal, git — geração e revisão de código          | `file_read`, `file_edit`, `file_write`, `grep`, `list_dir`, `terminal`, tools de git |
+| **search**       | Busca web em tempo real + RAG (não há subagente de RAG separado) | `web_search`, `web_fetch`, `vector_search`, `embedding`, `ingest_docs`               |
+
+HITL (Human-in-the-Loop) roda via `should_require_approval` (`backend/engine/hitl.py`), configurável por modo de permissão (perguntar sempre / aceitar edições / autônomo / plano).
+
+### Pipeline de RAG (dentro das tools `search`/`rag`)
+
+| Score   | Caminho                                                                               |
+| ------- | ------------------------------------------------------------------------------------- |
+| ≥ 0.7   | Injeção direta no contexto — alta confiança                                           |
+| 0.4–0.7 | Rerank (provider configurado) → injeção                                               |
+| < 0.4   | Cai para busca web, com os resultados curados (reranker + LLM judge) antes de indexar |
+
+---
+
+## Workbench (painel lateral)
+
+No modo **Code**, o chat vem com um painel lateral multi-aba — a workbench. Cada aba renderiza a partir de dados do backend em tempo real:
+
+| Aba               | O que faz                                                                                                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **File System**   | Árvore do workspace; abre arquivos como janelas flutuantes (redimensionáveis, arrastáveis), edita via Monaco Editor, e fixa arquivos ("pin") para manter no contexto.                                             |
+| **Git**           | Status (staged/unstaged/untracked), diff por arquivo com hunks, histórico de commits, stash e worktrees.                                                                                                          |
+| **Search**        | Busca em todo o workspace (arquivos + conteúdo).                                                                                                                                                                  |
+| **Plan**          | Planos, specs e guias gerados pelo agente (`create_artifact`, markdown em `~/.vectora/artifacts/`).                                                                                                               |
+| **Segundo plano** | Tarefas em segundo plano da sessão + histórico de execuções.                                                                                                                                                      |
+| **Preview**       | Configura targets de run (servidor/comando) e mostra o preview do projeto.                                                                                                                                        |
+| **Memory (RAG)**  | Memórias e citações RAG/web indexadas + settings de RAG: reranker on/off + top_k e tipos de arquivo a ingerir, e gestão de coleções (listar/apagar).                                                              |
+| **Context Graph** | Constrói e exibe o grafo de conhecimento do workspace (god nodes, conexões, perguntas) + settings: tipos de arquivo a indexar (code/document/paper) e modo (semântico/AST). Build pausável e retomável por quota. |
+| **Terminal**      | Shell embarcado real via PTY (`pywinpty`/`ptyprocess`) renderizado com xterm.js, com tema dinâmico sincronizado ao tema da UI.                                                                                    |
+
+Os artefatos do Context Graph e o cache ficam em `.vectora/context-graph/` dentro do workspace; o que estiver no `.vectoraignore` (ignore unificado, vale para context graph, RAG, filesystem e chat) é invisível para o Vectora.
+
+---
+
+## Pré-requisitos
+
+| Requisito          | Notas                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| **Python 3.13**    | Gerenciado pelo [uv](https://docs.astral.sh/uv/) — fixado em 3.13 (`requires-python` do projeto) |
+| **Node.js 26**     | Para o frontend web; versão e pnpm 11.5 são fixados pelo workspace                               |
+| **Chave Tavily**   | Busca web — [plano gratuito](https://app.tavily.com/)                                            |
+| **Provider de IA** | Configure as capacidades desejadas em Integrações e Modelos; Cohere não é obrigatório para RAG.  |
+
+---
+
+## Início rápido (a partir do código fonte)
+
+```bash
+git clone https://github.com/vectora-company/vectora.git
+cd vectora
+
+# Linux: prepara toolchains e dependências do sistema (opcional)
+# ./dotfiles.sh
+
+# Instalar dependências do projeto em qualquer plataforma
+uv run --locked scons install
+
+# Copiar e preencher suas chaves de API
+cp .env.example .env
+# Edite o .env: GOOGLE_API_KEY, COHERE_API_KEY, TAVILY_API_KEY
+
+# Terminal 1 — backend completo + SPA (porta 8080)
+uv run vectora start --port 8080
+# Terminal 2 — frontend dev (Vite, porta 3000, faz proxy p/ a API)
+pnpm --dir frontend dev
+```
+
+No Windows/macOS, instale `uv`, Python 3.13, Node.js 26 e pnpm 11.5 e execute `uv run --locked scons install` antes de iniciar o projeto.
+
+`scons install` começa informando o sistema, a arquitetura e, no Linux, a distribuição; depois sincroniza todos os grupos Python, executa `pnpm ci`, garante o binário nativo do Electron, baixa NATS e FFmpeg/FFprobe para `resources/` (conforme a arquitetura detectada) e, só no macOS, compila o helper de fala nativo. Ao final lista o que ficou instalado. No Linux, `dotfiles.sh` é opcional e prepara a toolchain separadamente. `pnpm ci` recria `frontend/node_modules` conforme o lockfile. O app usa o Chromium distribuído com Electron; Playwright é apenas cliente CDP e não precisa baixar browsers.
+
+Abra `http://localhost:3000`. O primeiro usuário a se cadastrar vira administrador root.
+
+### CLI de operação (VPS via SSH)
+
+O frontend cobre toda a configuração, mas em VPS via SSH a CLI Rich expõe o essencial:
+
+```bash
+uv run vectora config keys         # wizard de API keys + provider de LLM
+uv run vectora config docker up    # sobe Postgres + Redis + Qdrant local
+uv run vectora start --headless    # backend sem Electron (modo servidor)
+uv run vectora web                  # HTTP + Electron/Chromium, sem bandeja Python
+```
+
+---
+
+## Build (SCons)
+
+O sistema de build usa [SCons](https://scons.org/), incluído como dependência de dev, invocado a partir da **raiz do repositório**. Funciona direto no PowerShell, cmd, bash ou zsh — sem dependência de sintaxe shell específica.
+
+### Produto final (do zero ao instalador)
+
+```
+scons release          Build completo + instalador nativo para o SO atual
+```
+
+Bump de versão, build dos instaladores e publicação no canal de update rodam
+só via GitHub Actions, disparados por uma tag `v*` real (criada quando o
+usuário mescla o PR de release acumulado que `release-please.yml` mantém
+automaticamente) ou por `workflow_dispatch` manual.
+
+Pipeline executado em sequência (encadeado automaticamente por `release`):
+
+```
+build frontend (Vite)  -->  build híbrido do backend  -->  Electron + electron-builder
+frontend/dist/               dist/vectora/vectora(.exe)    frontend/dist-electron/
+```
+
+O empacotamento do backend (`build-hybrid.py`, chamado pelo `scons`) usa só o **PyInstaller** em modo `--onedir`: ele coleta o launcher, o pacote `backend/` (código e arquivos de dados, inclusive `backend/defaults.env`, onde o release injeta o `VECTORA_APP_SECRET`) e as libs Python em `dist/vectora/`, com os sidecars NATS e FFmpeg/FFprobe (e o helper de fala no macOS). O backend não é compilado em C e o build não exige toolchain C (MSVC, clang ou gcc). O app secret fica no instalador como arquivo legível: não é proteção, quem baixa o instalador consegue lê-lo.
+
+### Qualidade
+
+```
+scons tests            Suíte completa: pytest tests/ (unit+integration+e2e+stress) + vitest
+scons coverage          Mesma suíte com relatório de cobertura
+scons lint              ruff + ty + bandit (Python) + tsc + oxlint (TypeScript)
+scons tests-storage     Só testes de storage (Postgres/Redis/Qdrant — sobe docker automaticamente)
+scons clean             Remove dist/ frontend/dist/ frontend/electron/dist*
+scons help              Lista completa com descrições
+```
+
+**Nota:** no Windows basta abrir o PowerShell ou cmd na raiz do repositório e rodar `scons release`. Sem Git bash, sem truques de shell.
+
+### CI/CD
+
+- **GitHub Actions** (`.github/workflows/vectora.yml`) — pipeline única: lint → security scan (bandit + pip-audit) → frontend (oxlint/tsc/vitest) → build verification → testes unit/stress/integration+e2e — sempre, em todo PR contra `master` e em todo push em `master`, sem gate manual. Só o `release-native` (matriz Linux/macOS/Windows, backend empacotado com PyInstaller + electron-builder) continua condicionado, agora numa tag `v*` real ou `workflow_dispatch` manual. `.github/workflows/pr-gate.yml` roda a fila de verificações de todo PR (título em Conventional Commits, labels, milestone, pre-commit, contratos e segredos); `.github/workflows/release-please.yml` roda em todo push em `master` e mantém um PR de release acumulado (changelog + versão) — mesclá-lo é o que cria a tag.
+
+---
+
+## Docker
+
+```bash
+cp .env.example .env
+# Edite o .env com suas chaves
+
+docker compose up -d
+# Chat web: http://localhost:8080
+```
+
+`docker-compose.yml` sobe **PostgreSQL** (`pgvector/pgvector:pg16`), **Redis** (`redis-stack-server`, com RediSearch/RedisJSON para o cache LLM distribuído) e **Qdrant** — o backend do Vectora em si **não** roda como container, roda no host e se conecta a esses três serviços quando `STORAGE_MODE=complete`.
+
+VPS com HTTPS (Traefik):
+
+```bash
+cp .env.example .env
+# Defina VECTORA_DOMAIN e ACME_EMAIL
+
+docker network create traefik-public
+docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+# Chat web: https://vectora.seudominio.com
+```
+
+---
+
+## Referência de CLI
+
+```
+vectora [comando] [opções]
+
+Comandos:
+  (sem args)           Imprime este help
+  start                Backend completo + SPA (fullstack)
+  start --headless     Sobe somente o backend, sem janela Electron
+  web                  Sobe o webapp HTTP com Electron/Chromium, sem bandeja Python
+  config               Mostra/edita settings; subcomandos: keys, docker, qdrant, redis
+  storage              Migrations, diagnóstico, backup/restore, wizard BaaS
+  sessions             Listar todas as sessões salvas
+
+Opções de start:
+  --headless           Não inicia Electron nem bandeja (modo servidor)
+  --host <host>        Host de escuta (padrão: 0.0.0.0)
+  --port <n>           Porta (padrão: 8080)
+  --ssl-certfile/-keyfile <pem>   TLS (serve em https://)
+
+Diagnóstico da instalação:
+  vectora --tests       Baixa pytest sob demanda e executa smoke tests contra o backend instalado.
+                        Requer rede na primeira execução; não altera o build público com deps de teste.
+```
+
+---
+
+## Dados e Persistência
+
+Todos os dados ficam em `~/.vectora/`:
+
+```
+~/.vectora/
+├── config.toml             # Configuração de runtime (provedores, storage)
+├── auth.key                # Chave JWT (gerada automaticamente, perm 600)
+├── data/
+│   ├── vectora.db          # Usuários, sessões, memórias, checkpoints (SQLite WAL)
+│   ├── embedding_queue.db  # Fila de embeddings assíncrona (SQLite)
+│   ├── traces.db           # Spans de observabilidade (SQLite)
+│   └── lancedb/            # Banco vetorial (LanceDB, modo lite)
+├── artifacts/              # Planos, specs, guias (output do create_artifact)
+│   └── {session_id}/*.md
+├── secrets/
+│   ├── system.kdbx         # Vault de segredos do sistema (formato KeePassXC)
+│   └── users/{id}.kdbx     # Vault por usuário (chaves de API, SSH)
+├── skills/{user_id}/       # Skills instaladas (formato SKILL.md)
+├── safe_roots.json         # Caminhos confiáveis configurados pelo admin
+├── workspaces.json         # Workspaces registrados
+└── license_cache.json      # Cache de validação de licença (TTL 6h / 48h offline)
+```
+
+No modo **complete** (`STORAGE_MODE=complete`), checkpointer e sessões vão para PostgreSQL, vetores para Qdrant, e cache/KV para Redis — usuários, auth e settings continuam **sempre** em SQLite, independente do modo.
+
+---
+
+## Referência de Ferramentas
+
+Mais de 70 tools registradas, organizadas por categoria:
+
+| Categoria         | Ferramentas                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Arquivos**      | `file_read`, `file_edit`, `file_write`, `grep`, `list_dir`, `terminal`, `create_artifact`                    |
+| **Git**           | 14 operações — status, log, diff, branch, checkout, commit, push, pull, stage/unstage, stash, merge, compare |
+| **GitHub**        | `gh_issue_create/list/view/comment`, `gh_pr_create/list/view/merge` (via `gh` CLI)                           |
+| **Web**           | `web_search`, `web_fetch` + extração/crawl                                                                   |
+| **RAG**           | `vector_search`, `embedding`, `ingest_docs`, `manage_retriever`                                              |
+| **Context Graph** | `build_knowledge_graph`, `graph_query`, `graph_explain`, `graph_path`, `graph_update`, `graph_affected`      |
+| **Memória**       | `save_memory`, `get_memory`, `delete_memory`                                                                 |
+| **Workspace**     | `workspace_list`, `workspace_describe`, `bucket_summary`                                                     |
+| **Integrações**   | Jira, Slack, Linear, Google Drive, Gmail, Notion (opcionais, via OAuth/API key por workspace)                |
+| **Utilitárias**   | `time_*`, `hash_*`, `base64_*`, `regex_test`, `json_query`, `jwt_decode`, `http_request`                     |
+| **MCP**           | `call_mcp_tool` — delega para MCP servers de terceiros configurados pelo usuário                             |
+
+---
+
+## Testes
+
+O projeto segue TDD (par caminho-feliz + caminho-de-erro no mesmo teste). Contagem atual (verificada via execução real das suítes):
+
+| Suíte                              | Arquivos | Testes     | Como rodar                                                        |
+| ---------------------------------- | -------- | ---------- | ----------------------------------------------------------------- |
+| **Backend — unit** (`tests/unit/`) | 137      | 2.387      | `uv run pytest tests/unit -q`                                     |
+| **Backend — integration**          | 5        | 43         | `uv run pytest tests/integration -q` (Postgres/Redis/Qdrant)      |
+| **Backend — e2e**                  | 1        | 6          | `uv run pytest tests/e2e -q` (execuções reais do agente)          |
+| **Backend — stress**               | 4        | 7          | `uv run pytest tests/stress -q` (concorrência, sem APIs externas) |
+| **Backend — total**                | **148**  | **2.463**  | `uv run pytest tests -q`                                          |
+| **Frontend — vitest**              | 90       | 1.008      | `pnpm --dir frontend exec vitest run`                             |
+| **Frontend — Playwright e2e**      | 2        | 4          | `pnpm --dir frontend exec playwright test`                        |
+| **Total do produto**               | **240**  | **~3.475** | `scons tests` (raiz do repositório)                               |
+
+`scons coverage` roda a mesma suíte com relatório de cobertura (`htmlcov/index.html` para o backend, `frontend/coverage/index.html` para o frontend).
+
+---
+
+## Stack de Tecnologia
+
+### Backend
+
+| Camada              | Tecnologia                                                                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Linguagem           | Python 3.13 / [uv](https://docs.astral.sh/uv/)                                                                                                |
+| Servidor            | FastAPI ≥0.138 + Uvicorn — serve API, SSE, WebSocket e a SPA (`StaticFiles`)                                                                  |
+| Framework de agente | Motor nativo (`backend/engine/`) — loop de conversa imperativo, sem grafo compilado                                                           |
+| Providers de LLM    | Clients HTTP nativos (`backend/llm/<provider>/`) para Google, OpenAI, Anthropic, Cohere, Ollama/OpenRouter                                    |
+| Banco vetorial      | [LanceDB](https://lancedb.github.io/lancedb/) (lite, default) / Qdrant (complete)                                                             |
+| Embeddings + rerank | Adapters por capacidade para APIs diretas, roteadores compatíveis e runtimes locais; veja [Providers e tipos de IA](#providers-e-tipos-de-ia) |
+| Busca web           | Tavily via client HTTP nativo                                                                                                                 |
+| Retrieval esparso   | `rank-bm25` (híbrido com busca vetorial densa)                                                                                                |
+| Context Graph       | `tree-sitter` (Python/JS/TS/Go/Rust/Java/C/C++/JSON) + `networkx` + `rapidfuzz`                                                               |
+| Persistência        | SQLite + `aiosqlite` (WAL) + `SessionStore` nativo (Postgres via `asyncpg` no modo complete)                                                  |
+| Cache/KV            | Redis (`redis[hiredis]`, client nativo) — modo complete                                                                                       |
+| Terminal            | PTY via `pywinpty` (Windows) / `ptyprocess` (Unix)                                                                                            |
+| Cliente MCP         | [MCP](https://modelcontextprotocol.io/) via SDK oficial `mcp` (`ClientSession`) — consome servidores MCP de terceiros                         |
+| Segurança           | `argon2-cffi` (senhas), `pyjwt`, `pynacl`, `pykeepass` (vault KeePassXC), `slowapi` (rate limit)                                              |
+| Interface CLI       | [Rich](https://rich.readthedocs.io/)                                                                                                          |
+| Build/Distribuição  | PyInstaller (empacota o backend) + Electron + `electron-builder`                                                                              |
+
+### Frontend
+
+| Camada             | Tecnologia                                                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Bundler            | Vite 8 + TypeScript 6                                                                                                                 |
+| Framework UI       | React 19                                                                                                                              |
+| Routing            | TanStack Router (file-based, type-safe)                                                                                               |
+| Data fetching      | TanStack Query                                                                                                                        |
+| Estado             | Zustand (20 stores) + `useReducer` para estado local de UI                                                                            |
+| Estilo             | Tailwind CSS 4 + Radix UI + shadcn/ui + `lucide-react`                                                                                |
+| Editor             | Monaco Editor (`@monaco-editor/react`)                                                                                                |
+| Terminal           | `@xterm/xterm` + addons (fit, web-links), tema dinâmico via CSS vars                                                                  |
+| Janelas flutuantes | `react-rnd` (arquivos abertos como janelas redimensionáveis/arrastáveis)                                                              |
+| Markdown           | `react-markdown` + `remark-gfm` + `react-syntax-highlighter`                                                                          |
+| Forms + validação  | React Hook Form + Zod                                                                                                                 |
+| i18n               | [Paraglide JS](https://inlang.com/m/gerre34r/library-inlang-paraglideJs) — `m()` de `@/lib/paraglide/messages`, sem strings hardcoded |
+| PWA                | `vite-plugin-pwa` (manifest + service worker)                                                                                         |
+| Testes             | Vitest + Testing Library (unit/componente) + Playwright (e2e)                                                                         |
+| Lint               | oxlint (Oxc, Rust)                                                                                                                    |
+
+---
+
+## Configuração
+
+Chaves de API vão em `~/.vectora/config.toml` (criado pelo `vectora config keys`) ou em um `.env` local:
+
+```env
+# Provedor LLM (detectado automaticamente pelas chaves disponíveis)
+LLM_PROVIDER=google-genai
+GOOGLE_API_KEY=sua_chave_aqui
+
+# Opcional: credenciais para providers de IA; cada capacidade seleciona o modelo em IA Models
+# OPENAI_API_KEY, GOOGLE_API_KEY, COHERE_API_KEY, VOYAGE_API_KEY ou OPENROUTER_API_KEY
+
+# Obrigatório: busca web e extração de URLs
+TAVILY_API_KEY=sua_chave_aqui
+
+# Opcional: telemetria nativa
+TELEMETRY_ENABLED=true
+```
+
+---
+
+## Licença
+
+O Vectora é software livre sob a **GNU Affero General Public License v3.0** (`AGPL-3.0-only`). O texto completo está em [LICENSE](LICENSE).
+
+Em termos práticos, você pode usar, estudar, modificar e redistribuir o código. Se você distribuir uma versão modificada, ou oferecê-la como serviço a outras pessoas pela rede, precisa disponibilizar o código-fonte dessa versão sob a mesma licença.
+
+- **Direitos autorais:** © 2026 Vectora Ltda. A Vectora é a titular do código do projeto e pode oferecer o mesmo código sob outra licença, inclusive comercial, a quem não puder cumprir a AGPL. Para isso, ela precisa dos direitos sobre as contribuições recebidas; por isso todo PR de terceiros exige o aceite do [CLA](CLA.md).
+- **Licença comercial:** fale com [contato@vectora.company](mailto:contato@vectora.company).
+- **Dependências de terceiros:** a lista e as licenças estão em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- **O nome e a marca "Vectora"** não são licenciados pela AGPL; não os use de forma que sugira endosso do seu fork.
+
+## Contribuindo e segurança
+
+- Fluxo de contribuição, ambiente e checks: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Código de conduta: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+- Vulnerabilidades: não abra issue pública; siga [SECURITY.md](SECURITY.md).

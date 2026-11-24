@@ -1,0 +1,1168 @@
+// @vitest-environment jsdom
+/**
+ * SessionPage ($threadId) — composição de layout por modo de interface.
+ *
+ * Este arquivo era o menos coberto do frontend (4% de statements) e é
+ * justamente onde moraram os bugs de UI mais graves: chat do modo anterior
+ * desenhado por cima do Kanban, header roubando a faixa de topo dos painéis
+ * no IDE, e conteúdo de dois modos visível ao mesmo tempo. Nenhum deles era
+ * pegável por teste unitário antes porque a composição não tinha nenhum.
+ *
+ * A estratégia é trocar os componentes pesados (chat, kanban, workbench,
+ * editor) por marcadores e afirmar QUAIS aparecem, ONDE, e em que
+ * quantidade — que é exatamente o contrato que quebrava.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  act,
+  fireEvent,
+} from "@testing-library/react";
+import { useState } from "react";
+import type { ReactElement, ReactNode } from "react";
+
+const { navigateSpy, chatProps, routeParam } = vi.hoisted(() => ({
+  navigateSpy: vi.fn(),
+  chatProps: vi.fn(),
+  routeParam: { value: "t1" },
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  // O componente lê `Route.useParams()`, então o objeto devolvido por
+  // createFileRoute precisa carregá-lo — não basta repassar as opções.
+  createFileRoute: () => (opts: Record<string, unknown>) => ({
+    ...opts,
+    useParams: () => ({ threadId: routeParam.value }),
+  }),
+  useNavigate: () => navigateSpy,
+}));
+
+vi.mock("@/components/chat/chat-interface", () => ({
+  ChatInterface: ({
+    compact,
+    isNewThread,
+    threadId,
+  }: {
+    compact?: boolean;
+    isNewThread?: boolean;
+    threadId: string;
+  }) => {
+    chatProps({ compact, isNewThread });
+    const [response, setResponse] = useState("");
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [requestCount, setRequestCount] = useState(0);
+    return (
+      <div
+        data-testid="chat"
+        data-compact={String(!!compact)}
+        data-thread-id={threadId}
+      >
+        <output data-testid="stream-response">{response}</output>
+        <output data-testid="stream-request-count">{requestCount}</output>
+        <button
+          data-testid="stream-send"
+          onClick={() => {
+            setRequestCount((count) => count + 1);
+            setResponse("Resposta parcial");
+            setIsStreaming(true);
+          }}
+        >
+          Enviar
+        </button>
+        {isStreaming && (
+          <>
+            <button
+              data-testid="stream-stop"
+              onClick={() => setIsStreaming(false)}
+            >
+              Parar
+            </button>
+            <button
+              data-testid="stream-next-token"
+              onClick={() => setResponse("Resposta parcial atualizada")}
+            >
+              Próximo token
+            </button>
+            <button
+              data-testid="stream-finish"
+              onClick={() => {
+                setResponse("Resposta completa");
+                setIsStreaming(false);
+              }}
+            >
+              Finalizar resposta
+            </button>
+          </>
+        )}
+      </div>
+    );
+  },
+}));
+vi.mock("@/components/kanban/kanban-board", () => ({
+  KanbanBoard: () => <div data-testid="kanban" />,
+}));
+vi.mock("@/components/header/header", () => ({
+  Header: ({
+    compactNavigation,
+  }: {
+    compactNavigation?: {
+      onOpenSessions?: () => void;
+      workbenchOpen?: boolean;
+      onToggleWorkbench?: () => void;
+    };
+  }) => (
+    <div
+      data-testid="header"
+      data-compact-navigation={String(!!compactNavigation)}
+    >
+      {compactNavigation?.onOpenSessions && (
+        <button
+          type="button"
+          data-testid="compact-open-sessions"
+          onClick={compactNavigation.onOpenSessions}
+        />
+      )}
+      {compactNavigation?.onToggleWorkbench && (
+        <button
+          type="button"
+          data-testid="compact-toggle-workbench"
+          aria-pressed={compactNavigation.workbenchOpen}
+          onClick={compactNavigation.onToggleWorkbench}
+        >
+          Workbench
+        </button>
+      )}
+    </div>
+  ),
+}));
+vi.mock("@/components/header/mode-switcher", () => ({
+  ModeSwitch: () => <div data-testid="mode-switch" />,
+}));
+vi.mock("@/components/sidebar/sidebar", () => ({
+  Sidebar: ({
+    onNewChat,
+    inSheet,
+  }: {
+    onNewChat: () => void;
+    inSheet?: boolean;
+  }) => (
+    <div data-testid="sidebar" data-in-sheet={String(!!inSheet)}>
+      <button data-testid="sidebar-new-session" onClick={onNewChat} />
+    </div>
+  ),
+}));
+vi.mock("@/components/header/session-switcher", () => ({
+  SessionSwitcher: () => <div data-testid="session-switcher" />,
+}));
+vi.mock("@/components/workbench/workbench-panel", () => ({
+  WorkbenchContent: () => <div data-testid="workbench-content" />,
+  WorkbenchNavBar: () => <div data-testid="workbench-navbar" />,
+}));
+vi.mock("@/components/workbench/windows/docked-editor", () => ({
+  DockedEditor: () => <div data-testid="editor" />,
+}));
+vi.mock("@/components/workbench/windows/window-layer", () => ({
+  WindowLayer: () => null,
+}));
+vi.mock("@/components/workbench/windows/window-dock", () => ({
+  WindowDock: () => null,
+}));
+vi.mock("@/components/layout/license-banner", () => ({
+  LicenseBanner: () => null,
+}));
+vi.mock("@/components/layout/keyboard-shortcuts-dialog", () => ({
+  KeyboardShortcutsDialog: () => null,
+}));
+vi.mock("@/components/layout/command-palette", () => ({
+  CommandPalette: () => null,
+}));
+vi.mock("@/components/sidebar/new-chat-dialog", () => ({
+  NewChatDialog: ({ open }: { open: boolean }) =>
+    open ? <div role="dialog" data-testid="new-chat-dialog" /> : null,
+}));
+
+// O IdeModeLayout real traz drag/resize junto; o marcador preserva os SLOTS,
+// que é sobre o que os testes de posição do Header afirmam. `slot-center`
+// espelha a coluna central real (header + navBar + workbenchContent +
+// editor) — `chat` fica FORA dela, como a coluna lateral direita do IDE.
+vi.mock("@/components/layout/ide-mode-layout", () => ({
+  IdeModeLayout: ({
+    header,
+    navBar,
+    workbenchContent,
+    editor,
+    chat,
+    layoutState,
+    workbenchOpen,
+    onOpenWorkbench,
+  }: {
+    header: ReactNode;
+    navBar: ReactNode;
+    workbenchContent: ReactNode;
+    editor: ReactNode;
+    chat: ReactNode;
+    layoutState?: "wide" | "mobile" | "tablet";
+    workbenchOpen?: boolean;
+    onOpenWorkbench?: () => void;
+  }) => (
+    <div
+      data-testid="ide-layout"
+      data-layout-state={layoutState}
+      data-workbench-open={workbenchOpen ? "true" : "false"}
+    >
+      {layoutState === "mobile" && (
+        <button
+          type="button"
+          data-testid="ide-mobile-tab-workbench"
+          onClick={onOpenWorkbench}
+        >
+          {workbenchOpen ? "Workbench aberta" : "Abrir Workbench"}
+        </button>
+      )}
+      <div data-testid="slot-center">
+        {header}
+        <div data-testid="slot-navbar">{navBar}</div>
+        <div data-testid="slot-workbench">{workbenchContent}</div>
+        <div data-testid="slot-editor">{editor}</div>
+      </div>
+      <div data-testid="slot-chat">{chat}</div>
+    </div>
+  ),
+}));
+
+vi.mock("@/components/layout/horizontal-split", () => ({
+  HorizontalSplit: ({ left, right }: { left: ReactNode; right: ReactNode }) => (
+    <div data-testid="split">
+      <div data-testid="split-left">{left}</div>
+      <div data-testid="split-right">{right}</div>
+    </div>
+  ),
+}));
+
+vi.mock("@/lib/queries/threads", () => ({
+  useThreadsQuery: () => ({ data: [], isLoading: false }),
+  useThreadsPaging: () => ({
+    hasMore: false,
+    remaining: 0,
+    isLoadingMore: false,
+    loadMore: async () => {},
+  }),
+  useDeleteThread: () => ({ mutateAsync: vi.fn() }),
+  useUpdateThread: () => ({ mutate: vi.fn() }),
+  threadsQueryKey: () => ["threads"],
+}));
+
+vi.mock("@/lib/api/vectora-client", () => ({
+  listThreads: vi.fn().mockResolvedValue([]),
+  getHistory: vi.fn().mockResolvedValue({ messages: [] }),
+  // SessionPage marks an existing route as read on mount. Keep this mocked
+  // as a resolved idempotent RPC so layout tests exercise rendering rather
+  // than failing before the mode composition is committed.
+  markThreadRead: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock("../../../router", () => ({
+  queryClient: {
+    ensureQueryData: vi.fn(),
+    prefetchQuery: vi.fn().mockResolvedValue(undefined),
+    setQueryData: vi.fn(),
+  },
+}));
+
+import { useSettingsStore } from "@/lib/stores/settings-store";
+import { useWindowsStore } from "@/lib/stores/windows-store";
+import { useWorkbenchStore } from "@/lib/stores/workbench-store";
+import { Route } from "../$threadId";
+
+const SessionPage = (Route as unknown as { component: () => ReactElement })
+  .component;
+
+function setMode(uiMode: "assistant" | "ide" | "kanban", chatMode = false) {
+  useSettingsStore.setState({ uiMode, chatMode });
+}
+
+beforeEach(() => {
+  navigateSpy.mockClear();
+  chatProps.mockClear();
+  routeParam.value = "t1";
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: 1440,
+  });
+  Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value: undefined,
+  });
+  // jsdom não implementa matchMedia — useIsNarrowViewport depende dele.
+  // Sempre "largo": é o layout de 3 painéis que os testes afirmam.
+  // jsdom não implementa EventSource — hooks de webhook o instanciam no
+  // mount. Stub inerte: os testes aqui não afirmam nada sobre SSE.
+  vi.stubGlobal(
+    "EventSource",
+    class {
+      close() {}
+      addEventListener() {}
+      removeEventListener() {}
+    },
+  );
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ workspaces: [], active_id: null }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("SessionPage — um modo por vez, nunca dois", () => {
+  it("marca a rota de nova conversa antes dos efeitos de registro", () => {
+    routeParam.value = "new";
+    setMode("assistant");
+
+    render(<SessionPage />);
+
+    expect(chatProps).toHaveBeenCalledWith(
+      expect.objectContaining({ isNewThread: true }),
+    );
+  });
+
+  it("Kanban mostra o board e NENHUM chat", () => {
+    // Regressão: o chat era um overlay absoluto irmão das branches de modo,
+    // então continuava desenhado por cima do board depois da troca.
+    setMode("kanban");
+    render(<SessionPage />);
+
+    expect(screen.getByTestId("kanban")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat")).not.toBeInTheDocument();
+  });
+
+  it("Assistente mostra o chat e NENHUM board", () => {
+    setMode("assistant");
+    render(<SessionPage />);
+
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+    expect(screen.queryByTestId("kanban")).not.toBeInTheDocument();
+  });
+
+  it("IDE mostra o chat e NENHUM board", () => {
+    setMode("ide");
+    render(<SessionPage />);
+
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+    expect(screen.queryByTestId("kanban")).not.toBeInTheDocument();
+  });
+
+  it("erro/borda: nunca existe mais de uma instância de chat montada", () => {
+    // Duas instâncias significavam scroll/estado duplicado, efeito colateral
+    // direto do overlay hoisted.
+    setMode("assistant");
+    render(<SessionPage />);
+
+    expect(screen.getAllByTestId("chat")).toHaveLength(1);
+  });
+});
+
+describe("SessionPage — posição do Header por modo", () => {
+  // O app tem 3 colunas fixas (sidebar esquerda, centro, sidebar direita) —
+  // o modo (Assistente/IDE/Kanban) só recompõe QUAIS filhos aparecem em
+  // cada uma, nunca reordena as colunas em si. O Header sempre mora na
+  // coluna central, nunca esparramado por cima da coluna lateral direita
+  // (que muda de conteúdo por modo: workbench em Assistente, chat em IDE).
+
+  it("IDE: Header vive na coluna central, nunca na coluna de chat (sidebar direita)", () => {
+    setMode("ide");
+    render(<SessionPage />);
+
+    const header = screen.getByTestId("header");
+    expect(screen.getByTestId("slot-center")).toContainElement(header);
+    expect(screen.getByTestId("slot-chat")).not.toContainElement(header);
+  });
+
+  it("Assistente: Header fica dentro da coluna de chat (centro), nunca dentro do workbench (sidebar direita)", () => {
+    setMode("assistant");
+    render(<SessionPage />);
+
+    const header = screen.getByTestId("header");
+    expect(screen.getByTestId("shell-header-slot")).toContainElement(header);
+    for (const rail of screen.getAllByRole("complementary")) {
+      expect(rail).not.toContainElement(header);
+    }
+  });
+
+  it("erro/borda: só existe um Header montado em qualquer modo", () => {
+    for (const mode of ["assistant", "ide", "kanban"] as const) {
+      cleanup();
+      setMode(mode);
+      render(<SessionPage />);
+      expect(screen.getAllByTestId("header")).toHaveLength(1);
+    }
+  });
+});
+
+describe("SessionPage — o Header só cobre a coluna central, em qualquer layout", () => {
+  // Largo, tablet (faixas laterais) e cada modo: as faixas e colunas laterais
+  // fazem parte do shell e ficam FORA da coluna central, então o Header nunca
+  // passa por cima delas.
+  const RAILS = [
+    "compact-sessions-rail",
+    "workbench-navbar",
+    "ide-tablet-chat-rail",
+  ];
+
+  it.each([
+    ["assistant", 1400],
+    ["assistant", 818],
+    ["kanban", 1400],
+    ["kanban", 818],
+  ] as const)(
+    "%s a %ipx: nenhuma coluna lateral ou faixa fica dentro da coluna do Header",
+    async (mode, width) => {
+      setMode(mode);
+      useWorkbenchStore.setState({ panelOpen: { t1: false } });
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: width,
+      });
+
+      render(<SessionPage />);
+
+      const header = await screen.findByTestId("header");
+      const center = screen.getByTestId("shell-header-slot").closest("main");
+      expect(center).not.toBeNull();
+      expect(center).toContainElement(header);
+      for (const aside of screen.queryAllByRole("complementary")) {
+        expect(aside).not.toContainElement(header);
+        expect(center).not.toContainElement(aside);
+      }
+      for (const id of RAILS) {
+        for (const rail of screen.queryAllByTestId(id)) {
+          expect(center).not.toContainElement(rail);
+        }
+      }
+    },
+  );
+
+  it("nos layouts compactos as faixas existem e ficam em colunas do shell", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    const sessions = await screen.findByTestId("compact-sessions-rail");
+    const workbench = screen.getByTestId("workbench-navbar");
+    expect(sessions.closest("aside")).not.toBeNull();
+    expect(workbench.closest("aside")).not.toBeNull();
+  });
+});
+
+describe("SessionPage — sidebar de sessões", () => {
+  it("fica à esquerda em Assistente/Kanban e cede lugar à workbench no IDE", () => {
+    setMode("assistant");
+    render(<SessionPage />);
+    expect(screen.getAllByTestId("sidebar").length).toBeGreaterThan(0);
+
+    cleanup();
+    setMode("kanban");
+    render(<SessionPage />);
+    expect(screen.getAllByTestId("sidebar").length).toBeGreaterThan(0);
+
+    cleanup();
+    setMode("ide");
+    render(<SessionPage />);
+    expect(screen.queryByTestId("sidebar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("workbench-navbar")).toBeInTheDocument();
+  });
+
+  it("abre o diálogo de nova sessão pelo sidebar do modo Kanban", () => {
+    setMode("kanban");
+    render(<SessionPage />);
+
+    fireEvent.click(screen.getAllByTestId("sidebar-new-session")[0]!);
+
+    expect(screen.getByTestId("new-chat-dialog")).toBeInTheDocument();
+  });
+});
+
+describe("SessionPage — chat compacto no IDE", () => {
+  it("IDE usa o chat compacto com SessionSwitcher; Assistente usa o normal", () => {
+    setMode("ide");
+    render(<SessionPage />);
+    expect(screen.getByTestId("chat")).toHaveAttribute("data-compact", "true");
+    expect(screen.getByTestId("session-switcher")).toBeInTheDocument();
+
+    cleanup();
+    setMode("assistant");
+    render(<SessionPage />);
+    expect(screen.getByTestId("chat")).toHaveAttribute("data-compact", "false");
+    expect(screen.queryByTestId("session-switcher")).not.toBeInTheDocument();
+  });
+
+  it("preserva o stream ao abrir e fechar a Workbench no Assistente compacto", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 600,
+    });
+
+    render(<SessionPage />);
+
+    const toggleWorkbench = await screen.findByTestId(
+      "compact-toggle-workbench",
+    );
+    fireEvent.click(screen.getByTestId("stream-send"));
+
+    expect(screen.getByTestId("stream-response")).toHaveTextContent(
+      "Resposta parcial",
+    );
+    expect(screen.getByTestId("stream-stop")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-request-count")).toHaveTextContent("1");
+
+    fireEvent.click(toggleWorkbench);
+    expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-response")).toHaveTextContent(
+      "Resposta parcial",
+    );
+    fireEvent.click(screen.getByTestId("stream-next-token"));
+    expect(screen.getByTestId("stream-response")).toHaveTextContent(
+      "Resposta parcial atualizada",
+    );
+
+    fireEvent.click(toggleWorkbench);
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+    expect(screen.getByTestId("stream-response")).toHaveTextContent(
+      "Resposta parcial atualizada",
+    );
+    expect(screen.getByTestId("stream-stop")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-request-count")).toHaveTextContent("1");
+
+    fireEvent.click(screen.getByTestId("stream-finish"));
+    expect(screen.getByTestId("stream-response")).toHaveTextContent(
+      "Resposta completa",
+    );
+    expect(screen.queryByTestId("stream-stop")).not.toBeInTheDocument();
+    expect(screen.getByTestId("stream-request-count")).toHaveTextContent("1");
+  });
+
+  it("preserva a instância do chat ao cruzar o breakpoint durante o stream", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 600,
+    });
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: undefined,
+    });
+
+    render(<SessionPage />);
+    const chat = await screen.findByTestId("chat");
+    const chatLayout = chat.parentElement?.parentElement?.parentElement;
+    expect(chatLayout).toHaveClass("absolute");
+    fireEvent.click(screen.getByTestId("stream-send"));
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1200,
+    });
+    fireEvent(window, new Event("resize"));
+    await waitFor(() =>
+      expect(screen.getByTestId("header")).toHaveAttribute(
+        "data-compact-navigation",
+        "false",
+      ),
+    );
+    expect(chatLayout).toHaveClass("absolute");
+    expect(screen.getByTestId("chat")).toBe(chat);
+    expect(screen.getByTestId("chat")).toHaveAttribute("data-compact", "false");
+    expect(screen.getByTestId("stream-response")).toHaveTextContent(
+      "Resposta parcial",
+    );
+    expect(screen.getByTestId("stream-stop")).toBeInTheDocument();
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 600,
+    });
+    fireEvent(window, new Event("resize"));
+    await waitFor(() =>
+      expect(screen.getByTestId("header")).toHaveAttribute(
+        "data-compact-navigation",
+        "true",
+      ),
+    );
+    expect(chatLayout).toHaveClass("absolute");
+    expect(screen.getByTestId("chat")).toBe(chat);
+    expect(screen.getByTestId("stream-request-count")).toHaveTextContent("1");
+  });
+
+  it("isola o stream ao trocar de sessão com a Workbench aberta", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false, t2: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 600,
+    });
+
+    const { rerender } = render(<SessionPage />);
+    fireEvent.click(await screen.findByTestId("stream-send"));
+    fireEvent.click(screen.getByTestId("compact-toggle-workbench"));
+    expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-stop")).toBeInTheDocument();
+
+    routeParam.value = "t2";
+    rerender(<SessionPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("chat")).toHaveAttribute(
+        "data-thread-id",
+        "t2",
+      ),
+    );
+    expect(screen.queryByTestId("stream-stop")).not.toBeInTheDocument();
+    expect(screen.getByTestId("stream-response")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+  });
+
+  it("mantém o chat central ao abrir a Workbench no layout largo", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1200,
+    });
+
+    render(<SessionPage />);
+
+    expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
+    expect(await screen.findByTestId("chat")).toBeInTheDocument();
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+  });
+});
+
+describe("SessionPage — layout do IDE em tablet", () => {
+  it("mantém as colunas de desktop em uma janela de 818px", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "outerWidth", {
+      configurable: true,
+      value: 818,
+    });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(screen.queryByTestId("ide-mobile-tab-workbench")).toBeNull();
+    expect(screen.getByTestId("editor")).toBeInTheDocument();
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+  });
+});
+
+describe("SessionPage — IDE e Kanban no tablet", () => {
+  it("Kanban mostra a faixa de sessões e tira os botões do cabeçalho", async () => {
+    setMode("kanban");
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(
+      await screen.findByTestId("compact-sessions-rail"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+    fireEvent.click(screen.getByTestId("compact-rail-sessions"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("IDE entra no layout de tablet entre 640 e 1100 px", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(await screen.findByTestId("ide-layout")).toHaveAttribute(
+      "data-layout-state",
+      "tablet",
+    );
+  });
+});
+
+describe("SessionPage — tablet com faixas nas bordas", () => {
+  it("mostra as faixas de sessões e do workbench e abre uma gaveta por vez", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    expect(
+      await screen.findByTestId("compact-sessions-rail"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("workbench-navbar")).toBeInTheDocument();
+    // Os botões do cabeçalho só existem quando não há faixas (celular).
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("compact-rail-sessions"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar")).toHaveAttribute(
+      "data-in-sheet",
+      "true",
+    );
+
+    fireEvent.click(screen.getByTestId("compact-rail-sessions"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("abrir o workbench fecha a gaveta de sessões", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+    fireEvent.click(await screen.findByTestId("compact-rail-sessions"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
+    // Esc fecha a gaveta, como na de sessões.
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+
+  it("Esc fecha a gaveta do workbench", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+});
+
+async function openWorkbenchDrawer() {
+  setMode("assistant");
+  useWorkbenchStore.setState({ panelOpen: { t1: false } });
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: 818,
+  });
+  render(<SessionPage />);
+  act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+  return screen.findByTestId("compact-workbench-overlay");
+}
+
+describe("SessionPage — gavetas compactas padronizadas", () => {
+  it("a gaveta do workbench é um diálogo com nome, igual à de sessões", async () => {
+    const drawer = await openWorkbenchDrawer();
+
+    expect(drawer).toHaveAttribute("role", "dialog");
+    expect(drawer).toHaveAccessibleName();
+    expect(drawer).toHaveAttribute("data-slot", "sheet-content");
+  });
+
+  it("o fundo escuro é o mesmo para workbench e sessões, e cobre a janela toda", async () => {
+    await openWorkbenchDrawer();
+
+    const overlay = document.querySelector("[data-slot='sheet-overlay']");
+    // Cobre a janela toda, menos a barra de título do Electron, que fica acima.
+    expect(overlay).toHaveClass(
+      "fixed",
+      "inset-x-0",
+      "bottom-0",
+      "top-[var(--titlebar-h,0px)]",
+      "bg-black/50",
+    );
+  });
+
+  it("a gaveta mostra a coluna inteira do workbench (faixa e painel) e preenche a largura", async () => {
+    const drawer = await openWorkbenchDrawer();
+
+    expect(
+      drawer.querySelector("[data-testid='workbench-navbar']"),
+    ).not.toBeNull();
+    expect(drawer).toContainElement(screen.getByTestId("workbench-content"));
+    const slot = drawer.querySelector(":scope > div:not(.sr-only)");
+    expect(slot).toHaveClass("flex-1", "[&>*]:w-full", "[&>*]:flex-1");
+  });
+
+  it("o chat continua montado e visível por baixo da gaveta", async () => {
+    await openWorkbenchDrawer();
+
+    expect(screen.getByTestId("chat")).toBeInTheDocument();
+  });
+
+  it("no modo IDE o header não oferece sessões", async () => {
+    setMode("ide");
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 818,
+    });
+
+    render(<SessionPage />);
+
+    await screen.findByTestId("header");
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+  });
+});
+
+function setWidth(value: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value,
+  });
+}
+
+describe("SessionPage — as laterais fecham ao ir para o compacto", () => {
+  it("laterais abertas no layout largo começam fechadas quando a janela fica compacta", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(1400);
+    render(<SessionPage />);
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+
+    act(() => {
+      setWidth(818);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await waitFor(() =>
+      expect(useWorkbenchStore.getState().panelOpen.t1).toBe(false),
+    );
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("abrir já compacto com o workbench aberto da sessão anterior não abre gaveta nenhuma", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(818);
+
+    render(<SessionPage />);
+
+    await waitFor(() =>
+      expect(useWorkbenchStore.getState().panelOpen.t1).toBe(false),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("voltar ao layout largo não reabre nem fecha nada à força", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    act(() => {
+      setWidth(1400);
+      window.dispatchEvent(new Event("resize"));
+    });
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+  });
+});
+
+describe("SessionPage — no IDE compacto só existem as gavetas do IDE", () => {
+  it("abrir o workbench abre uma gaveta só, a do IDE, e nunca a do Assistente", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+    // O IDE tem a própria gaveta (IdeModeLayout); a do Assistente não abre.
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("a gaveta de sessões nunca abre no IDE", async () => {
+    setMode("ide");
+    setWidth(818);
+    render(<SessionPage />);
+
+    expect(screen.queryByTestId("compact-open-sessions")).toBeNull();
+    expect(screen.queryByTestId("sidebar")).toBeNull();
+  });
+
+  it("no Kanban o workbench não abre gaveta", async () => {
+    setMode("kanban");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+  });
+});
+
+describe("SessionPage — abrir um arquivo fecha a gaveta do workbench", () => {
+  it("no Assistente compacto, abrir um arquivo na janela leva o foco para ele", async () => {
+    const drawer = await openWorkbenchDrawer();
+    expect(drawer).toBeInTheDocument();
+
+    act(() => useWindowsStore.getState().open("ws-1", "src/main.py"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+  });
+
+  it("no IDE compacto, abrir um arquivo no editor fecha a gaveta", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+
+    act(() => useWindowsStore.getState().openDocked("ws-1", "src/main.py"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "false",
+      ),
+    );
+  });
+
+  it("abrir um documento no canvas (diff, commit) também fecha a gaveta", async () => {
+    setMode("ide");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "true",
+      ),
+    );
+
+    act(() =>
+      useWindowsStore.getState().openCanvasDocument({
+        id: "file:ws-1:a.py",
+        kind: "file",
+        workspaceId: "ws-1",
+        title: "a.py",
+        path: "a.py",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("ide-layout")).toHaveAttribute(
+        "data-workbench-open",
+        "false",
+      ),
+    );
+  });
+
+  it("no layout largo abrir um arquivo não mexe no workbench", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    setWidth(1400);
+    render(<SessionPage />);
+
+    act(() => useWindowsStore.getState().open("ws-1", "src/main.py"));
+
+    expect(useWorkbenchStore.getState().panelOpen.t1).toBe(true);
+  });
+
+  it("fechar uma aba de arquivo não fecha a gaveta que o usuário abriu", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    setWidth(818);
+    render(<SessionPage />);
+    act(() => useWindowsStore.getState().open("ws-1", "a.py"));
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+    await screen.findByTestId("compact-workbench-overlay");
+
+    act(() => useWindowsStore.getState().closeTab("ws-1", "a.py"));
+
+    expect(screen.getByTestId("compact-workbench-overlay")).toBeInTheDocument();
+  });
+});
+
+describe("SessionPage — laterais compactas", () => {
+  it("abre uma sidebar por vez e renderiza sessões dentro do Sheet", async () => {
+    setMode("assistant");
+    useWorkbenchStore.setState({ panelOpen: { t1: false } });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 600,
+    });
+
+    render(<SessionPage />);
+    fireEvent.click(await screen.findByTestId("compact-open-sessions"));
+
+    expect(await screen.findByTestId("sidebar")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar")).toHaveAttribute(
+      "data-in-sheet",
+      "true",
+    );
+
+    fireEvent.click(screen.getByTestId("compact-toggle-workbench"));
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("compact-workbench-overlay")).toHaveClass(
+      "right-0",
+      "z-50",
+    );
+    fireEvent.keyDown(screen.getByTestId("compact-workbench-overlay"), {
+      key: "Escape",
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByTestId("compact-toggle-workbench"));
+    expect(
+      await screen.findByTestId("compact-workbench-overlay"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
+
+    fireEvent.click(screen.getByTestId("compact-open-sessions"));
+    expect(await screen.findByTestId("sidebar")).toBeInTheDocument();
+    expect(screen.queryByTestId("compact-workbench-overlay")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("compact-open-sessions"));
+    await waitFor(() => expect(screen.queryByTestId("sidebar")).toBeNull());
+  });
+
+  it("mantém o Kanban dentro da largura de um smartphone estreito", () => {
+    setMode("kanban");
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 320,
+    });
+
+    render(<SessionPage />);
+
+    const board = screen.getByTestId("kanban");
+    expect(board.parentElement).toHaveClass("min-w-0");
+    expect(board.parentElement?.parentElement).toHaveClass("w-full", "min-w-0");
+  });
+});
+
+describe("SessionPage — workbench do Assistente estreito", () => {
+  it("mantém a navegação do workbench no painel central", async () => {
+    useSettingsStore.setState({ uiMode: "assistant", chatMode: false });
+    useWorkbenchStore.setState({ panelOpen: { t1: true } });
+    Object.defineProperty(window, "outerWidth", {
+      configurable: true,
+      value: 639,
+    });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 639,
+    });
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query.includes("767px"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(<SessionPage />);
+    act(() => useWorkbenchStore.getState().setPanelOpen("t1", true));
+
+    expect(await screen.findByTestId("workbench-navbar")).toBeInTheDocument();
+    expect(await screen.findByTestId("workbench-content")).toBeInTheDocument();
+    expect(await screen.findByTestId("chat")).toBeInTheDocument();
+    Object.defineProperty(window, "outerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+  });
+});

@@ -1,0 +1,244 @@
+"""Tipo de mensagem nativo do motor agêntico.
+
+Fundação de todo o resto do motor nativo — o loop de conversa
+(``backend/engine/conversation_loop.py``), os 5 chat clients
+(``backend/llm/*/chat_client.py``) e a persistência (``backend/
+persistence/native/session_store.py``) operam todos sobre ``VMessage``.
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Any, Literal
+
+from pydantic import TypeAdapter, ValidationError
+
+from backend.vtypes.contracts import JsonObject, UsageSnapshot
+
+logger = logging.getLogger(__name__)
+
+
+def coerce_json_object(value: object, *, raw: object | None = None) -> JsonObject:
+    """Normalize provider tool arguments to the object shape tools require."""
+    try:
+        return TypeAdapter(JsonObject).validate_python(value)
+    except ValidationError:
+        pass
+    return {"_parse_error": str(raw if raw is not None else value)}
+
+
+class MessageRole(StrEnum):
+    """Papel da mensagem — enum nativo em vez de string solta."""
+
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
+
+
+@dataclass(slots=True)
+class ToolCall:
+    """Uma chamada de tool já completa (não fragmentada) — presente em
+    ``VMessage.tool_calls`` depois que o streaming termina de acumular."""
+
+    id: str
+    name: str
+    args: JsonObject
+
+
+@dataclass(slots=True)
+class ToolCallChunk:
+    """Fragmento de tool call em streaming — ``args_fragment`` é a string
+    JSON parcial acumulada externamente pelo caller (o próprio client de
+    provider decide se emite o argumento completo num único chunk ou
+    fragmentado; ``VMessageChunk`` só carrega o que já chegou)."""
+
+    index: int
+    id: str | None = None
+    name: str | None = None
+    args_fragment: str = ""
+
+
+MediaKind = Literal["image", "audio", "video", "document", "text", "file"]
+
+
+@dataclass(slots=True)
+class ContentBlock:
+    """Bloco de conteúdo multimodal.
+
+    - ``text``: texto.
+    - ``image_url``: imagem (``image_url`` com URL ou ``data:``; no histórico
+      persistido fica só ``asset_id``).
+    - ``media``: anexo que não é imagem (áudio, vídeo, documento, texto,
+      arquivo). ``text`` guarda a representação textual usada quando o
+      modelo não recebe o arquivo nativamente (texto extraído, transcrição
+      ou referência); ``asset_id`` aponta os bytes; ``media_data_url`` só
+      existe na cópia montada para o provider e nunca é persistido.
+    - ``reasoning``: raciocínio exposto pelo provider.
+    """
+
+    kind: Literal["text", "image_url", "media", "reasoning"]
+    text: str | None = None
+    image_url: str | None = None
+    asset_id: str | None = None
+    attachment_name: str | None = None
+    attachment_mime_type: str | None = None
+    attachment_size_bytes: int | None = None
+    reasoning_text: str | None = None
+    media_kind: MediaKind | None = None
+    media_sha256: str | None = None
+    media_data_url: str | None = None
+    media_preview_asset_ids: list[str] | None = None
+    """Prévias visuais salvas (páginas de PDF, quadros de vídeo)."""
+    media_preview_caption: str | None = None
+    media_preview_urls: list[str] | None = None
+    """``data:`` URLs das prévias; só na cópia do provider, nunca persistido."""
+
+    @property
+    def is_textual(self) -> bool:
+        """Bloco cujo ``text`` chega ao modelo (texto ou anexo em texto)."""
+        return self.kind in {"text", "media"}
+
+
+@dataclass(slots=True)
+class VMessage:
+    """Mensagem completa (não-streaming) do histórico de conversa."""
+
+    role: MessageRole
+    content: list[ContentBlock] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: str | None = None
+    """Presente quando ``role == MessageRole.TOOL`` — id da tool call que
+    esta mensagem responde."""
+    name: str | None = None
+    """Nó/soul emissor (agente principal vs. subagente) — vira o campo
+    `node` do evento SSE `token`."""
+    finish_reason: str | None = None
+    """`stop` | `length` | `content_filter` | `tool_calls` — decide se o
+    loop de conversa continua ou para (backend/engine/conversation_loop.py)."""
+    is_error: bool | None = False
+    """Marca um resultado de tool como erro — ``None`` preserva um estado
+    desconhecido ao reidratar dados antigos; vira `is_error` no evento SSE."""
+
+    def text(self) -> str:
+        """Concatena todos os blocos `text`, na ordem — equivalente ao
+        `.content` string-only que o código hoje lê de `AIMessage`."""
+        return "".join(b.text or "" for b in self.content if b.kind == "text")
+
+    def model_text(self) -> str:
+        """Texto que o modelo recebe, incluindo a forma textual dos anexos."""
+        return "".join(b.text or "" for b in self.content if b.is_textual)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialização pra persistência (`SessionStore.append_message`)."""
+        return {
+            "role": self.role.value,
+            "content": [
+                {
+                    "kind": b.kind,
+                    "text": b.text,
+                    "image_url": b.image_url,
+                    "asset_id": b.asset_id,
+                    "attachment_name": b.attachment_name,
+                    "attachment_mime_type": b.attachment_mime_type,
+                    "attachment_size_bytes": b.attachment_size_bytes,
+                    "reasoning_text": b.reasoning_text,
+                    "media_kind": b.media_kind,
+                    "media_sha256": b.media_sha256,
+                    "media_data_url": b.media_data_url,
+                    "media_preview_asset_ids": b.media_preview_asset_ids,
+                    "media_preview_caption": b.media_preview_caption,
+                    "media_preview_urls": b.media_preview_urls,
+                }
+                for b in self.content
+            ],
+            "tool_calls": [
+                {"id": tc.id, "name": tc.name, "args": tc.args}
+                for tc in self.tool_calls
+            ],
+            "tool_call_id": self.tool_call_id,
+            "name": self.name,
+            "finish_reason": self.finish_reason,
+            "is_error": self.is_error,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VMessage:
+        """Desserialização — contraparte de `to_dict`, usada por
+        `SessionStore.get_history`. Linha corrompida no histórico nunca
+        derruba a reconstrução inteira — vira mensagem de erro visível
+        no lugar dela."""
+        try:
+            return cls(
+                role=MessageRole(data["role"]),
+                content=[
+                    ContentBlock(
+                        kind=b["kind"],
+                        text=b.get("text"),
+                        image_url=b.get("image_url"),
+                        asset_id=b.get("asset_id"),
+                        attachment_name=b.get("attachment_name"),
+                        attachment_mime_type=b.get("attachment_mime_type"),
+                        attachment_size_bytes=b.get("attachment_size_bytes"),
+                        reasoning_text=b.get("reasoning_text"),
+                        media_kind=b.get("media_kind"),
+                        media_sha256=b.get("media_sha256"),
+                        media_data_url=b.get("media_data_url"),
+                        media_preview_asset_ids=b.get("media_preview_asset_ids"),
+                        media_preview_caption=b.get("media_preview_caption"),
+                        media_preview_urls=b.get("media_preview_urls"),
+                    )
+                    for b in data.get("content", [])
+                ],
+                tool_calls=[
+                    ToolCall(
+                        id=tc["id"],
+                        name=tc["name"],
+                        args=coerce_json_object(tc["args"]),
+                    )
+                    for tc in data.get("tool_calls", [])
+                ],
+                tool_call_id=data.get("tool_call_id"),
+                name=data.get("name"),
+                finish_reason=data.get("finish_reason"),
+                is_error=(
+                    None
+                    if "is_error" in data and data["is_error"] is None
+                    else bool(data.get("is_error", False))
+                ),
+            )
+        except (KeyError, ValueError) as exc:
+            logger.exception("mensagem corrompida no histórico", extra={"data": data})
+            return cls(
+                role=MessageRole.SYSTEM,
+                content=[
+                    ContentBlock(
+                        kind="text", text=f"[mensagem corrompida no histórico: {exc}]"
+                    )
+                ],
+                is_error=True,
+            )
+
+
+def text_message(role: MessageRole, text: str, *, name: str | None = None) -> VMessage:
+    """Atalho pro caso comum — mensagem de um único bloco de texto."""
+    return VMessage(
+        role=role, content=[ContentBlock(kind="text", text=text)], name=name
+    )
+
+
+@dataclass(slots=True)
+class VMessageChunk:
+    """Fragmento de streaming — o loop de conversa e os 5 chat clients
+    (`backend/llm/*/chat.py`) emitem uma sequência desses por turno; o
+    caller acumula em um `VMessage` final."""
+
+    delta_text: str = ""
+    delta_reasoning: str | None = None
+    tool_call_chunks: list[ToolCallChunk] = field(default_factory=list)
+    finish_reason: str | None = None
+    usage: UsageSnapshot | None = None
+    """`{"input_tokens", "output_tokens", "total_tokens"}` — mesmo shape que
+    os 5 chat clients nativos já preenchem hoje."""

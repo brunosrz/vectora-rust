@@ -1,0 +1,310 @@
+"""Handler de compartilhamento de threads (leitura pública).
+
+Endpoints:
+    POST /threads/share         — autenticado, cria token de acesso público
+    GET  /threads/{id}/shares   — autenticado, lista os links ativos da conversa
+    GET  /threads/share/{token} — público, retorna conversa somente-leitura
+    DELETE /threads/share/{token} — autenticado, revoga token
+
+O token é um UUID armazenado na tabela ``shared_threads`` do mesmo banco
+SQLite usado pelas threads (``~/.vectora/checkpoints.db``).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import secrets
+import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request
+
+from backend.api.schemas import (
+    CreateShareRequest,
+    CreateShareResponse,
+    HistoryMessage,
+    ListSharesResponse,
+    SharedThread,
+    ThreadShare,
+)
+
+logger = logging.getLogger(__name__)
+_SECRET_TEXT = re.compile(
+    r"(?i)[\"']?(api[_ -]?key|token|secret|password)[\"']?\s*[:=]\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;}]+)|"
+    r"[\"']?(authorization)[\"']?\s*[:=]\s*bearer\s+"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\r\n,;}]+)"
+)
+
+
+def _sanitize_shared_text(value: str) -> str:
+    """Remove credential-shaped values before exposing a public snapshot."""
+    return _SECRET_TEXT.sub(
+        lambda match: (
+            f"{match.group(1) or match.group(2) or 'authorization'}: [redacted]"
+        ),
+        value,
+    )
+
+
+router = APIRouter(prefix="/threads", tags=["share"])
+
+
+# ---------------------------------------------------------------------------
+# DB helpers (reusa conexão do handler de threads)
+# ---------------------------------------------------------------------------
+
+
+async def _get_db() -> Any:
+    from backend.api.handlers.threads import _get_db as _threads_db
+
+    return await _threads_db()
+
+
+async def _ensure_share_table(db: Any) -> None:
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS shared_threads (
+            token       TEXT PRIMARY KEY,
+            thread_id   TEXT NOT NULL,
+            created_by  TEXT NOT NULL DEFAULT '',
+            created_at  TEXT NOT NULL,
+            expires_at  TEXT NOT NULL
+            ,permission TEXT NOT NULL DEFAULT 'read'
+        )
+    """)
+    try:
+        await db.execute(
+            "ALTER TABLE shared_threads ADD COLUMN permission TEXT NOT NULL DEFAULT 'read'"
+        )
+    except Exception as exc:
+        if "duplicate column name" not in str(exc).lower():
+            raise
+    await db.commit()
+
+
+async def _write_share_audit(
+    user_id: str, action: str, *, thread_id: str | None = None, token: str | None = None
+) -> None:
+    """Persiste a auditoria; falha explícita impede uma operação sem trilha."""
+    from backend.rbac.auth import get_db_for_audit, write_audit_required
+
+    audit_db = await get_db_for_audit()
+    metadata = {
+        key: value
+        for key, value in (("thread_id", thread_id), ("token", token))
+        if value
+    }
+    await write_audit_required(
+        audit_db, user_id, action, success=True, metadata=metadata
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /threads/share — cria token (autenticado)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/share")
+async def create_share(
+    request: Request, body: CreateShareRequest
+) -> CreateShareResponse:
+    user = getattr(request.state, "user", None)
+    user_id = user.id if user else "local"
+
+    db = await _get_db()
+    await _ensure_share_table(db)
+
+    token = secrets.token_urlsafe(24)
+    now = datetime.now(UTC)
+    expires_at = (now + timedelta(hours=max(1, min(body.ttl_hours, 720)))).isoformat()
+
+    # SessionStore é a fonte de verdade da posse; `vectora_sessions.extra` é
+    # apenas metadado de UI e não contém necessariamente o user_id.
+    from backend.services import agent_factory
+
+    session = await (await agent_factory.get_session_store()).get_session(
+        body.thread_id
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    owner_id = str(session.get("user_id", ""))
+    if owner_id != user_id and getattr(user, "role", "member") not in ("root", "admin"):
+        raise HTTPException(status_code=403, detail="Não autorizado")
+    await db.execute(
+        "INSERT INTO shared_threads (token, thread_id, created_by, created_at, expires_at, permission) VALUES (?,?,?,?,?,?)",
+        (token, body.thread_id, user_id, now.isoformat(), expires_at, body.permission),
+    )
+    await db.commit()
+    try:
+        await _write_share_audit(user_id, "share_create", thread_id=body.thread_id)
+    except Exception:
+        await db.execute("DELETE FROM shared_threads WHERE token = ?", (token,))
+        await db.commit()
+        raise
+
+    base_url = str(request.base_url).rstrip("/")
+    return CreateShareResponse(
+        token=token,
+        url=f"{base_url}/share/{token}",
+        expires_at=expires_at,
+        permission=body.permission,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /threads/share/{token} — leitura pública
+# ---------------------------------------------------------------------------
+
+
+@router.get("/share/{token}")
+async def get_shared_thread(token: str) -> SharedThread:
+    db = await _get_db()
+    await _ensure_share_table(db)
+
+    async with db.execute(
+        "SELECT thread_id, created_at, expires_at, permission FROM shared_threads WHERE token = ?",
+        (token,),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Share token not found")
+
+    thread_id, created_at, expires_at, _permission = row
+
+    now = datetime.now(UTC).isoformat()
+    if expires_at < now:
+        raise HTTPException(status_code=404, detail="Share token expired")
+
+    # Obtém título da thread
+    title = ""
+    async with db.execute(
+        "SELECT extra FROM vectora_sessions WHERE thread_id = ?",
+        (thread_id,),
+    ) as cur:
+        session_row = await cur.fetchone()
+    if session_row:
+        try:
+            extra = json.loads(session_row[0] or "{}")
+            title = _sanitize_shared_text(str(extra.get("title", "")))
+        except Exception:
+            pass
+
+    # Histórico via o mesmo grafo que o chat escreve (deep-agent). Ler por um
+    # grafo diferente devolve messages vazio — ver agent_factory.aget_thread_messages.
+    messages: list[HistoryMessage] = []
+    try:
+        from backend.services import agent_factory
+
+        pairs = await agent_factory.aget_thread_messages(thread_id)
+        messages = [
+            HistoryMessage(role=role, content=_sanitize_shared_text(text))
+            for role, text, _cp, _att in pairs
+        ]
+    except Exception:
+        logger.debug("share: não foi possível carregar histórico do grafo")
+
+    return SharedThread(
+        thread_id=thread_id,
+        title=title,
+        messages=messages,
+        created_at=created_at,
+        expires_at=expires_at,
+        permission="read",
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /threads/{thread_id}/shares — links ativos da conversa (autenticado)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{thread_id}/shares")
+async def list_thread_shares(thread_id: str, request: Request) -> ListSharesResponse:
+    """Lista os links de leitura ainda válidos de uma conversa, do mais novo ao mais antigo.
+
+    Quem pode listar é quem pode criar: o dono da conversa ou um admin. Os links
+    vencidos ficam de fora, porque já não abrem a conversa.
+    """
+    user = getattr(request.state, "user", None)
+    user_id = user.id if user else "local"
+
+    from backend.services import agent_factory
+
+    session = await (await agent_factory.get_session_store()).get_session(thread_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    owner_id = str(session.get("user_id", ""))
+    if owner_id != user_id and getattr(user, "role", "member") not in ("root", "admin"):
+        raise HTTPException(status_code=403, detail="Não autorizado")
+
+    db = await _get_db()
+    await _ensure_share_table(db)
+    now = datetime.now(UTC).isoformat()
+    async with db.execute(
+        "SELECT token, created_at, expires_at, permission FROM shared_threads "
+        "WHERE thread_id = ? AND expires_at >= ? ORDER BY created_at DESC, token ASC",
+        (thread_id, now),
+    ) as cur:
+        rows = await cur.fetchall()
+
+    base_url = str(request.base_url).rstrip("/")
+    return ListSharesResponse(
+        shares=[
+            ThreadShare(
+                token=row[0],
+                url=f"{base_url}/share/{row[0]}",
+                created_at=row[1],
+                expires_at=row[2],
+                permission=row[3],
+            )
+            for row in rows
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /threads/share/{token} — revoga token (autenticado)
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/share/{token}")
+async def delete_share(token: str, request: Request) -> dict:
+    # Sem usuário (modo local, sem login) vale a mesma identidade `local` com que
+    # `POST /threads/share` cria o link; do contrário um link criado ali não
+    # poderia ser revogado.
+    user = getattr(request.state, "user", None)
+    user_id = user.id if user else "local"
+
+    db = await _get_db()
+    await _ensure_share_table(db)
+
+    async with db.execute(
+        "SELECT thread_id, created_by, created_at, expires_at, permission FROM shared_threads WHERE token = ?",
+        (token,),
+    ) as cur:
+        row = await cur.fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Share token not found")
+
+    # Apenas o criador ou admin pode revogar
+    role = getattr(user, "role", "member")
+    if row[1] != user_id and role not in ("root", "admin"):
+        raise HTTPException(status_code=403, detail="Não autorizado")
+
+    await db.execute("DELETE FROM shared_threads WHERE token = ?", (token,))
+    await db.commit()
+    try:
+        await _write_share_audit(user_id, "share_revoke", token=token)
+    except Exception:
+        await db.execute(
+            "INSERT INTO shared_threads (token, thread_id, created_by, created_at, expires_at, permission) VALUES (?,?,?,?,?,?)",
+            (token, *row),
+        )
+        await db.commit()
+        raise
+    return {}

@@ -1,0 +1,568 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-BoldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* =============================================================================
+   Tokens de design — Vectora
+   Arquitetura:
+     :root         → valores do tema escuro (padrão)
+     .light        → overrides do tema claro
+     @theme inline → publica os vars como tokens Tailwind reativos
+   ============================================================================= */
+
+/* ── Tema escuro (padrão) — "Dark" (baseado em miguelsolorio.min-theme, adaptado) ── */
+:root {
+  --app-header-height: 4rem;
+  --font-family-editor: "JetBrains Mono", ui-monospace, monospace;
+  --font-family-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-family-ui: Inter, ui-sans-serif, system-ui, sans-serif;
+  /* Safe-area tokens: use these semantic classes on viewport-edge UI. */
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-right: env(safe-area-inset-right, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-left: env(safe-area-inset-left, 0px);
+  --background: #1f1f1f;
+  --foreground: #d4d4d4;
+
+  --muted: #262626;
+  --muted-foreground: #9e9e9e;
+
+  --card: #1a1a1a;
+  --card-foreground: #d4d4d4;
+
+  --popover: #1a1a1a;
+  --popover-foreground: #d4d4d4;
+
+  --secondary: #2a2a2a;
+  --secondary-foreground: #d4d4d4;
+
+  --accent: #2a2a2a;
+  --accent-foreground: #d4d4d4;
+
+  --border: #2a2a2a;
+  --input: #2a2a2a;
+
+  /* CTA neutro do tema Dark — sem acento colorido. */
+  --primary: #d4d4d4;
+  --primary-foreground: #1a1a1a;
+  --ring: #d4d4d4;
+
+  /* Erro / destrutivo. */
+  --destructive: #f97583;
+  --destructive-foreground: #1a1a1a;
+
+  /* Estados de interface (Settings e telas de formulário): sucesso, aviso e
+     informação. Erro é --destructive. Cada um tem o par "-foreground" para
+     texto sobre fundo cheio; o fundo suave usa o próprio token com alfa. */
+  --success: #3fb950;
+  --success-foreground: #1a1a1a;
+  --warning: #d29922;
+  --warning-foreground: #1a1a1a;
+  --info: #58a6ff;
+  --info-foreground: #1a1a1a;
+
+  /* Git Workbench semantic tones. */
+  --git-addition: #3fb950;
+  --git-modification: #d29922;
+  --git-information: #58a6ff;
+  --git-warning: #f0883e;
+  --git-success: #3fb950;
+
+  /* Highlights de etapa do Context Graph (bolinhas por arquivo): cada estágio
+     do build (AST → semântica → concluído) tem cor própria para tornar o
+     progresso visível. Únicos acentos coloridos da paleta neutra. */
+  --graph-stage-ast: #4a9eff;
+  --graph-stage-semantic: #b66dff;
+  --graph-stage-done: #5ec26a;
+
+  /* Bolha de mensagem do usuário — cor distinta do fundo do agente. */
+  --user-bubble: #2563eb;
+  --user-bubble-foreground: #ffffff;
+
+  /* Fundo dos painéis laterais (sidebar + workbench nav bar) — ligeiramente
+     mais escuro que --background para criar contraste visual com o chat. */
+  --sidebar: #181818;
+
+  /* Tone por status do Kanban — borda esquerda do card, dot da coluna e
+     (Sprint 4 Fase 5) cor do arc animado. Reaproveita tokens neutros onde
+     faz sentido semântico (blocked = destructive); cores novas só onde a
+     paleta neutra não distingue nada. */
+  --kanban-tone-triage: var(--muted-foreground);
+  --kanban-tone-todo: var(--muted-foreground);
+  --kanban-tone-scheduled: #8957e5;
+  --kanban-tone-ready: #4a9eff;
+  --kanban-tone-running: #5ec26a;
+  --kanban-tone-blocked: var(--destructive);
+  --kanban-tone-review: #d9a441;
+  --kanban-tone-done: #5ec26a;
+  --kanban-tone-archived: var(--muted-foreground);
+
+  /* Thumb da scrollbar customizada (.custom-scrollbar, ver regra global
+     abaixo) — usa color-mix em vez de valor fixo pra herdar corretamente
+     em .light (var(--foreground)/var(--background) são resolvidos no
+     ponto de uso, não na declaração, então funciona sob .light sem
+     precisar redeclarar lá). */
+  --scrollbar-thumb: color-mix(
+    in srgb,
+    var(--foreground) 65%,
+    var(--background)
+  );
+  --scrollbar-thumb-hover: var(--foreground);
+
+  color-scheme: dark;
+}
+
+/* One responsibility per edge: consumers add the matching class instead of
+   repeating env(safe-area-inset-*) expressions throughout the component tree. */
+.safe-area-top {
+  padding-top: var(--safe-area-top);
+}
+.safe-area-right {
+  padding-right: var(--safe-area-right);
+}
+.safe-area-bottom {
+  padding-bottom: var(--safe-area-bottom);
+}
+.safe-area-left {
+  padding-left: var(--safe-area-left);
+}
+
+/* Edge components keep their design-system padding and add the inset. */
+.safe-area-top-banner {
+  padding-top: calc(var(--safe-area-top) + 0.375rem);
+}
+.safe-area-top-header {
+  min-height: calc(var(--app-header-height) + var(--safe-area-top));
+  padding-top: var(--safe-area-top);
+}
+.safe-area-bottom-snackbar {
+  padding-bottom: calc(var(--safe-area-bottom) + 0.75rem);
+}
+.safe-area-right-snackbar {
+  padding-right: calc(var(--safe-area-right) + 1rem);
+}
+.safe-area-bottom-dock {
+  padding-bottom: calc(var(--safe-area-bottom) + 0.25rem);
+}
+
+/* Sheets preserve consumer padding and stop at the protected viewport edge. */
+.safe-offset-left {
+  left: var(--safe-area-left);
+}
+.safe-offset-right {
+  right: var(--safe-area-right);
+}
+.safe-offset-top {
+  top: var(--safe-area-top);
+}
+.safe-offset-bottom {
+  bottom: var(--safe-area-bottom);
+}
+
+/* ── Tema claro — "Light" (baseado em miguelsolorio.min-theme, adaptado) ─────── */
+.light {
+  --background: #ffffff;
+  --foreground: #2b2b2b;
+
+  --muted: #f0f0f0;
+  --muted-foreground: #595959;
+
+  --card: #f6f6f6;
+  --card-foreground: #2b2b2b;
+
+  --popover: #ffffff;
+  --popover-foreground: #2b2b2b;
+
+  --secondary: #eeeeee;
+  --secondary-foreground: #2b2b2b;
+
+  --accent: #eeeeee;
+  --accent-foreground: #2b2b2b;
+
+  --border: #d8d8d8;
+  --input: #d8d8d8;
+
+  /* CTA neutro do tema Light — sem acento colorido. */
+  --primary: #2b2b2b;
+  --primary-foreground: #ffffff;
+  --ring: #2b2b2b;
+
+  --destructive: #d32f2f;
+  --destructive-foreground: #ffffff;
+
+  --success: #1a7f37;
+  --success-foreground: #ffffff;
+  --warning: #9a6700;
+  --warning-foreground: #ffffff;
+  --info: #0969da;
+  --info-foreground: #ffffff;
+
+  /* Git Workbench semantic tones with light-theme contrast. */
+  --git-addition: #1a7f37;
+  --git-modification: #9a6700;
+  --git-information: #0969da;
+  --git-warning: #bc4c00;
+  --git-success: #1a7f37;
+
+  /* Highlights de etapa do Context Graph — tons mais escuros p/ contraste no claro. */
+  --graph-stage-ast: #1f6feb;
+  --graph-stage-semantic: #8957e5;
+  --graph-stage-done: #2da44e;
+
+  --user-bubble: #2563eb;
+  --user-bubble-foreground: #ffffff;
+
+  /* Fundo dos painéis laterais no tema claro — cinza suave sobre fundo branco. */
+  --sidebar: #f3f3f3;
+
+  /* Tone por status do Kanban — tons mais escuros p/ contraste no claro. */
+  --kanban-tone-triage: var(--muted-foreground);
+  --kanban-tone-todo: var(--muted-foreground);
+  --kanban-tone-scheduled: #6639b7;
+  --kanban-tone-ready: #1f6feb;
+  --kanban-tone-running: #2da44e;
+  --kanban-tone-blocked: var(--destructive);
+  --kanban-tone-review: #b6790a;
+  --kanban-tone-done: #2da44e;
+  --kanban-tone-archived: var(--muted-foreground);
+
+  color-scheme: light;
+}
+
+/* ── Publicar vars como tokens Tailwind reativos ─────────────────────────── */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  /* Escala mínima de texto: o menor tamanho permitido em rótulos densos
+     (selos, legendas) no lugar de text-[10px]. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 0.875rem;
+
+  --color-git-addition: var(--git-addition);
+  --color-git-modification: var(--git-modification);
+  --color-git-information: var(--git-information);
+  --color-git-warning: var(--git-warning);
+  --color-git-success: var(--git-success);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-graph-stage-ast: var(--graph-stage-ast);
+  --color-graph-stage-semantic: var(--graph-stage-semantic);
+  --color-graph-stage-done: var(--graph-stage-done);
+
+  --color-user-bubble: var(--user-bubble);
+  --color-user-bubble-foreground: var(--user-bubble-foreground);
+
+  --color-sidebar: var(--sidebar);
+
+  --color-kanban-tone-triage: var(--kanban-tone-triage);
+  --color-kanban-tone-todo: var(--kanban-tone-todo);
+  --color-kanban-tone-scheduled: var(--kanban-tone-scheduled);
+  --color-kanban-tone-ready: var(--kanban-tone-ready);
+  --color-kanban-tone-running: var(--kanban-tone-running);
+  --color-kanban-tone-blocked: var(--kanban-tone-blocked);
+  --color-kanban-tone-review: var(--kanban-tone-review);
+  --color-kanban-tone-done: var(--kanban-tone-done);
+  --color-kanban-tone-archived: var(--kanban-tone-archived);
+
+  --radius: 0.5rem;
+
+  --font-aeonik-mono:
+    "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Monaco, monospace;
+  --font-mono: var(--font-family-mono);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--border);
+  }
+
+  html {
+    /* Preferências → Aparência: escala global da UI (padrão 1 = 100%),
+       aplicada em src/routes/__root.tsx via CSS var. */
+    font-size: calc(100% * var(--font-scale-ui, 1));
+  }
+
+  html,
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family:
+      var(--font-family-ui, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+  }
+
+  /* Acessibilidade: respeita `prefers-reduced-motion`. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .vectora-diff-added-line {
+    background-color: color-mix(in srgb, #16a34a 24%, transparent);
+  }
+
+  .vectora-diff-removed-line {
+    background-color: color-mix(in srgb, #dc2626 24%, transparent);
+  }
+
+  .vectora-diff-hunk-line {
+    background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    color: var(--foreground);
+  }
+}
+
+/* Todo container rolável da aplicação usa a mesma geometria visual. Classes
+   específicas (`custom-scrollbar`/`app-scrollbar`) podem ajustar a opacidade,
+   mas nenhum painel volta à scrollbar larga padrão do Chromium. */
+[class~="overflow-auto"],
+[class~="overflow-y-auto"],
+[class~="overflow-x-auto"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-gutter: stable;
+}
+[class~="overflow-auto"]::-webkit-scrollbar,
+[class~="overflow-y-auto"]::-webkit-scrollbar,
+[class~="overflow-x-auto"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[class~="overflow-auto"]::-webkit-scrollbar-track,
+[class~="overflow-y-auto"]::-webkit-scrollbar-track,
+[class~="overflow-x-auto"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[class~="overflow-auto"]::-webkit-scrollbar-thumb,
+[class~="overflow-y-auto"]::-webkit-scrollbar-thumb,
+[class~="overflow-x-auto"]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+/* Use this on dense split panes where an always-reserved gutter creates a
+   false third column between adjacent content areas. */
+.vectora-no-scrollbar-gutter {
+  scrollbar-gutter: auto;
+}
+
+/* Scrollbar customizada (chat, thread-list, collapsed-sidebar) — regra
+   única global e escopada, evita colisão de especificidade entre
+   componentes que aplicam a mesma classe. Fica invisível até o hover,
+   cor vinda de --scrollbar-thumb/--scrollbar-thumb-hover (derivados por
+   tema, ver presets.ts). */
+.app-scrollbar,
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  /* Sem `scroll-behavior: smooth`: ele transforma QUALQUER escrita de
+     scrollTop numa animação de velocidade constante, então ir ao fim de
+     uma conversa longa levava tempo proporcional ao tamanho dela e
+     engasgava enquanto o conteúdo do caminho era medido. O posicionamento
+     no fim precisa ser um salto direto. */
+  will-change: scroll-position;
+}
+.app-scrollbar:hover,
+.custom-scrollbar:hover {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+.app-scrollbar::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.app-scrollbar::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.app-scrollbar::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.app-scrollbar:hover::-webkit-scrollbar-thumb,
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+.app-scrollbar::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Reserva a calha da barra de rolagem mesmo quando ela está invisível.
+   Sem isto, o conteúdo ocupa a largura toda e a barra desenha por cima
+   dele quando aparece — e a largura do conteúdo pula no momento em que
+   o container passa a ter overflow. Usado nos modais de Settings, onde
+   o conteúdo (paths, chaves) encosta na borda direita. */
+.scroll-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
+/* Gaveta compacta das colunas laterais (components/layout/compact-drawer.tsx):
+   entra deslizando com uma desaceleração suave e sai mais rápido; o fundo escuro
+   faz fade. A largura é arrastável, então nada aqui anima `width`. */
+@keyframes compact-drawer-in-left {
+  from {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+@keyframes compact-drawer-out-left {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+    opacity: 0.7;
+  }
+}
+@keyframes compact-drawer-in-right {
+  from {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+@keyframes compact-drawer-out-right {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+    opacity: 0.7;
+  }
+}
+@keyframes compact-drawer-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes compact-drawer-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.compact-drawer.compact-drawer {
+  transition: none;
+  will-change: transform;
+}
+.compact-drawer.compact-drawer[data-state="open"] {
+  animation: compact-drawer-in-right 340ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.compact-drawer.compact-drawer[data-state="closed"] {
+  animation: compact-drawer-out-right 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+.compact-drawer.compact-drawer[data-side="left"][data-state="open"] {
+  animation-name: compact-drawer-in-left;
+}
+.compact-drawer.compact-drawer[data-side="left"][data-state="closed"] {
+  animation-name: compact-drawer-out-left;
+}
+[data-slot="sheet-overlay"]:has(+ .compact-drawer)[data-state="open"] {
+  animation: compact-drawer-fade-in 260ms ease-out both;
+}
+[data-slot="sheet-overlay"]:has(+ .compact-drawer)[data-state="closed"] {
+  animation: compact-drawer-fade-out 200ms ease-in both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .compact-drawer.compact-drawer,
+  [data-slot="sheet-overlay"]:has(+ .compact-drawer) {
+    animation-duration: 1ms !important;
+  }
+}

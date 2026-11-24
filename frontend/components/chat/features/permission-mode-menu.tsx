@@ -1,0 +1,86 @@
+"use client";
+
+/**
+ * PermissionModeMenu (R2)
+ *
+ * Chip + dropdown com os 5 modos de permissão. A escolha persiste no
+ * settings-store (campo permissionMode) e é enviada em cada request como
+ * config.permission_mode, consumida pelo hitl_check no backend.
+ *
+ * Popover com portal (mesmo padrão do ModelSelector, ver model-selector.tsx)
+ * — escapa da stacking context do composer; um `absolute` comum renderizava
+ * atrás da sidebar mesmo com z-index nominal maior, porque um ancestral do
+ * composer forma sua própria stacking context.
+ */
+
+import { useState } from "react";
+import { Check, ChevronDown } from "lucide-react";
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  useSettingsStore,
+  PERMISSION_MODES,
+} from "@/lib/stores/settings-store";
+import { m } from "@/lib/paraglide/messages";
+import { mDyn } from "@/lib/i18n-dyn";
+
+export function PermissionModeMenu({ compact = false }: { compact?: boolean }) {
+  const mode = useSettingsStore((s) => s.permissionMode);
+  const setMode = useSettingsStore((s) => s.setPermissionMode);
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={`flex min-w-0 max-w-full shrink items-center overflow-hidden rounded-md text-xs leading-4 font-medium text-muted-foreground transition-colors select-none hover:bg-muted/50 hover:text-foreground ${compact ? "h-7 w-full gap-0.5 px-1" : "gap-1.5 px-2 py-1.5"}`}
+          title={m.permission_title()}
+          aria-label={`${m.permission_title()}: ${mDyn(`permission.mode.${mode}`)}`}
+          aria-expanded={open}
+        >
+          <span
+            className="inline min-w-0 truncate font-medium"
+            data-compact-control-label
+          >
+            {mDyn(`permission.mode.${mode}`)}
+          </span>
+          {!compact && <ChevronDown className="h-3 w-3 shrink-0" />}
+        </button>
+      </PopoverTrigger>
+
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={6}
+        className="z-50 w-[min(14rem,calc(100vw-1rem))] max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-background shadow-xl p-0 py-1"
+      >
+        <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {m.permission_title()}
+        </div>
+        {PERMISSION_MODES.map((item) => (
+          <button
+            key={item}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
+            onClick={() => {
+              setMode(item);
+              setOpen(false);
+            }}
+          >
+            {item === mode ? (
+              <Check className="w-4 h-4 shrink-0 text-primary" />
+            ) : (
+              <span className="w-4 h-4 shrink-0" />
+            )}
+            <span className="truncate font-medium text-foreground">
+              {mDyn(`permission.mode.${item}`)}
+            </span>
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}

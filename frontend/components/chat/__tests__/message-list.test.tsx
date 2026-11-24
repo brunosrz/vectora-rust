@@ -1,0 +1,649 @@
+// @vitest-environment jsdom
+/**
+ * MessageList — posicionamento de scroll ao abrir/trocar de thread.
+ *
+ * O conteúdo fica visibility:hidden enquanto a altura ainda cresce
+ * (markdown/syntax highlight sendo medidos) e é revelado quando estabiliza.
+ * O reposicionamento é um SALTO direto (scrollTop = scrollHeight), disparado
+ * por ResizeObserver — nunca rolagem incremental de velocidade constante, que
+ * fazia conversas longas demorarem proporcionalmente ao tamanho.
+ *
+ * A posição de scroll é preservada por thread entre montagens, porque trocar
+ * de modo (Assistente/IDE/Kanban) remonta o chat.
+ */
+
+import {
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  vi,
+} from "vitest";
+import {
+  act,
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+} from "@testing-library/react";
+import { MessageList } from "../message-list";
+import type { Message } from "@/lib/types";
+const branchMocks = vi.hoisted(() => ({
+  listConversationBranches: vi.fn(),
+  compareConversationBranch: vi.fn(),
+  selectConversationBranch: vi.fn(),
+}));
+
+vi.mock("@/lib/api/vectora-client", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/api/vectora-client")
+  >("@/lib/api/vectora-client");
+  return { ...actual, ...branchMocks };
+});
+
+vi.mock("@/lib/paraglide/messages", () => ({
+  m: {
+    message_list_aria: () => "Messages",
+    scroll_back_to_bottom: () => "Back to bottom",
+    chat_branch_label: () => "Branch",
+    chat_branch_current: () => "Current branch",
+    chat_branch_point: ({ id }: { id: number }) => `Branch ${id}`,
+    chat_branch_compare: () => "Compare",
+  },
+}));
+
+vi.mock("../message-item", () => ({
+  MessageItem: ({ message }: { message: Message }) => (
+    <div data-testid="message-item">{message.content}</div>
+  ),
+}));
+
+vi.mock("../message-skeleton", () => ({
+  MessageSkeletons: () => <div data-testid="message-skeletons" />,
+}));
+
+const { scrollToIndexMock } = vi.hoisted(() => ({
+  scrollToIndexMock: vi.fn(),
+}));
+
+// Thread virtualizada (> VIRTUALIZE_THRESHOLD mensagens): escrever
+// scrollTop direto no container não é confiável com @tanstack/react-virtual
+// (ele mantém seu próprio offset interno) — precisa passar por scrollToIndex.
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: () => ({
+    getVirtualItems: () => [],
+    getTotalSize: () => 20000,
+    scrollToIndex: scrollToIndexMock,
+    measureElement: () => {},
+  }),
+}));
+
+// jsdom não implementa Element.scrollTo nem ResizeObserver.
+beforeAll(() => {
+  if (!Element.prototype.scrollTo) {
+    Element.prototype.scrollTo = () => {};
+  }
+  if (!("ResizeObserver" in globalThis)) {
+    class FakeResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    (globalThis as { ResizeObserver?: unknown }).ResizeObserver =
+      FakeResizeObserver;
+  }
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  scrollToIndexMock.mockClear();
+  branchMocks.listConversationBranches.mockReset();
+  branchMocks.compareConversationBranch.mockReset();
+  branchMocks.selectConversationBranch.mockReset();
+});
+
+beforeEach(() => {
+  branchMocks.listConversationBranches.mockResolvedValue({
+    branches: [],
+    active_head_message_id: null,
+  });
+});
+
+function msg(id: string, content: string): Message {
+  return {
+    id,
+    role: "assistant",
+    content,
+    timestamp: new Date(),
+  } as unknown as Message;
+}
+
+function baseProps(messages: Message[]) {
+  return {
+    messages,
+    isRegenerating: false,
+    copiedId: null,
+    onCopy: vi.fn(),
+    onRegenerate: vi.fn(),
+    feedbackComment: {},
+    showCommentInput: null,
+    onFeedback: vi.fn(),
+    onSubmitComment: vi.fn(),
+    onCancelComment: vi.fn(),
+    onToggleComment: vi.fn(),
+    setFeedbackComment: vi.fn(),
+  };
+}
+
+/** Altura fixa e mensurável, com scrollTop realmente gravável (jsdom não
+ * implementa layout, então scrollTop é só uma propriedade). */
+function mockScrollMetrics(container: HTMLElement, scrollHeight = 2000) {
+  Object.defineProperty(container, "scrollHeight", {
+    configurable: true,
+    get: () => scrollHeight,
+  });
+  Object.defineProperty(container, "clientHeight", {
+    configurable: true,
+    get: () => 500,
+  });
+}
+
+describe("MessageList — posicionamento de scroll ao abrir a thread", () => {
+  it("esconde o conteúdo durante a convergência e revela ao estabilizar, posicionado no fim", async () => {
+    vi.useFakeTimers();
+    render(<MessageList {...baseProps([msg("m1", "olá")])} threadId="t1" />);
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+
+    const content = screen.getByTestId("message-list-content");
+    expect(content).toHaveStyle({ visibility: "hidden" });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(content).toHaveStyle({ visibility: "visible" });
+    // Salto direto pro fim — não uma posição intermediária.
+    expect(container.scrollTop).toBe(2000);
+  });
+
+  it("erro/borda: a janela de convergência sempre termina, mesmo sem o ResizeObserver disparar", async () => {
+    vi.useFakeTimers();
+    render(<MessageList {...baseProps([msg("m1", "olá")])} threadId="t-cap" />);
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+    const content = screen.getByTestId("message-list-content");
+    expect(content).toHaveStyle({ visibility: "hidden" });
+
+    // Nenhum callback de ResizeObserver é emitido (o fake não dispara) —
+    // mesmo assim o conteúdo precisa ser revelado pelo teto da janela.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1300);
+    });
+
+    expect(content).toHaveStyle({ visibility: "visible" });
+  });
+
+  it("não reesconde o conteúdo quando a thread não muda (nova mensagem via streaming)", async () => {
+    vi.useFakeTimers();
+    const { rerender } = render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t2" />,
+    );
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    const content = screen.getByTestId("message-list-content");
+    expect(content).toHaveStyle({ visibility: "visible" });
+
+    rerender(
+      <MessageList
+        {...baseProps([msg("m1", "olá"), msg("m2", "segunda mensagem")])}
+        threadId="t2"
+      />,
+    );
+
+    expect(content).toHaveStyle({ visibility: "visible" });
+  });
+});
+
+describe("MessageList — scroll sobrevive à remontagem (troca de modo)", () => {
+  it("restaura a posição salva da thread em vez de voltar ao topo", async () => {
+    vi.useFakeTimers();
+    const messages = [msg("m1", "olá"), msg("m2", "tchau")];
+    const { unmount } = render(
+      <MessageList {...baseProps(messages)} threadId="t-modo" />,
+    );
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    // Usuário rola pra uma posição intermediária e troca de modo.
+    container.scrollTop = 850;
+    unmount();
+
+    render(<MessageList {...baseProps(messages)} threadId="t-modo" />);
+    const restored = screen.getByLabelText("Messages");
+    mockScrollMetrics(restored);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(restored.scrollTop).toBe(850);
+  });
+
+  it("erro/borda: thread sem posição salva abre no fim, não em 0", async () => {
+    vi.useFakeTimers();
+    render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t-nova" />,
+    );
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container, 4000);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(container.scrollTop).toBe(4000);
+  });
+});
+
+describe("MessageList — botão 'Voltar ao fim'", () => {
+  it("aparece ao rolar pra cima e some ao voltar ao fim", async () => {
+    vi.useFakeTimers();
+    render(<MessageList {...baseProps([msg("m1", "olá")])} threadId="t-btn" />);
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    // Nenhum botão enquanto o scroll está no fim.
+    expect(screen.queryByLabelText("Back to bottom")).not.toBeInTheDocument();
+
+    // Usuário rola pra cima.
+    container.scrollTop = 200;
+    await act(async () => {
+      fireEvent.scroll(container);
+    });
+    expect(screen.getByLabelText("Back to bottom")).toBeInTheDocument();
+
+    // E volta ao fim: 2000 - 500 = 1500 é o scrollTop máximo aqui.
+    container.scrollTop = 1500;
+    await act(async () => {
+      fireEvent.scroll(container);
+    });
+    expect(screen.queryByLabelText("Back to bottom")).not.toBeInTheDocument();
+  });
+
+  it("clicar no botão leva ao fim de uma vez, sem posição intermediária", async () => {
+    vi.useFakeTimers();
+    render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t-btn2" />,
+    );
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    container.scrollTop = 100;
+    await act(async () => {
+      fireEvent.scroll(container);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Back to bottom"));
+    });
+
+    expect(container.scrollTop).toBe(2000);
+    expect(screen.queryByLabelText("Back to bottom")).not.toBeInTheDocument();
+  });
+});
+
+describe("MessageList — skeletons de carregamento", () => {
+  it("mostra skeletons e esconde a lista enquanto o histórico carrega", () => {
+    render(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-load"
+        isLoadingThread
+      />,
+    );
+
+    expect(screen.getByTestId("message-skeletons")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("message-list-content"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("erro/borda: o botão 'Voltar ao fim' nunca aparece durante o carregamento", async () => {
+    vi.useFakeTimers();
+    const { rerender } = render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t-load2" />,
+    );
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    container.scrollTop = 100;
+    await act(async () => {
+      fireEvent.scroll(container);
+    });
+    expect(screen.getByLabelText("Back to bottom")).toBeInTheDocument();
+
+    rerender(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-load2"
+        isLoadingThread
+      />,
+    );
+    expect(screen.queryByLabelText("Back to bottom")).not.toBeInTheDocument();
+  });
+});
+
+describe("MessageList — thread virtualizada (> 50 mensagens)", () => {
+  it("usa virtualizer.scrollToIndex pro último item, não scrollTop bruto", async () => {
+    vi.useFakeTimers();
+    const manyMessages = Array.from({ length: 80 }, (_, i) =>
+      msg(`m${i}`, `mensagem ${i}`),
+    );
+    render(<MessageList {...baseProps(manyMessages)} threadId="t-virt" />);
+
+    const container = screen.getByLabelText("Messages");
+    mockScrollMetrics(container);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+
+    expect(scrollToIndexMock).toHaveBeenCalled();
+    expect(scrollToIndexMock).toHaveBeenLastCalledWith(79, { align: "end" });
+  });
+});
+
+describe("MessageList — padding compacto (modo IDE)", () => {
+  it("compact=true usa px-3 em vez de px-4/sm:px-6", () => {
+    const { container } = render(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-compact"
+        compact
+      />,
+    );
+
+    expect(container.querySelector(".px-3")).not.toBeNull();
+    expect(container.querySelector(".px-4")).toBeNull();
+  });
+
+  it("erro/borda: compact=false (padrão) preserva o padding original", () => {
+    const { container } = render(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-nao-compacto"
+      />,
+    );
+
+    expect(container.querySelector(".px-4")).not.toBeNull();
+    expect(container.querySelector(".px-3")).toBeNull();
+  });
+});
+
+describe("MessageList — comparação e seleção de branches", () => {
+  const branches = {
+    branches: [
+      { head_message_id: 2, created_at: "", active: true, message_count: 2 },
+      { head_message_id: 3, created_at: "", active: false, message_count: 2 },
+    ],
+    active_head_message_id: 2,
+  };
+
+  it("compara a ponta candidata sem selecionar a branch ativa", async () => {
+    branchMocks.listConversationBranches.mockResolvedValue(branches);
+    branchMocks.compareConversationBranch.mockResolvedValue({
+      active_head_message_id: 2,
+      selected_head_message_id: 3,
+      common_message_ids: [1],
+      active_divergent_message_ids: [2],
+      selected_divergent_message_ids: [3],
+    });
+    branchMocks.selectConversationBranch.mockResolvedValue(branches);
+
+    render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t-branches" />,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Branch 3" }),
+    ).toHaveAttribute("aria-pressed", "false");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Compare 3" }));
+    });
+
+    expect(branchMocks.compareConversationBranch).toHaveBeenCalledWith(
+      "t-branches",
+      3,
+    );
+    expect(branchMocks.selectConversationBranch).not.toHaveBeenCalled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "comum: 1; ativa: 2; candidata: 3",
+    );
+    expect(
+      screen.getByRole("button", { name: "Current branch" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("ignora uma comparação antiga que termina depois da candidata atual", async () => {
+    const pending = new Map<
+      number,
+      (result: {
+        active_head_message_id: number;
+        selected_head_message_id: number;
+        common_message_ids: number[];
+        active_divergent_message_ids: number[];
+        selected_divergent_message_ids: number[];
+      }) => void
+    >();
+    branchMocks.listConversationBranches.mockResolvedValue({
+      ...branches,
+      branches: [
+        ...branches.branches,
+        { head_message_id: 4, created_at: "", active: false, message_count: 2 },
+      ],
+    });
+    branchMocks.compareConversationBranch.mockImplementation(
+      (_threadId: string, headMessageId: number) =>
+        new Promise((resolve) => pending.set(headMessageId, resolve)),
+    );
+
+    render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t-race" />,
+    );
+    await screen.findByRole("button", { name: "Compare 3" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Compare 3" }));
+      fireEvent.click(screen.getByRole("button", { name: "Compare 4" }));
+    });
+
+    await act(async () => {
+      pending.get(4)?.({
+        active_head_message_id: 2,
+        selected_head_message_id: 4,
+        common_message_ids: [1],
+        active_divergent_message_ids: [2],
+        selected_divergent_message_ids: [4],
+      });
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "comum: 1; ativa: 2; candidata: 4",
+    );
+
+    await act(async () => {
+      pending.get(3)?.({
+        active_head_message_id: 2,
+        selected_head_message_id: 3,
+        common_message_ids: [1],
+        active_divergent_message_ids: [2],
+        selected_divergent_message_ids: [3],
+      });
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "comum: 1; ativa: 2; candidata: 4",
+    );
+  });
+
+  it("seleciona explicitamente uma branch e recarrega o estado ativo", async () => {
+    branchMocks.listConversationBranches.mockResolvedValue(branches);
+    branchMocks.selectConversationBranch.mockResolvedValue({
+      branches: [
+        { ...branches.branches[0], active: false },
+        { ...branches.branches[1], active: true },
+      ],
+      active_head_message_id: 3,
+    });
+
+    render(
+      <MessageList {...baseProps([msg("m1", "olá")])} threadId="t-select" />,
+    );
+    const branchButton = await screen.findByRole("button", {
+      name: "Branch 3",
+    });
+    await act(async () => {
+      fireEvent.click(branchButton);
+    });
+
+    expect(branchMocks.selectConversationBranch).toHaveBeenCalledWith(
+      "t-select",
+      3,
+    );
+    expect(
+      screen.getByRole("button", { name: "Current branch" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Branch 2" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});
+
+// O conteúdo fica `visibility: hidden` até a altura estabilizar, e a consulta por
+// papel ignora o que está oculto; o texto do gatilho é o que se verifica.
+function olderButton(label: string): HTMLButtonElement {
+  const button = screen.getByText(label).closest("button");
+  if (!button) throw new Error(`gatilho "${label}" não é um botão`);
+  return button;
+}
+
+describe("MessageList — mensagens anteriores", () => {
+  it("sem mensagens anteriores não mostra o gatilho", () => {
+    render(<MessageList {...baseProps([msg("m1", "olá")])} threadId="t-old" />);
+
+    expect(screen.queryByTestId("older-messages-sentinel")).toBeNull();
+  });
+
+  it("mostra o gatilho e pede a página anterior ao clicar", () => {
+    const onLoadOlder = vi.fn();
+    render(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-old"
+        hasOlderMessages
+        onLoadOlder={onLoadOlder}
+      />,
+    );
+
+    fireEvent.click(olderButton("Load earlier messages"));
+
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("durante o carregamento o gatilho fica desabilitado", () => {
+    const onLoadOlder = vi.fn();
+    render(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-old"
+        hasOlderMessages
+        isLoadingOlder
+        onLoadOlder={onLoadOlder}
+      />,
+    );
+
+    const button = olderButton("Loading earlier messages…");
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onLoadOlder).not.toHaveBeenCalled();
+  });
+
+  it("depois de uma falha oferece tentar de novo", () => {
+    const onLoadOlder = vi.fn();
+    render(
+      <MessageList
+        {...baseProps([msg("m1", "olá")])}
+        threadId="t-old"
+        hasOlderMessages
+        loadOlderFailed
+        onLoadOlder={onLoadOlder}
+      />,
+    );
+
+    fireEvent.click(olderButton("Could not load. Try again"));
+
+    expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("ao inserir as anteriores no início mantém a posição de leitura", () => {
+    let scrollHeight = 1000;
+    const spy = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockImplementation(() => scrollHeight);
+    const props = baseProps([msg("m3", "c"), msg("m4", "d")]);
+    const { rerender, container } = render(
+      <MessageList {...props} threadId="t-prepend" hasOlderMessages />,
+    );
+    const scroller = container.querySelector(
+      '[data-testid="message-list-content"]',
+    )?.parentElement as HTMLElement;
+    scroller.scrollTop = 120;
+    // Uma renderização sem mudança registra as medidas de antes.
+    rerender(<MessageList {...props} threadId="t-prepend" hasOlderMessages />);
+
+    scrollHeight = 1600; // as duas anteriores somam 600px acima do que se lia
+    rerender(
+      <MessageList
+        {...props}
+        messages={[
+          msg("m1", "a"),
+          msg("m2", "b"),
+          msg("m3", "c"),
+          msg("m4", "d"),
+        ]}
+        threadId="t-prepend"
+        hasOlderMessages
+      />,
+    );
+
+    expect(scroller.scrollTop).toBe(720);
+    spy.mockRestore();
+  });
+});

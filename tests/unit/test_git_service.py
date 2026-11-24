@@ -1,0 +1,305 @@
+"""Testes da camada assíncrona compartilhada do Git Workbench."""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+from pathlib import Path
+
+import git
+import pytest
+
+from backend.services.git import (
+    GitOperationError,
+    GitService,
+    classify_git_error,
+    redact_git_output,
+    status_snapshot,
+)
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("fatal: Authentication failed for origin", "git_authentication_failed"),
+        ("Automatic merge failed; fix conflicts", "git_conflict"),
+        ("rejected: non-fast-forward", "git_branch_diverged"),
+        ("Could not resolve host: github.com", "git_network_failed"),
+        ("fatal: unknown git failure", "git_command_failed"),
+    ],
+)
+def test_classify_git_error_returns_stable_codes(message: str, expected: str) -> None:
+    assert classify_git_error(message) == expected
+
+
+def make_repo(path: Path) -> git.Repo:
+    repo = git.Repo.init(path)
+    (path / "README.md").write_text("Vectora\n", encoding="utf-8")
+    repo.index.add(["README.md"])
+    repo.index.commit("initial")
+    return repo
+
+
+def test_status_snapshot_is_available_without_tools_dependency(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path / "repo")
+    (tmp_path / "repo" / "README.md").write_text("changed\n", encoding="utf-8")
+
+    result = status_snapshot(repo)
+
+    assert result["status"] == "ok"
+    assert result["clean"] is False
+    assert result["modified"] == ["README.md"]
+
+
+@pytest.mark.asyncio
+async def test_operations_same_repository_are_serialized(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+    running = 0
+    maximum = 0
+
+    async def operation() -> None:
+        nonlocal running, maximum
+        running += 1
+        maximum = max(maximum, running)
+        await asyncio.sleep(0.01)
+        running -= 1
+
+    def callback() -> None:
+        asyncio.run(operation())
+
+    await asyncio.gather(
+        service.execute("one", repo, "fetch", callback),
+        service.execute("two", repo, "fetch", callback),
+    )
+
+    assert maximum == 1
+
+
+@pytest.mark.asyncio
+async def test_lock_timeout_is_typed(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+    gate = threading.Event()
+
+    async def hold_lock() -> None:
+        await service.execute("one", repo, "fetch", gate.wait, timeout_seconds=5)
+
+    first = asyncio.create_task(hold_lock())
+    await asyncio.sleep(0.02)
+    with pytest.raises(GitOperationError, match="Tempo limite") as error:
+        await service.execute("two", repo, "fetch", lambda: None, timeout_seconds=0.01)
+    gate.set()
+    await first
+    assert error.value.code == "git_lock_timeout"
+
+
+def test_git_timeout_defaults_are_configurable() -> None:
+    from backend.settings import Settings
+
+    settings = Settings(
+        _env_file=None,
+        git_lock_timeout=7.0,
+        git_command_timeout=11.0,
+        git_cli_timeout=13.0,
+    )
+
+    assert settings.git_lock_timeout == 7.0
+    assert settings.git_command_timeout == 11.0
+    assert settings.git_cli_timeout == 13.0
+
+
+def test_redact_git_output_masks_url_credentials_and_parameters() -> None:
+    value = (
+        "https://user:token@example.com/repo?token=secret "
+        "authorization=Bearer bearer-secret Authorization: Bearer colon-secret "
+        "Authorization: Basic basic-secret"
+    )
+    result = redact_git_output(value)
+    assert "***@example.com" in result
+    assert "token=***" in result
+    assert "authorization=***" in result
+    assert "Authorization: ***" in result
+    assert "bearer-secret" not in result
+    assert "colon-secret" not in result
+    assert "basic-secret" not in result
+
+
+def test_redact_git_output_masks_token_only_url_userinfo() -> None:
+    result = redact_git_output("fatal: https://TOKEN@host.example/repo.git")
+
+    assert "TOKEN" not in result
+    assert "https://***@host.example/repo.git" in result
+
+
+@pytest.mark.asyncio
+async def test_latest_and_history_retain_recent_operations(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+
+    await service.execute("workspace", repo, "fetch", lambda: "first")
+    await service.execute("workspace", repo, "pull", lambda: "second")
+
+    latest = await service.latest("workspace")
+
+    assert latest is not None
+    assert latest["operation"] == "pull"
+    history = await service.history("workspace")
+    assert [item["operation"] for item in history] == ["pull", "fetch"]
+
+
+@pytest.mark.asyncio
+async def test_history_empty_workspace_returns_empty_list(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+    await service.execute("workspace", repo, "fetch", lambda: "done")
+
+    assert await service.history("") == []
+
+
+@pytest.mark.asyncio
+async def test_history_limit_is_bounded_and_failure_is_retained(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+
+    def fail() -> None:
+        raise ValueError("https://TOKEN@host/repo")
+
+    with pytest.raises(ValueError):
+        await service.execute("workspace", repo, "fetch", fail)
+
+    history = await service.history("workspace", limit=0)
+    assert len(history) == 1
+    assert history[0]["state"] == "failed"
+    assert "TOKEN" not in str(history[0])
+
+
+@pytest.mark.asyncio
+async def test_status_exposes_operation_in_progress_for_reconnection(
+    tmp_path: Path,
+) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking() -> None:
+        started.set()
+        release.wait()
+
+    running = asyncio.create_task(service.execute("workspace", repo, "fetch", blocking))
+    await asyncio.to_thread(started.wait, 1)
+    try:
+        snapshot = await service.status("workspace", repo)
+        operation = snapshot.operation_in_progress
+        assert operation is not None
+        assert operation.state == "running"
+        assert operation.operation == "fetch"
+    finally:
+        release.set()
+        await running
+
+
+@pytest.mark.asyncio
+async def test_generic_callback_failure_is_terminal(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+
+    def fail() -> str:
+        raise ValueError("token=leaked")
+
+    with pytest.raises(ValueError):
+        await service.execute("workspace", repo, "fetch", fail)
+
+    latest = await service.latest("workspace")
+
+    assert latest is not None
+    assert latest["state"] == "failed"
+    assert latest["error_code"] == "git_operation_failed"
+    assert latest["error"] == "token=***"
+
+
+@pytest.mark.asyncio
+async def test_error_result_is_recorded_as_failed_operation(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+
+    with pytest.raises(GitOperationError) as error:
+        await service.execute(
+            "workspace",
+            repo,
+            "push",
+            lambda: {"status": "error", "message": "rejected: non-fast-forward"},
+        )
+
+    assert error.value.code == "git_branch_diverged"
+    latest = await service.latest("workspace")
+    assert latest is not None
+    assert latest.state == "failed"
+    assert latest.error_code == "git_branch_diverged"
+
+
+@pytest.mark.asyncio
+async def test_timeout_waits_for_callback_before_releasing_lock(tmp_path: Path) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking() -> str:
+        started.set()
+        release.wait()
+        return "done"
+
+    operation = asyncio.create_task(
+        service.execute("workspace", repo, "fetch", blocking, timeout_seconds=0.01)
+    )
+    await asyncio.to_thread(started.wait, 1)
+    try:
+        await asyncio.sleep(0.05)
+        assert not operation.done()
+        with pytest.raises(GitOperationError) as lock_error:
+            await service.execute(
+                "other-workspace",
+                repo,
+                "pull",
+                lambda: None,
+                timeout_seconds=0.01,
+            )
+        assert lock_error.value.code == "git_lock_timeout"
+    finally:
+        release.set()
+
+    with pytest.raises(GitOperationError, match="Tempo limite"):
+        await operation
+
+
+@pytest.mark.asyncio
+async def test_cancellation_waits_for_callback_before_releasing_lock(
+    tmp_path: Path,
+) -> None:
+    service = GitService()
+    repo = make_repo(tmp_path / "repo")
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def blocking() -> str:
+        started.set()
+        release.wait()
+        finished.set()
+        return "done"
+
+    operation = asyncio.create_task(
+        service.execute("workspace", repo, "fetch", blocking, timeout_seconds=5)
+    )
+    await asyncio.to_thread(started.wait, 1)
+    operation.cancel()
+    await asyncio.sleep(0)
+    assert not finished.is_set()
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await operation
+    assert finished.is_set()
+    await service.execute("workspace", repo, "status", lambda: "ready")

@@ -1,0 +1,1280 @@
+name: Vectora (app)
+
+# Pipeline do app Vectora (backend Python + frontend Vite + casca Electron).
+#
+# Fluxo PR-based: lint/security/frontend/build/testes rodam sempre — em
+# todo PR, qualquer que seja a base (master, release/*, ou branch de feature
+# em PRs empilhados), e em todo push em master/release/* (merge de PR) — sem
+# gate manual. A matriz nativa também roda em PR para validar o empacotamento
+# por SO/arquitetura; R2/KV e tags continuam exclusivos do release em master.
+# `paths` restringe esse pipeline (caro: lint+security+frontend+build+testes)
+# a mudanças que realmente afetam o app.
+on:
+  push:
+    branches: [master, "release/**"]
+    # Os pushes de release na master precisam ser detectados mesmo quando só
+    # atualizam changelog e arquivos de versão, que não estão nos paths do app.
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "tests/**"
+      - "utils/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "SConstruct"
+      - "build-hybrid.py"
+      - ".github/workflows/vectora.yml"
+      - ".github/actions/**"
+      # Releases alteram changelog e arquivos de versão, então também precisam
+      # disparar este workflow mesmo sem mudanças no código do app.
+      - "CHANGELOG.md"
+      - ".github/release-lines.json"
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "tests/**"
+      - "utils/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "SConstruct"
+      - "build-hybrid.py"
+      - ".github/workflows/vectora.yml"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+concurrency:
+  # Builds repetidos da mesma ref podem se cancelar. Cada push de release em
+  # master recebe grupo próprio para preservar a publicação em andamento.
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && github.run_id || 'shared' }}
+  cancel-in-progress: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: .
+env:
+  # 3.13: versão que o uv resolve (cpython-3.13) e que o projeto fixa em
+  # requires-python.
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "26"
+
+jobs:
+  # ── 1. Lint & Format ────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Ruff check
+        run: uv run ruff check backend tests
+      - name: Ruff format check
+        run: uv run ruff format --check backend tests
+      - name: Type check (ty)
+        run: uv run ty check backend tests
+      - name: Python sem uso (vulture)
+        run: uv run --with vulture python utils/unused_code.py python
+
+  # ── 2b. Frontend (oxlint + tsc + vitest) ────────────────────────────────
+  # O job `lint` cobre só o Python (ruff + ty). A suíte TypeScript — lint
+  # (oxlint), type check (tsc --noEmit) e testes (vitest) — roda aqui. i18n e
+  # rotas (Paraglide + TanStack Router) são gerados antes; ambos são pré-req do
+  # tsc e do vitest.
+  frontend:
+    name: Frontend (lint + types + tests)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Install deps
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Compile i18n messages (Paraglide)
+        working-directory: frontend
+        run: pnpm i18n:compile
+      - name: Lint (oxlint)
+        working-directory: frontend
+        run: pnpm exec oxlint --deny-warnings
+      - name: Código sem uso do frontend (knip contra o baseline)
+        run: python3 utils/unused_code.py frontend
+      - name: Páginas sem navegação
+        run: python3 utils/unused_code.py routes
+      - name: Lint i18n (no hardcoded UI strings)
+        working-directory: frontend
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: pnpm lint:i18n -- --changed
+      - name: Type check (tsc --noEmit)
+        working-directory: frontend
+        run: pnpm typecheck
+      - name: Unit tests (vitest)
+        working-directory: frontend
+        run: pnpm test
+
+  # ── 3. Build Verification (backend compile + frontend SPA) ──────────────
+  build_verification:
+    name: Build Verification
+    runs-on: ubuntu-24.04
+    needs: [lint, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Compile backend
+        run: uv run python -m compileall backend
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Build frontend SPA
+        # cwd=frontend (não `--dir`): o pnpm resolve allowBuilds (sharp)
+        # a partir do cwd; de fora de frontend/ ele não lê o pnpm-workspace.yaml
+        # e o install aborta com ERR_PNPM_IGNORED_BUILDS.
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+  # ── 4a. Unit Tests ──────────────────────────────────────────────────────
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-24.04
+    needs: build_verification
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: vectora
+          POSTGRES_PASSWORD: vectora
+          POSTGRES_DB: vectora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vectora -d vectora_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      qdrant:
+        image: qdrant/qdrant@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10
+        ports:
+          - 6333:6333
+          - 6334:6334
+        env:
+          QDRANT__SERVICE__API_KEY: vectora
+          QDRANT__SERVICE__GRPC_PORT: 6334
+        options: >-
+          --health-cmd "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Verify Qdrant readiness
+        run: >-
+          curl --fail --retry 15 --retry-delay 1 -H "api-key: vectora" http://localhost:6333/readyz
+      - name: Create .env from Secrets
+        run: |
+          cat <<'EOF' > .env
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY || 'test-key' }}
+          COHERE_API_KEY=${{ secrets.COHERE_API_KEY || 'test-key' }}
+          TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY || 'test-key' }}
+          LLM_PROVIDER=${{ secrets.LLM_PROVIDER || 'google-genai' }}
+          LOG_LEVEL=${{ secrets.LOG_LEVEL || 'INFO' }}
+          ENABLE_WEB_SEARCH=false
+          ENABLE_WEB_FETCH=false
+          EOF
+      # Sem --cov de propósito: já foi removido daqui como tentativa de
+      # mitigar o hang abaixo — não resolveu (hang idêntico sem --cov),
+      # mantido fora só porque cobertura deve ser um job dedicado de
+      # qualquer forma, sem competir por CPU com o gate de tempo dos testes.
+      # Hipótese de esgotamento de fd (ulimit -n) testada e descartada —
+      # hang idêntico com o limite bem mais alto.
+      #
+      # DIAGNÓSTICO — hang intermitente (mas frequente) sempre no mesmo
+      # padrão (ver pyproject.toml [tool.pytest.ini_options] pro histórico
+      # completo da investigação): roda o pytest em background e, se ainda
+      # estiver vivo aos 250s (o hang real trava os 300s inteiros do
+      # timeout do pytest — nunca "quase termina"), captura o estado NATIVO
+      # de cada thread via /proc (wchan = função do kernel em que a thread
+      # está bloqueada de verdade) e via py-spy (stack nativo C + Python
+      # juntos) ANTES do timeout_method=thread matar o processo — o
+      # faulthandler do próprio pytest só mostra o frame Python, não a
+      # razão real do bloqueio no kernel.
+      # LANCE_IO_THREADS/LANCE_CPU_THREADS: testando a hipótese de que o
+      # runtime tokio interno do Lance entra numa configuração degenerada
+      # de threadpool em runners com poucos vCPUs (achado real — ver
+      # github.com/lancedb/lancedb/issues/2326 — "Number of CPUs is less
+      # than or equal to the number of IO core reservations"). Sem
+      # confirmação de que isso causa o hang em si, só um warning
+      # documentado, mas é testável e barato.
+      - name: Run unit tests
+        env:
+          LANCE_IO_THREADS: "1"
+          LANCE_CPU_THREADS: "1"
+          VECTORA_TEST_POSTGRES_DSN: postgresql://vectora:vectora@localhost:5432/vectora_test
+          VECTORA_TEST_REDIS_URL: redis://localhost:6379/0
+          VECTORA_TEST_QDRANT_URL: http://localhost:6333
+        run: |
+          echo "nproc: $(nproc)"
+          uv run pytest tests/unit/ -v -m "not live and not real_lancedb" &
+          UV_PID=$!
+          (
+            sleep 250
+            if kill -0 "$UV_PID" 2>/dev/null; then
+              echo "::group::DIAGNÓSTICO — pytest ainda vivo aos 250s"
+              # $UV_PID é o processo `uv` (wrapper) — o Python/pytest real é
+              # um FILHO dele. 1ª tentativa deste diagnóstico mirou o PID
+              # errado (mostrou só as 2 threads triviais do uv em si:
+              # futex_do_wait esperando o filho + ep_poll do runtime do uv).
+              PY_PID=$(pgrep -P "$UV_PID" | head -1)
+              if [ -z "$PY_PID" ]; then PY_PID="$UV_PID"; fi
+              echo "uv_pid=$UV_PID python_pid=$PY_PID"
+              echo "--- threads do processo Python: tid | comm | wchan (função do kernel bloqueando) ---"
+              for t in /proc/"$PY_PID"/task/*/; do
+                tid=$(basename "$t")
+                wchan=$(cat "$t/wchan" 2>/dev/null || echo "?")
+                comm=$(cat "$t/comm" 2>/dev/null || echo "?")
+                echo "tid=$tid comm=$comm wchan=$wchan"
+              done
+              echo "--- fds abertos: $(find "/proc/$PY_PID/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l) ---"
+              # py-spy: bloqueado por ptrace neste runner mesmo com sudo
+              # ("Permission Denied" mesmo com PATH preservado) — desistido,
+              # não é contornável sem privilégio que o runner não concede.
+              echo "--- backend/storage/sqlite/pool.py::_new_conn diag (arquivo, não stream) ---"
+              cat /tmp/vectora_pool_diag.log 2>/dev/null || echo "(arquivo não existe — _new_conn nunca chamado neste hang)"
+              echo "::endgroup::"
+            fi
+          ) &
+          WATCHDOG_PID=$!
+          wait "$UV_PID"
+          PYTEST_EXIT=$?
+          kill "$WATCHDOG_PID" 2>/dev/null || true
+          exit $PYTEST_EXIT
+      # Testes marcados `real_lancedb` chamam lancedb.connect_async() sem
+      # mock — travam de forma determinística no Linux CI (ver comentário
+      # completo em pyproject.toml [tool.pytest.ini_options], seção
+      # `timeout`). Rodam num subprocesso do SO isolado (`timeout` do
+      # coreutils, não fork — fork causa segfault no runtime nativo do
+      # LanceDB, jemalloc não é fork-safe) com prazo próprio e curto; um
+      # travamento (exit 124) ou crash nativo (exit 128+sinal, ex. 139 =
+      # SIGSEGV) aqui vira warning, não falha o job — sem isso, o bug
+      # upstream do LanceDB bloquearia todo PR indefinidamente.
+      - name: Run real LanceDB isolated tests
+        run: |
+          set +e
+          timeout 90s uv run pytest tests/unit/ -v -m real_lancedb --timeout=60 --tb=short
+          EXIT=$?
+          set -e
+          if [ $EXIT -eq 124 ] || [ $EXIT -ge 128 ]; then
+            echo "::warning::testes reais de LanceDB travaram ou crasharam na CI (bug upstream conhecido, não bloqueando o job) — exit $EXIT"
+            exit 0
+          fi
+          exit $EXIT
+      - name: Run stress tests
+        run: uv run pytest tests/stress/ -v --timeout=120 --tb=short
+
+  # ── 4b. Integration + E2E (gate do Docker; precisam de chaves reais) ────
+  test-external:
+    name: Integration + E2E Tests
+    runs-on: ubuntu-24.04
+    needs: build_verification
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: vectora
+          POSTGRES_PASSWORD: vectora
+          POSTGRES_DB: vectora_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vectora -d vectora_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: [6379:6379]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      qdrant:
+        image: qdrant/qdrant@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10
+        ports: [6333:6333, 6334:6334]
+        env:
+          QDRANT__SERVICE__API_KEY: vectora
+          QDRANT__SERVICE__GRPC_PORT: 6334
+        options: >-
+          --health-cmd "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/6333'"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Verify Qdrant readiness
+        run: >-
+          curl --fail --retry 15 --retry-delay 1 -H "api-key: vectora" http://localhost:6333/readyz
+      - name: Create .env from Secrets
+        run: |
+          cat <<'EOF' > .env
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY || '' }}
+          COHERE_API_KEY=${{ secrets.COHERE_API_KEY || '' }}
+          TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY || '' }}
+          LLM_PROVIDER=${{ secrets.LLM_PROVIDER || 'google-genai' }}
+          LOG_LEVEL=${{ secrets.LOG_LEVEL || 'INFO' }}
+          ENABLE_WEB_SEARCH=true
+          ENABLE_WEB_FETCH=true
+          EOF
+      - name: Integration tests
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VECTORA_TEST_POSTGRES_DSN: postgresql://vectora:vectora@localhost:5432/vectora_test
+          VECTORA_TEST_REDIS_URL: redis://localhost:6379/0
+          VECTORA_TEST_QDRANT_URL: http://localhost:6333
+        run: uv run pytest tests/integration/ -v --timeout=120 -p no:randomly --tb=short -m "not live and not singularity"
+      - name: E2E tests
+        run: uv run pytest tests/e2e/ -m live -v --timeout=180 --tb=short
+
+  # ── 5. Decide se este push publica um release ──────────────────────────
+  # Um push na master publica quando o commit é o do Release Please ou quando
+  # é o merge de uma PR vinda da branch `release/X.Y` da série de manutenção
+  # (republicação de uma versão que ainda não foi publicada). Qualquer outro
+  # evento resulta em `false`; PRs e branches nunca publicam.
+  release-trigger:
+    name: Detect release promotion
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      is_release: ${{ steps.detect.outputs.is_release }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: "3.13"
+          sync: "false"
+          working-directory: .
+      - name: Detect release promotion
+        id: detect
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          PULL_HEAD_REFS=""
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            # Só cabeças de PRs do próprio repositório, já mescladas na master.
+            PULL_HEAD_REFS=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+              --jq '.[] | select(.merged_at != null and .base.ref == "master" and .head.repo.full_name == env.GITHUB_REPOSITORY) | .head.ref')
+            export PULL_HEAD_REFS
+            is_release=$(uv run --no-project --with "pydantic>=2.13.4" python utils/release.py release-promotion)
+          else
+            is_release=false
+          fi
+          echo "is_release=$is_release" >> "$GITHUB_OUTPUT"
+          echo "Release promotion: $is_release"
+
+  # ── 5b. Resolve release line ────────────────────────────────────────────
+  # Both native builds and R2/KV publication consume this single output. In
+  # particular, a manual dispatch must use the checked-out package version,
+  # rather than deriving a different channel from the Git ref.
+  release-channel:
+    name: Resolve release version and update channel
+    needs: [test-unit, test-external, release-trigger]
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master') ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.release-trigger.outputs.is_release == 'true')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      channel: ${{ steps.channel.outputs.value }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read version from pyproject.toml
+        id: version
+        working-directory: .
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '^version' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: "3.13"
+          sync: "false"
+          working-directory: .
+      - name: Select update channel from package version
+        id: channel
+        working-directory: .
+        shell: bash
+        run: |
+          CHANNEL=$(uv run --no-project --with "pydantic>=2.13.4" python utils/release.py update-channel "${{ steps.version.outputs.value }}")
+          echo "value=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+  # ── 6. Prepare the Electron cache before native package matrix ────────────
+  # O runtime do Electron é específico de SO/arquitetura. Este job prepara os
+  # caches Linux e Windows; o build macOS baixa o runtime no próprio job para
+  # não alocar um segundo runner macOS arm64 só para aquecimento.
+  prepare-electron:
+    name: Prepare Electron (${{ matrix.target }}/${{ matrix.arch }})
+    needs: [release-channel, release-trigger]
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master') ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.release-trigger.outputs.is_release == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Restore Electron cache
+        uses: actions/cache@v6
+        with:
+          path: .electron-cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('frontend/package.json', 'frontend/pnpm-lock.yaml') }}
+      - name: Configure Electron cache
+        shell: bash
+        run: echo "ELECTRON_CACHE=$GITHUB_WORKSPACE/.electron-cache" >> "$GITHUB_ENV"
+      - name: Download Electron into cache
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+  # ── 7. Native package matrix (PyInstaller + Electron installers) ──────────
+  # Pull requests build and verify every native package without production
+  # credentials. R2/KV publication and tagging remain release-only and happen
+  # after the complete matrix succeeds.
+  release-native:
+    name: Release native (${{ matrix.target }}/${{ matrix.arch }})
+    needs:
+      [
+        test-unit,
+        test-external,
+        release-channel,
+        release-trigger,
+        prepare-electron,
+      ]
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/master') ||
+      (github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.release-trigger.outputs.is_release == 'true')
+    env:
+      # Resolvido uma única vez a partir de pyproject.toml, compartilhado com
+      # o job de publicação para builds manuais e tags usarem a mesma linha.
+      VECTORA_UPDATE_CHANNEL: ${{ needs.release-channel.outputs.channel }}
+    strategy:
+      fail-fast: false
+      # Em PR só o Linux x64 (a plataforma mais barata): empacotamento e smoke
+      # do binário são validados; a matriz completa roda no disparo manual e
+      # no master. Snapcraft's project base is core22: building on the matching
+      # host lets us use destructive mode and avoids a remote LXD image pull.
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'pull_request' && '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"}]' || '[{"os":"ubuntu-22.04","arch":"x64","target":"linux"},{"os":"ubuntu-22.04-arm","arch":"arm64","target":"linux"},{"os":"macos-26","arch":"arm64","target":"mac"},{"os":"windows-latest","arch":"x64","target":"win"},{"os":"windows-11-arm","arch":"arm64","target":"win"}]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      # Windows ARM64 runs the backend under Windows' x64 emulation because
+      # PyArrow has no win_arm64 wheel; Electron and the installer remain ARM64-native.
+      - uses: ./.github/actions/setup-uv
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.target == 'win' && matrix.arch == 'arm64' && 'x64' || '' }}
+          all-extras: "false"
+          sync: "false"
+      - name: Sync dependencies
+        if: matrix.target != 'win' || matrix.arch != 'arm64'
+        working-directory: .
+        run: uv sync --frozen
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Cache Electron runtime
+        uses: actions/cache@v6
+        with:
+          path: .electron-cache
+          key: electron-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('frontend/package.json', 'frontend/pnpm-lock.yaml') }}
+      - name: Configure Electron cache
+        shell: bash
+        run: echo "ELECTRON_CACHE=$GITHUB_WORKSPACE/.electron-cache" >> "$GITHUB_ENV"
+      - name: Build frontend SPA (Vite)
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Install Linux package build dependencies
+        if: matrix.target == 'linux'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            sudo rm -rf /var/lib/apt/lists/*
+            sudo apt-get -o Acquire::Retries=5 update -qq && break
+            [ "$attempt" -lt 5 ] || exit 1
+            sleep $((attempt * 10))
+          done
+          sudo apt-get -o Acquire::Retries=5 install -y flatpak flatpak-builder fuse3 libarchive-tools rpm snapd
+          image="ghcr.io/canonical/snapcraft:8_core22"
+          compat_dir="${RUNNER_TEMP:?RUNNER_TEMP must be set}/snapcraft-compat"
+          docker pull "$image"
+          mkdir -p "$compat_dir"
+          cat > "$compat_dir/snapcraft" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          image="${SNAPCRAFT_IMAGE:-ghcr.io/canonical/snapcraft:8_core22}"
+          args=("$@")
+          if [[ "${args[0]:-}" == "snap" ]]; then
+            args=(pack --destructive-mode "${args[@]:1}")
+          fi
+
+          exec docker run --rm -v "$PWD:/project" -w /project "$image" "${args[@]}"
+          EOF
+          chmod +x "$compat_dir/snapcraft"
+          echo "$compat_dir" >> "${GITHUB_PATH:?GITHUB_PATH must be set}"
+          flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+      - name: Cache nats-server binary
+        uses: actions/cache@v6
+        with:
+          path: resources/nats-server*
+          key: nats-server-${{ matrix.target }}-${{ matrix.arch }}
+      - name: Cache ffmpeg/ffprobe binaries
+        uses: actions/cache@v6
+        with:
+          path: |
+            resources/ffmpeg*
+            resources/ffprobe*
+          key: ffmpeg-${{ matrix.target }}-${{ matrix.arch }}
+      - name: Install build components (scons install)
+        # build-hybrid.py falha rápido sem resources/nats-server, sem
+        # resources/ffmpeg e ffprobe e, no macOS, sem resources/vectora-speech.
+        # `scons install` prepara tudo isso pelas mesmas funções usadas
+        # localmente; binários já presentes (cache acima) são pulados. `scons`
+        # só existe no venv que o `uv sync` cria, por isso `uv run`.
+        working-directory: .
+        run: uv run scons install
+        shell: bash
+      - name: Speech helper check (macOS)
+        # Exercita o helper compilado: gera uma fala com `say`, consulta a
+        # autorização e, se o runner a concede, confere a transcrição. Sem
+        # autorização, só registra um aviso (o runner não tem como aprová-la).
+        if: runner.os == 'macOS'
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          helper="$PWD/resources/vectora-speech"
+          audio="$RUNNER_TEMP/speech.aiff"
+          say -o "$audio" "the secret code is blue seven"
+          run_limited() { perl -e 'alarm shift; exec @ARGV' 240 "$@"; }
+          run_limited "$helper" check --locale en-US | tee "$RUNNER_TEMP/speech-check.json"
+          authorized=$(python3 -c 'import json,sys; print(str(json.load(open(sys.argv[1])).get("authorized", False)).lower())' "$RUNNER_TEMP/speech-check.json")
+          if [ "$authorized" != "true" ]; then
+            echo "::notice::Reconhecimento de fala não autorizado neste runner; a transcrição real não foi exercitada."
+            exit 0
+          fi
+          run_limited "$helper" transcribe "$audio" --locale en-US | tee "$RUNNER_TEMP/speech-out.json"
+          python3 -c 'import json,sys; text=json.load(open(sys.argv[1])).get("text",""); assert "blue" in text.lower(), text' "$RUNNER_TEMP/speech-out.json"
+      - name: Build backend (PyInstaller onedir)
+        # Mesmo pipeline que `scons release` roda localmente (build-hybrid.py,
+        # na raiz do repositório): o PyInstaller empacota launcher.py, o pacote
+        # backend (código e dados, inclusive o defaults.env) e as libs em dist/vectora/ (onedir).
+        working-directory: .
+        run: python build-hybrid.py
+        shell: bash
+      - name: Smoke test (license bypass)
+        env:
+          VECTORA_LICENSE_BYPASS: "1"
+        working-directory: .
+        run: ./dist/vectora/vectora --version || ./dist/vectora/vectora.exe --version
+        shell: bash
+      - name: Smoke test (server actually boots inside the frozen binary)
+        # --version só confirma que o processo abre e fecha; isto sobe o
+        # backend de verdade (`vectora web`, dentro do binário do PyInstaller,
+        # não source interpretado) e confirma que /health
+        # responde -- rotas montadas, settings carregadas, storage ok.
+        working-directory: .
+        run: uv run scons smoke
+        shell: bash
+      - name: Export Windows signing cert
+        if: matrix.target == 'win'
+        working-directory: .
+        shell: pwsh
+        env:
+          WIN_CERTIFICATE_BASE64: ${{ secrets.WIN_CERTIFICATE_BASE64 }}
+          WIN_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WIN_CERTIFICATE_BASE64 -or -not $env:WIN_CERTIFICATE_PASSWORD) {
+            Write-Host "Trusted Windows signing certificate is not configured; installers will remain unsigned."
+            exit 0
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'vectora-signing.pfx'
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:WIN_CERTIFICATE_BASE64))
+          $signTool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName | Select-Object -Last 1 -ExpandProperty FullName
+          if (-not $signTool) { throw 'Windows SDK signtool.exe was not found.' }
+          $binaryRoots = @('dist/vectora', 'resources')
+          $binaries = Get-ChildItem $binaryRoots -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.Extension -in '.exe', '.dll', '.pyd' }
+          foreach ($binary in $binaries) {
+            & $signTool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f $certificatePath /p $env:WIN_CERTIFICATE_PASSWORD $binary.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed for $($binary.FullName)" }
+          }
+          "CSC_LINK=$certificatePath" >> $env:GITHUB_ENV
+          "CSC_KEY_PASSWORD=$env:WIN_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
+      - name: Sign macOS sidecars ad-hoc when Apple credentials are absent
+        if: matrix.target == 'mac'
+        working-directory: .
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            echo "Apple Developer credentials are configured; electron-builder will sign nested code and notarize the app."
+            exit 0
+          fi
+          echo "Apple credentials are incomplete; applying ad-hoc signatures to Mach-O sidecars. First launch may require the documented Gatekeeper override."
+          for root in dist/vectora resources; do
+            [[ -d "$root" ]] || continue
+            while IFS= read -r -d '' binary; do
+              if file -b "$binary" | grep -q 'Mach-O'; then
+                codesign --force --sign - --timestamp=none "$binary"
+              fi
+            done < <(find "$root" -type f -print0)
+          done
+      - name: Prepare macOS signing configuration
+        if: matrix.target == 'mac'
+        working-directory: frontend
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          BUILDER_CONFIG: ${{ runner.temp }}/electron-builder.yml
+        run: node electron/prepare-builder-config.cjs electron/electron-builder.yml "$BUILDER_CONFIG"
+      - name: Test conditional macOS signing configuration
+        working-directory: frontend
+        run: node --test electron/prepare-builder-config.node.cjs
+      - name: Verifica sincronia de versão (pyproject.toml vs frontend/package.json)
+        # A release reescreve todos os arquivos de .github/release-lines.json
+        # (version_files), incluindo frontend/package.json. Sem essa sincronia, electron-builder
+        # nomeia o instalador e grava o latest.yml com a versão ERRADA
+        # (herdada do package.json desatualizado) -- o R2/KV publicam sob o
+        # path de versão certo, mas o CONTEÚDO fica mentindo a versão, e o
+        # electron-updater recusa a atualização como "downgrade". Falhar
+        # aqui, cedo, é mais barato que descobrir isso em produção.
+        working-directory: .
+        shell: bash
+        run: |
+          pyproject_version=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          frontend_version=$(node -p "require('./frontend/package.json').version")
+          if [ "$pyproject_version" != "$frontend_version" ]; then
+            echo "::error::Versão divergente: pyproject.toml=$pyproject_version frontend/package.json=$frontend_version -- confira version_files em .github/release-lines.json antes de publicar."
+            exit 1
+          fi
+      - name: Build desktop shell + installer
+        # Sem working-directory explícito: herda o default do workflow (raiz do
+        # repositório), então --dir frontend aponta para o app.
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GH_TOKEN: ${{ secrets.VECTORA_RELEASES_TOKEN }}
+        shell: bash
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend run electron:build
+          if [ "${{ matrix.target }}" = "mac" ]; then
+            # Sem credenciais da Apple a configuração usa a identidade ad-hoc
+            # (`-`), que não envolve segredo. O electron-builder pula a
+            # assinatura em PRs por padrão e deixaria o .app com o selo do
+            # Electron quebrado; forçamos a assinatura ad-hoc para o teste de
+            # instalação verificar um pacote íntegro.
+            if [ -z "${APPLE_ID:-}" ] || [ -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+              export CSC_FOR_PULL_REQUEST=true
+            fi
+            pnpm --dir frontend exec electron-builder --config "$RUNNER_TEMP/electron-builder.yml" --${{ matrix.target }} --${{ matrix.arch }} --publish never
+          elif [ "${{ matrix.target }}" = "linux" ]; then
+            # Todos os formatos usam o mesmo linux-unpacked e a mesma cópia do
+            # Electron. Separar o Snap fazia o builder preparar o runtime duas
+            # vezes no mesmo job.
+            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --linux AppImage deb rpm pacman flatpak snap tar.gz --${{ matrix.arch }} --publish never
+          else
+            pnpm --dir frontend exec electron-builder --config electron/electron-builder.yml --${{ matrix.target }} --${{ matrix.arch }} --publish never
+          fi
+      - name: Verify required platform artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="frontend/dist-electron"
+          require_one() {
+            local pattern="$1"
+            compgen -G "$output/$pattern" >/dev/null || {
+              echo "::error::Missing required release artifact: $pattern"
+              exit 1
+            }
+          }
+          case "${{ matrix.target }}" in
+            win)
+              require_one "Vectora-*-win-${{ matrix.arch }}.exe"
+              require_one "Vectora-*-win-${{ matrix.arch }}.msi"
+              ;;
+            mac)
+              require_one "Vectora-*-mac-${{ matrix.arch }}.dmg"
+              require_one "Vectora-*-mac-${{ matrix.arch }}.zip"
+              ;;
+            linux)
+              # electron-builder normalizes architecture names per target
+              # (x86_64, amd64, aarch64, x64); verify format presence instead.
+              require_one "Vectora-*-linux-*.AppImage"
+              require_one "Vectora-*-linux-*.deb"
+              require_one "Vectora-*-linux-*.rpm"
+              require_one "Vectora-*-linux-*.snap"
+              require_one "Vectora-*-linux-*.pacman"
+              require_one "Vectora-*-linux-*.flatpak"
+              require_one "Vectora-*-linux-*.tar.gz"
+              ;;
+          esac
+      - name: Install and launch macOS packages
+        if: matrix.target == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tested_executable=""
+          for format in dmg zip; do
+            installer=$(find frontend/dist-electron -maxdepth 1 -type f -name "*.$format" -print -quit)
+            test -n "$installer" || { echo "No .$format installer was generated." >&2; exit 1; }
+            app="$RUNNER_TEMP/Vectora-$format.app"
+            if [[ "$format" == "dmg" ]]; then
+              mount="$RUNNER_TEMP/vectora-dmg"
+              mkdir -p "$mount"
+              hdiutil attach "$installer" -nobrowse -readonly -mountpoint "$mount"
+              app_source=$(find "$mount" -maxdepth 2 -name Vectora.app -print -quit)
+              if [[ -z "$app_source" ]]; then
+                hdiutil detach "$mount"
+                echo "Vectora.app missing from DMG." >&2
+                exit 1
+              fi
+              ditto "$app_source" "$app"
+              hdiutil detach "$mount"
+            else
+              unpack="$RUNNER_TEMP/vectora-zip"
+              mkdir -p "$unpack"
+              ditto -x -k "$installer" "$unpack"
+              app_source=$(find "$unpack" -maxdepth 3 -name Vectora.app -print -quit)
+              test -n "$app_source" || { echo "Vectora.app missing from ZIP." >&2; exit 1; }
+              ditto "$app_source" "$app"
+            fi
+            executable="$app/Contents/MacOS/Vectora"
+            test -x "$executable" || { echo "Installed app executable is missing: $executable" >&2; exit 1; }
+            file "$executable"
+            codesign --verify --deep --strict "$app"
+            if VECTORA_LICENSE_BYPASS=1 "$executable" --smoke-test > "$RUNNER_TEMP/vectora-$format-startup.log" 2>&1; then
+              :
+            else
+              status=$?
+              cat "$RUNNER_TEMP/vectora-$format-startup.log"
+              echo "Vectora startup smoke test failed for .$format (code $status)." >&2
+              exit "$status"
+            fi
+            cat "$RUNNER_TEMP/vectora-$format-startup.log"
+            if [[ -z "$tested_executable" ]]; then
+              tested_executable="$executable"
+            fi
+          done
+          VECTORA_LICENSE_BYPASS=1 "$tested_executable" --tests > "$RUNNER_TEMP/vectora-installed-tests.log" 2>&1 || {
+            status=$?
+            cat "$RUNNER_TEMP/vectora-installed-tests.log"
+            echo "Installed Vectora test suite failed (status $status)." >&2
+            exit "$status"
+          }
+          cat "$RUNNER_TEMP/vectora-installed-tests.log"
+      - name: Install Linux package and verify runtime
+        if: matrix.target == 'linux' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE/frontend/dist-electron:/artifacts:ro" \
+            ubuntu:24.04 sh -euc '
+              for attempt in 1 2 3 4 5; do
+                rm -rf /var/lib/apt/lists/*
+                apt-get -o Acquire::Retries=5 update -qq && break
+                [ "$attempt" -lt 5 ] || exit 1
+                sleep $((attempt * 10))
+              done
+              apt-get -o Acquire::Retries=5 install -y xvfb /artifacts/Vectora-*-linux-amd64.deb
+              dpkg-query -s vectora | grep -F "Status: install ok installed"
+              executable=/opt/Vectora/vectora
+              test -x "$executable"
+              command -v vectora >/dev/null
+              test "$(readlink -f "$(command -v vectora)")" = "$executable"
+              ldd "$executable" | tee /tmp/vectora-ldd.txt
+              if grep -q "not found" /tmp/vectora-ldd.txt; then
+                echo "Vectora has unresolved runtime libraries in Ubuntu 24.04" >&2
+                exit 1
+              fi
+              alsa=$(grep -m1 "libasound\.so" /tmp/vectora-ldd.txt | sed -E "s/.*=> ([^ ]+).*/\1/")
+              if [ -n "$alsa" ] && ! grep -aq snd_device_name_get_hint "$alsa"; then
+                echo "The resolved ALSA library does not export the real ALSA API." >&2
+                exit 1
+              fi
+              command -v xvfb-run
+              set +e
+              VECTORA_LICENSE_BYPASS=1 xvfb-run -a "$executable" --no-sandbox --smoke-test \
+                > /tmp/vectora-startup.log 2>&1
+              startup_status=$?
+              set -e
+              cat /tmp/vectora-startup.log
+              if [ "$startup_status" -ne 0 ]; then
+                echo "Vectora startup smoke test failed (status $startup_status)." >&2
+                exit 1
+              fi
+              if grep -Eiq "error while loading shared libraries|FATAL.*(error|exception)" /tmp/vectora-startup.log; then
+                echo "Vectora reported a fatal startup error in Ubuntu 24.04." >&2
+                exit 1
+              fi
+              VECTORA_LICENSE_BYPASS=1 xvfb-run -a "$executable" --no-sandbox --tests \
+                > /tmp/vectora-installed-tests.log 2>&1 || {
+                  status=$?
+                  cat /tmp/vectora-installed-tests.log
+                  echo "Installed Vectora test suite failed in Ubuntu 24.04 (status $status)." >&2
+                  exit "$status"
+                }
+              cat /tmp/vectora-installed-tests.log
+            '
+      - name: Remove temporary Windows signing certificate
+        if: always() && matrix.target == 'win'
+        shell: pwsh
+        run: Remove-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'vectora-signing.pfx') -Force -ErrorAction SilentlyContinue
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: vectora-${{ matrix.target }}-${{ matrix.arch }}
+          path: |
+            frontend/dist-electron/*.exe
+            frontend/dist-electron/*.msi
+            frontend/dist-electron/*.dmg
+            frontend/dist-electron/*.zip
+            frontend/dist-electron/*.AppImage
+            frontend/dist-electron/*.deb
+            frontend/dist-electron/*.rpm
+            frontend/dist-electron/*.snap
+            frontend/dist-electron/*.pacman
+            frontend/dist-electron/*.flatpak
+            frontend/dist-electron/*.tar.gz
+            frontend/dist-electron/latest*.yml
+            frontend/dist-electron/*.blockmap
+          if-no-files-found: error
+          retention-days: 30
+
+  # Install the actual Windows packages and verify their installed paths.
+  # macOS packages are tested on the native build runner to avoid allocating
+  # additional macOS arm64 runners for the two formats.
+  desktop-install-smoke:
+    name: Desktop install and launch (${{ matrix.platform }}/${{ matrix.arch }}/${{ matrix.format }})
+    needs: release-native
+    if: needs.release-native.result == 'success' && github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON('[{"platform":"Windows","os":"windows-latest","arch":"x64","format":"exe"},{"platform":"Windows","os":"windows-latest","arch":"x64","format":"msi"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"exe"},{"platform":"Windows","os":"windows-11-arm","arch":"arm64","format":"msi"}]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download native installer
+        uses: actions/download-artifact@v8
+        with:
+          name: vectora-${{ matrix.platform == 'Windows' && 'win' || matrix.platform == 'macOS' && 'mac' || 'linux' }}-${{ matrix.arch }}
+          path: installers
+      - name: Install and launch Windows installer
+        if: matrix.platform == 'Windows'
+        shell: pwsh
+        env:
+          INSTALLER_FORMAT: ${{ matrix.format }}
+        run: |
+          $installer = Get-ChildItem "$env:GITHUB_WORKSPACE\installers" -File | Where-Object { $_.Extension -eq ".${env:INSTALLER_FORMAT}" } | Select-Object -First 1
+          if (-not $installer) { throw "No .$env:INSTALLER_FORMAT installer was downloaded." }
+          if ($env:INSTALLER_FORMAT -eq "msi") {
+            $install = Start-Process msiexec.exe -ArgumentList @("/i", $installer.FullName, "/qn", "/norestart", "/l*v", "$env:RUNNER_TEMP\vectora-install.log") -Wait -PassThru
+          } else {
+            $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S") -Wait -PassThru
+          }
+          if ($install.ExitCode -ne 0) { throw "Installer failed with exit code $($install.ExitCode)." }
+          # Instaladores NSIS podem relançar a si mesmos e devolver o controle
+          # antes de terminar de copiar os arquivos.
+          Wait-Process -Name $installer.BaseName -Timeout 180 -ErrorAction SilentlyContinue
+          $uninstallKeys = foreach ($hive in "HKCU:", "HKLM:") {
+            Get-ItemProperty "$hive\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue |
+              Where-Object { $_.DisplayName -like "*Vectora*" }
+          }
+          $candidates = @("$env:LOCALAPPDATA\Programs\Vectora\Vectora.exe", "$env:ProgramFiles\Vectora\Vectora.exe", "${env:ProgramFiles(x86)}\Vectora\Vectora.exe")
+          $candidates += $uninstallKeys | Where-Object { $_.InstallLocation } | ForEach-Object { Join-Path $_.InstallLocation "Vectora.exe" }
+          $app = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $app) {
+            Write-Host "Installer exit code: $($install.ExitCode)"
+            Write-Host "Uninstall entries:"
+            $uninstallKeys | Select-Object DisplayName, DisplayVersion, InstallLocation, UninstallString | Format-List | Out-String | Write-Host
+            Write-Host "Installer file:"
+            Get-ChildItem "$env:GITHUB_WORKSPACE\installers" -File | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
+            Write-Host "Install directory contents:"
+            $installDir = "$env:LOCALAPPDATA\Programs\Vectora"
+            if (Test-Path -LiteralPath $installDir) {
+              Get-ChildItem $installDir -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 250 | Write-Host
+            }
+            Write-Host "Installer entries for the app executable and Electron libraries:"
+            $sevenZip = "C:\Program Files\7-Zip\7z.exe"
+            if (Test-Path -LiteralPath $sevenZip) {
+              & $sevenZip l $installer.FullName 2>&1 | Select-String -Pattern "Vectora.exe|ffmpeg.dll|libEGL.dll|app-arm64|app-64" | ForEach-Object { Write-Host $_.Line }
+            }
+            Write-Host "Files inside the installer app archive:"
+            $archiveDir = Join-Path $env:RUNNER_TEMP "installer-archive"
+            New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
+            if (Test-Path -LiteralPath $sevenZip) {
+              & $sevenZip e "-o$archiveDir" $installer.FullName "`$PLUGINSDIR\app-arm64.7z" -y 2>&1 | Out-Null
+              $archive = Join-Path $archiveDir "app-arm64.7z"
+              if (Test-Path -LiteralPath $archive) {
+                & $sevenZip l $archive 2>&1 | Select-String -Pattern "Vectora.exe|ffmpeg.dll|libEGL.dll|libGLESv2.dll" | ForEach-Object { Write-Host $_.Line }
+                Write-Host "7-Zip version:"
+                & $sevenZip 2>&1 | Select-Object -First 2 | ForEach-Object { Write-Host $_ }
+                Write-Host "Compression methods used by the app archive:"
+                & $sevenZip l -slt $archive 2>&1 | Select-String -Pattern "^Method = " | ForEach-Object { $_.Line } | Sort-Object -Unique | ForEach-Object { Write-Host $_ }
+                $probeDir = Join-Path $archiveDir "probe"
+                & $sevenZip x $archive "-o$probeDir" Vectora.exe -y 2>&1 | Select-Object -Last 3 | ForEach-Object { Write-Host $_ }
+                Write-Host "Vectora.exe extracted by 7-Zip: $(Test-Path -LiteralPath (Join-Path $probeDir 'Vectora.exe'))"
+              }
+            }
+            Write-Host "Windows Defender status and detections:"
+            Get-MpComputerStatus -ErrorAction SilentlyContinue | Select-Object RealTimeProtectionEnabled, AntivirusEnabled | Format-List | Out-String | Write-Host
+            Get-MpThreatDetection -ErrorAction SilentlyContinue | Select-Object -First 10 ThreatID, ProcessName, Resources | Format-List | Out-String -Width 250 | Write-Host
+            Get-WinEvent -FilterHashtable @{ LogName = "Microsoft-Windows-Windows Defender/Operational"; Id = 1116, 1117 } -MaxEvents 5 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.Message }
+            Write-Host "Running processes from the installer:"
+            Get-Process | Where-Object { $_.Name -match "Vectora|vectora|Uninstall|nsis|Setup" } | Select-Object Name, Id, Path | Format-Table -AutoSize | Out-String -Width 250 | Write-Host
+            throw "Installed Vectora.exe was not found in standard install locations."
+          }
+          Write-Host "Installed executable: $app"
+          & $app --smoke-test 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\vectora-startup.log"
+          if ($LASTEXITCODE -ne 0) { throw "Installed Vectora startup smoke test failed with exit code $LASTEXITCODE." }
+          & $app --tests 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\vectora-installed-tests.log"
+          if ($LASTEXITCODE -ne 0) { throw "Installed Vectora test suite failed with exit code $LASTEXITCODE." }
+  # ── 7. Create the tag and the GitHub Release after distribution ──────────
+  # O commit da PR de release só vira uma versão publicada depois que os testes
+  # e os instaladores terminarem com sucesso. Este job cria a tag, a release e
+  # os anexos. Os binários ficam só na GitHub Release; o Cloudflare recebe depois
+  # apenas o manifesto que aponta para eles (job seguinte).
+  #
+  # Tudo que fala com o GitHub aqui usa o `gh`, para que o job possa ser
+  # simulado com um `gh` falso (utils/workflow_sim.py, CONTRIBUTING.md).
+  tag-release:
+    name: Tag and publish release
+    needs:
+      [release-native, release-channel, release-trigger, desktop-install-smoke]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.release-trigger.outputs.is_release == 'true'
+    runs-on: ubuntu-24.04
+    # Uma publicação iniciada nunca deve ser cancelada por outro push.
+    concurrency:
+      group: vectora-tag-release-${{ github.run_id }}
+      cancel-in-progress: false
+    environment:
+      name: production
+    permissions:
+      contents: write
+      actions: write
+    env:
+      # Tag e release usam RELEASE_TAG_TOKEN quando ele existe. O GitHub recusa
+      # que o GITHUB_TOKEN crie uma tag cujo commit tenha workflows diferentes
+      # dos da branch padrão (acontece quando a master avança antes de o job
+      # rodar de novo); um token com a permissão `workflows` não tem esse limite.
+      GH_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN || github.token }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Read released version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          test -n "$version"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - name: Download desktop installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: vectora-*
+          path: dist-release
+          merge-multiple: true
+      - name: Select release assets
+        # Só os instaladores e os blockmaps deles, escolhidos pelo nome
+        # (utils/release_assets.py), vão para release-assets/. Manifestos de
+        # atualização e qualquer outro arquivo dos artefatos ficam de fora do
+        # checksum e do upload, e nenhum nome com caractere de glob chega ao
+        # `gh release upload`.
+        working-directory: .
+        run: python3 utils/release_assets.py stage dist-release release-assets
+      - name: Create release checksums and optional GPG signatures
+        working-directory: .
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: python3 utils/sign_release_artifacts.py release-assets
+      - name: Check the release commit workflows
+        shell: bash
+        env:
+          RELEASE_TAG_TOKEN: ${{ secrets.RELEASE_TAG_TOKEN }}
+        run: |
+          set -euo pipefail
+          workflow_files() {
+            gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows?ref=$1" \
+              --jq '.[] | "\(.path) \(.sha)"' | sort
+          }
+          if diff <(workflow_files "$GITHUB_SHA") <(workflow_files "$DEFAULT_BRANCH") >/dev/null; then
+            echo "Os workflows de $GITHUB_SHA são os mesmos de $DEFAULT_BRANCH."
+          elif [[ -n "${RELEASE_TAG_TOKEN:-}" ]]; then
+            echo "Os workflows de $GITHUB_SHA diferem dos de $DEFAULT_BRANCH; a tag e a release usam o RELEASE_TAG_TOKEN."
+          else
+            echo "::warning::Os workflows de $GITHUB_SHA diferem dos de $DEFAULT_BRANCH. O GitHub costuma recusar que o GITHUB_TOKEN crie a tag nesse caso (\"refusing to allow a GitHub App to create or update workflow\"). Se a tag ou a release falhar, configure o secret RELEASE_TAG_TOKEN (veja o CONTRIBUTING.md)."
+          fi
+      - name: Create tag
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          lookup_error="$RUNNER_TEMP/tag-lookup-error.txt"
+          : > "$lookup_error"
+          if existing="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha 2>"$lookup_error")"; then
+            # Resolve tags anotadas e leves ao commit, sem tratar HTTP 422 como ausência.
+            existing="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          else
+            lookup_status=$?
+            if grep -Fq '(HTTP 404)' "$lookup_error"; then
+              existing=""
+            else
+              cat "$lookup_error" >&2
+              exit "$lookup_status"
+            fi
+          fi
+          if [[ -n "$existing" ]]; then
+            if [[ "$existing" != "$GITHUB_SHA" ]]; then
+              echo "::error::A tag $TAG já existe em $existing, e não em $GITHUB_SHA."
+              exit 1
+            fi
+            echo "A tag $TAG já aponta para $GITHUB_SHA."
+            exit 0
+          fi
+          tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags" \
+            -f tag="$TAG" -f message="Vectora $VERSION" \
+            -f object="$GITHUB_SHA" -f type=commit --jq .sha)"
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+            -f ref="refs/tags/$TAG" -f sha="$tag_object" >/dev/null
+          echo "Tag $TAG criada em $GITHUB_SHA."
+      - name: Create GitHub Release
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A release $TAG já existe."
+            exit 0
+          fi
+          # O corpo é a seção da versão no CHANGELOG.md; sem ela, as notas
+          # geradas pelo GitHub.
+          notes=(--generate-notes)
+          if python3 utils/release_notes.py CHANGELOG.md "$VERSION" > release-notes.md; then
+            notes=(--notes-file release-notes.md)
+          fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Vectora $VERSION" \
+            "${notes[@]}" \
+            --draft
+      - name: Attach release assets
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t assets < <(find release-assets -maxdepth 1 -type f -print0 | sort -z)
+          if ((${#assets[@]} == 0)); then
+            echo "::error::Nenhum arquivo para anexar à release."
+            exit 1
+          fi
+          # O `gh release upload` expande colchetes, asteriscos e interrogações
+          # como glob; um nome fora deste padrão aborta o job antes do upload.
+          for asset in "${assets[@]}"; do
+            [[ "${asset##*/}" =~ ^[A-Za-z0-9._+-]+$ ]] || {
+              echo "::error::Nome de anexo inesperado: ${asset##*/}"
+              exit 1
+            }
+          done
+          gh release upload "$TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          case "$draft" in
+            true)
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+              echo "A release $TAG foi publicada depois do upload de todos os anexos."
+              ;;
+            false)
+              echo "A release $TAG já estava publicada; os anexos foram atualizados."
+              ;;
+            *)
+              echo "::error::Resposta inesperada ao consultar o estado da release: $draft"
+              exit 1
+              ;;
+          esac
+      - name: Start release-line rotation
+        # Uma release criada com o GITHUB_TOKEN não dispara o evento `release`
+        # do rotate-release-lines.yml; por isso a rotação é pedida aqui. Com o
+        # RELEASE_TAG_TOKEN o evento também dispara; a rotação é idempotente.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run rotate-release-lines.yml \
+            --repo "$GITHUB_REPOSITORY" --ref "$DEFAULT_BRANCH" \
+            --field "release_tag=$TAG" --field "target_branch=$DEFAULT_BRANCH"
+
+  # ── 8. Publish the update manifest (R2 + KV) ─────────────────────────────
+  # Os binários ficam na GitHub Release (pública e gratuita). O Cloudflare
+  # guarda só o manifesto `latest.yml` de cada SO e arquitetura, com a URL de
+  # cada arquivo na release, e o canal no KV. Roda depois do tag-release porque
+  # o manifesto só pode apontar para arquivos que já existem. É um único job
+  # para toda a matriz: publicar de dentro de cada job faria read-modify-write
+  # concorrentes na mesma chave `config` do KV (publishVersionAndPrune),
+  # corrompendo rollout_percent, previous_stable e history.
+  publish-update-channel:
+    name: Publish update manifest (R2 + KV)
+    needs: [release-channel, release-trigger, tag-release]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/master' &&
+      needs.release-trigger.outputs.is_release == 'true'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: vectora-production-update-channel
+      cancel-in-progress: false
+    environment:
+      name: production
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # As credenciais R2 e do Wrangler ficam limitadas ao passo de publicação.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Check out release publisher
+        uses: actions/checkout@v7
+        with:
+          repository: vectora-company/services
+          ref: master
+          token: ${{ secrets.VECTORA_RELEASES_TOKEN }}
+          path: release-worker
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.0
+      - name: Download all installers
+        # O publicador calcula o hash e o tamanho de cada instalador para montar
+        # o manifesto; os arquivos em si não são enviados ao R2.
+        uses: actions/download-artifact@v8
+        with:
+          pattern: vectora-*
+          path: dist-electron-all
+          merge-multiple: true
+      - name: Install release publisher dependencies
+        working-directory: release-worker
+        run: pnpm install --frozen-lockfile
+      - name: Publish manifest (R2 + KV)
+        # Sem CLOUDFLARE_API_TOKEN (wrangler/KV) ou sem as credenciais R2
+        # (upload S3) o script falha na autenticação — o job fica vermelho
+        # de propósito, nunca um no-op silencioso.
+        working-directory: release-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CHANNEL: ${{ needs.release-channel.outputs.channel }}
+          VERSION: ${{ needs.release-channel.outputs.version }}
+        run: |
+          pnpm run release -- \
+            --channel="$CHANNEL" \
+            --version="$VERSION" \
+            --dist="$GITHUB_WORKSPACE/dist-electron-all" \
+            --release-url="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION"

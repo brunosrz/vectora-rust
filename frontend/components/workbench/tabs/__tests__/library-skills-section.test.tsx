@@ -1,0 +1,194 @@
+// @vitest-environment jsdom
+/**
+ * SkillsSection lista diretamente o catálogo remoto, lista GET /skills/catalog
+ * e instala uma skill com POST /skills {skill_id}.
+ */
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  fireEvent,
+  act,
+} from "@testing-library/react";
+
+import { SkillsSection } from "../library-skills-section";
+import { useLibraryStore, type CatalogSkill } from "@/lib/stores/library-store";
+import { answerConfirm } from "@/components/ui/__tests__/answer-confirm";
+
+afterEach(cleanup);
+
+beforeEach(() => {
+  useLibraryStore.setState({
+    skillsItems: [],
+    skillsLoading: false,
+    skillsFetchedAt: null,
+    skillsQuery: "",
+    skillsError: null,
+  });
+});
+
+const CATALOG: CatalogSkill[] = [
+  {
+    id: "pdf-extract",
+    name: "PDF Extract",
+    description: "Extrai texto de PDFs",
+    source: "https://github.com/example/pdf-extract-skill",
+    publisher: "Example Maintainers",
+  },
+];
+
+function mockFetch({
+  entries = CATALOG as typeof CATALOG,
+  installOk = true,
+} = {}) {
+  global.fetch = vi
+    .fn()
+    .mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/skills/catalog") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ entries, total: entries.length }),
+        } as Response);
+      }
+      if (url === "/skills" && init?.method === "POST") {
+        return Promise.resolve({
+          ok: installOk,
+          json: async () => ({}),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
+    });
+}
+
+describe("SkillsSection — Catálogo", () => {
+  it("lista as skills disponíveis do registry remoto", async () => {
+    mockFetch();
+    render(<SkillsSection query="" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("PDF Extract")).toBeTruthy();
+    });
+    expect(screen.getByText(/Example Maintainers/)).toBeTruthy();
+  });
+
+  it("instalar chama POST /skills com o id do catálogo", async () => {
+    mockFetch();
+    render(<SkillsSection query="" />);
+    await waitFor(() => screen.getByText("PDF Extract"));
+
+    fireEvent.click(screen.getByText("Install"));
+    await answerConfirm(true);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/skills",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            skill_id: CATALOG[0].id,
+            confirm_unverified: true,
+          }),
+        }),
+      );
+    });
+  });
+
+  it("digitar na busca dispara /skills/catalog?q= com debounce de 350ms; erro de rede na busca seguinte mantém o último resultado bom e mostra erro discreto", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/license/status") {
+        return {
+          ok: true,
+          json: async () => ({ configured: false }),
+        } as Response;
+      }
+      if (url === "/skills/catalog") {
+        return {
+          ok: true,
+          json: async () => ({ entries: CATALOG }),
+        } as Response;
+      }
+      if (url === "/skills/catalog?q=pdf") {
+        return {
+          ok: true,
+          json: async () => ({ entries: CATALOG }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const { rerender } = render(<SkillsSection query="" />);
+    await vi.waitFor(() =>
+      expect(screen.getByText("PDF Extract")).toBeTruthy(),
+    );
+
+    rerender(<SkillsSection query="pdf" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    await vi.waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some((c) => c[0] === "/skills/catalog?q=pdf"),
+      ).toBe(true);
+    });
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/skills/catalog?q=falha") throw new Error("offline");
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+    rerender(<SkillsSection query="falha" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText("PDF Extract")).toBeTruthy();
+      expect(screen.getByText("Error searching skills")).toBeTruthy();
+    });
+
+    vi.useRealTimers();
+  });
+
+  it("catálogo vazio mostra estado específico", async () => {
+    mockFetch({ entries: [] });
+    render(<SkillsSection query="" />);
+    await waitFor(() => {
+      expect(screen.getByText("No skills available yet.")).toBeTruthy();
+    });
+  });
+
+  it("exibe confiança verificada sem badge redundante de comunidade", async () => {
+    mockFetch({
+      entries: [
+        {
+          ...CATALOG[0],
+          id: "a",
+          name: "Skill Oficial",
+          vectora_verified: true,
+        },
+        { ...CATALOG[0], id: "b", name: "Skill Verificada", verified: true },
+        { ...CATALOG[0], id: "c", name: "Skill Comunidade" },
+      ],
+    });
+    render(<SkillsSection query="" />);
+
+    await waitFor(() => screen.getByText("Skill Oficial"));
+    expect(screen.getByText("Official")).toBeTruthy();
+    expect(screen.getByText("Verified")).toBeTruthy();
+    expect(screen.queryByText("Community", { exact: true })).toBeNull();
+  });
+
+  it("não infere autor a partir de uma URL quando o catálogo não informa publisher", async () => {
+    mockFetch({
+      entries: [{ ...CATALOG[0], publisher: undefined }],
+    });
+    render(<SkillsSection query="" />);
+
+    await waitFor(() => expect(screen.getByText("PDF Extract")).toBeTruthy());
+    expect(screen.queryByText(/Example Maintainers/)).toBeNull();
+    expect(screen.queryByText(/example\/pdf-extract-skill/)).toBeNull();
+  });
+});
