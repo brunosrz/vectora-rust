@@ -15,6 +15,7 @@ import contextlib
 import logging
 import os
 import platform
+import shutil
 import sys
 import threading
 import time
@@ -58,8 +59,11 @@ def _default_shell() -> list[str]:
         if which("pwsh.exe"):
             return ["pwsh.exe", "-NoLogo"]
         return ["cmd.exe"]
-    shell = os.environ.get("SHELL", "/bin/bash")
-    return [shell]
+    configured = os.environ.get("SHELL", "").strip()
+    shell = shutil.which(configured) if configured else None
+    if shell:
+        return [shell]
+    return [shutil.which("bash") or shutil.which("sh") or "/bin/sh"]
 
 
 class PtySession:

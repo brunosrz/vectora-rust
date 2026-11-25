@@ -42,6 +42,18 @@ def test_sem_policy_spawna_shell_padrao_sem_bwrap(_fake_backend, tmp_path):
     assert isinstance(session, PtySession)
 
 
+def test_shell_configurado_inexistente_usa_shell_posix_disponivel(monkeypatch):
+    monkeypatch.setattr(pty_mod, "_IS_WINDOWS", False)
+    monkeypatch.setenv("SHELL", "/missing/configured-shell")
+    monkeypatch.setattr(
+        pty_mod.shutil,
+        "which",
+        lambda command: {"bash": None, "sh": "/bin/sh"}.get(command),
+    )
+
+    assert pty_mod._default_shell() == ["/bin/sh"]
+
+
 def test_policy_desabilitada_nao_envolve_com_bwrap(_fake_backend, tmp_path):
     PtySession.create(
         terminal_id="t1",
