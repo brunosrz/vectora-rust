@@ -6,7 +6,7 @@
  * (cookies httpOnly não trafegam em WS cross-origin) e passa na query string.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { VECTORA_API_URL } from "@/lib/constants/api";
 import { m } from "@/lib/paraglide/messages";
@@ -44,6 +44,8 @@ export function XtermView({
   onClosed,
 }: XtermViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
   const termRef = useRef<any | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitRef = useRef<any | null>(null);
@@ -62,6 +64,8 @@ export function XtermView({
     if (!containerRef.current) return;
     let cancelled = false;
     const host = containerRef.current;
+    setConnectionError(null);
+    setConnected(false);
 
     (async () => {
       // CSS + libs carregados só no cliente
@@ -129,7 +133,9 @@ export function XtermView({
       try {
         ws = new WebSocket(url);
       } catch {
-        term.write(`\r\n\x1b[31m[${m.terminal_conn_error()}]\x1b[0m\r\n`);
+        const error = m.terminal_conn_error();
+        setConnectionError(error);
+        term.write(`\r\n\x1b[31m[${error}]\x1b[0m\r\n`);
         return;
       }
       ws.binaryType = "arraybuffer";
@@ -161,7 +167,12 @@ export function XtermView({
           try {
             const j = JSON.parse(ev.data);
             if (j.type === "error") {
-              term.write(`\r\n\x1b[31m${j.message}\x1b[0m\r\n`);
+              const message = String(j.message ?? m.terminal_conn_error());
+              setConnectionError(message);
+              term.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`);
+            } else if (j.type === "connected") {
+              setConnected(true);
+              setConnectionError(null);
             } else if (j.type === "closed") {
               term.write(`\r\n\x1b[33m[${m.terminal_ended()}]\x1b[0m\r\n`);
               onClosedRef.current?.();
@@ -176,7 +187,9 @@ export function XtermView({
       });
 
       ws.addEventListener("error", () => {
-        term.write(`\r\n\x1b[31m[${m.terminal_conn_error()}]\x1b[0m\r\n`);
+        const error = m.terminal_conn_error();
+        setConnectionError((current) => current ?? error);
+        term.write(`\r\n\x1b[31m[${error}]\x1b[0m\r\n`);
       });
 
       ws.addEventListener("close", () => {
@@ -184,7 +197,9 @@ export function XtermView({
         // WebSocket também ocorre em falha de autenticação/inicialização; nesse
         // caso, manter a aba expõe a mensagem de erro e permite reconectar.
         if (!cancelled) {
-          term.write(`\r\n\x1b[31m[${m.terminal_conn_error()}]\x1b[0m\r\n`);
+          const error = m.terminal_conn_error();
+          setConnectionError((current) => current ?? error);
+          term.write(`\r\n\x1b[31m[${error}]\x1b[0m\r\n`);
         }
       });
 
@@ -243,9 +258,23 @@ export function XtermView({
 
   return (
     <div
-      ref={containerRef}
-      className="h-full w-full bg-sidebar"
+      className="relative h-full w-full bg-sidebar"
       onClick={() => termRef.current?.focus()}
-    />
+    >
+      <div ref={containerRef} className="h-full w-full" />
+      {!connected && (
+        <div
+          role={connectionError ? "alert" : "status"}
+          aria-live="polite"
+          className={`absolute inset-x-2 top-2 z-10 rounded-md border px-3 py-2 text-xs shadow-sm ${
+            connectionError
+              ? "border-destructive/40 bg-destructive/10 text-destructive"
+              : "border-border bg-background/95 text-muted-foreground"
+          }`}
+        >
+          {connectionError ?? m.terminal_connecting()}
+        </div>
+      )}
+    </div>
   );
 }

@@ -1731,6 +1731,7 @@
   "stack_unknown_3": "Escreva testes para as funções mais críticas",
   "terminal_close": "Fechar terminal",
   "terminal_conn_error": "erro de conexão",
+  "terminal_connecting": "Conectando ao terminal...",
   "terminal_ended": "encerrado",
   "terminal_new": "Novo terminal",
   "terminal_no_sandbox_warning": "Shell sem sandbox: tem o mesmo poder de um terminal local na pasta confiada.",
