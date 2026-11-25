@@ -202,3 +202,152 @@ async def test_loop_envia_a_imagem_do_historico_ao_chat_client(
     assert [block.image_url for block in image_blocks] == [
         "data:image/png;base64," + base64.b64encode(PNG).decode()
     ]
+
+
+async def test_anexos_sobrevivem_tool_call_e_recarga_do_historico(
+    store: SessionStore, assets: AssetStore
+) -> None:
+    """Imagens e arquivo textual continuam no contexto após uma tool call."""
+    from pydantic import create_model
+
+    from backend.engine.conversation_loop import LoopConfig, run_conversation
+    from backend.tools.context import ToolContext
+    from backend.tools.registry import ToolExtras, ToolRegistry, ToolSpec
+    from backend.vtypes.message import ToolCallChunk, VMessageChunk
+
+    thread_id = "thread-attachments-tool"
+    await store.create_session(thread_id, user_id="alice", workspace_id="ws-1")
+    image_a = PNG + b"image-a"
+    image_b = PNG + b"image-b"
+    text_file = "const answer = 42;\nconsole.log(answer);\n"
+    message = await _build_user_vmessage(
+        "Compare as duas capturas com este código.",
+        [
+            Attachment(
+                kind=AttachmentKind.IMAGE,
+                name="primeira.png",
+                mime_type="image/png",
+                base64_data=base64.b64encode(image_a).decode(),
+            ),
+            Attachment(
+                kind=AttachmentKind.IMAGE,
+                name="segunda.png",
+                mime_type="image/png",
+                base64_data=base64.b64encode(image_b).decode(),
+            ),
+            Attachment(
+                kind=AttachmentKind.CODE,
+                name="exemplo.js",
+                mime_type="text/plain",
+                base64_data=base64.b64encode(text_file.encode()).decode(),
+            ),
+        ],
+        thread_id,
+        user_id="alice",
+        workspace_id="ws-1",
+    )
+    await store.append_message(thread_id, message)
+
+    tool_calls: list[str] = []
+
+    async def inspect_project() -> str:
+        tool_calls.append("called")
+        return "inspeção concluída"
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolSpec(
+            name="inspect_project",
+            description="Inspeciona o projeto.",
+            args_model=create_model("AttachmentRegressionArgs"),
+            handler=inspect_project,
+            extras=ToolExtras(destructive=False),
+            needs_ctx=False,
+        )
+    )
+
+    received: list[list[VMessage]] = []
+
+    class _Client:
+        async def astream(
+            self, messages, *, tools=None, temperature=None, max_tokens=None
+        ):
+            received.append(list(messages))
+            if len(received) == 1:
+                yield VMessageChunk(
+                    tool_call_chunks=[
+                        ToolCallChunk(
+                            index=0,
+                            id="call-inspect",
+                            name="inspect_project",
+                            args_fragment="{}",
+                        )
+                    ],
+                    finish_reason="tool_calls",
+                )
+            else:
+                yield VMessageChunk(delta_text="Comparei as imagens e o código.")
+
+        async def agenerate(
+            self, messages, *, tools=None, temperature=None, max_tokens=None
+        ):
+            raise NotImplementedError
+
+    await run_conversation(
+        session_store=store,
+        chat_client=_Client(),
+        tool_registry=registry,
+        ctx=ToolContext(user_id="alice", workspace_id="ws-1", thread_id=thread_id),
+        thread_id=thread_id,
+        config=LoopConfig(),
+    )
+
+    assert tool_calls == ["called"]
+    assert len(received) == 2
+    second_request = received[1]
+    images = [
+        block.image_url
+        for sent in second_request
+        for block in sent.content
+        if block.kind == "image_url"
+    ]
+    assert images == [
+        "data:image/png;base64," + base64.b64encode(image_a).decode(),
+        "data:image/png;base64," + base64.b64encode(image_b).decode(),
+    ]
+    text_blocks = [
+        block.text or ""
+        for sent in second_request
+        for block in sent.content
+        if block.kind in {"text", "media"}
+    ]
+    assert any("Compare as duas capturas" in text for text in text_blocks)
+    assert any(text_file in text for text in text_blocks)
+    assert any(
+        sent.role is MessageRole.TOOL and "inspeção concluída" in sent.text()
+        for sent in second_request
+    )
+
+    reloaded = await store.get_history(thread_id)
+    persisted_user = next(item for item in reloaded if item.role is MessageRole.USER)
+    persisted_images = [
+        block for block in persisted_user.content if block.kind == "image_url"
+    ]
+    assert len(persisted_images) == 2
+    assert all(block.asset_id and block.image_url is None for block in persisted_images)
+    assert any(
+        block.kind == "media" and text_file in (block.text or "")
+        for block in persisted_user.content
+    )
+    assert any(item.role is MessageRole.TOOL for item in reloaded)
+
+    after_reload = hydrate_media_blocks(
+        reloaded,
+        user_id="alice",
+        workspace_id="ws-1",
+        thread_id=thread_id,
+    )
+    reloaded_user = next(item for item in after_reload if item.role is MessageRole.USER)
+    assert [
+        block.image_url for block in reloaded_user.content if block.kind == "image_url"
+    ] == images
