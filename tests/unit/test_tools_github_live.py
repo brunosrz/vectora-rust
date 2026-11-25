@@ -7,9 +7,7 @@ integração salva no Vectora e o CLI real do workspace.
 
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
 
 import pytest
 
@@ -17,6 +15,7 @@ from backend.tools.context import ToolContext
 from backend.tools.gh import gh_pr_view
 from backend.tools.github import github_fetch_pr_diff
 from backend.tools.web import fetch_url
+from tests.live_github import live_pull_request_target
 
 pytestmark = [pytest.mark.live, pytest.mark.asyncio]
 
@@ -27,19 +26,6 @@ def _live_token() -> str:
         os.environ.get("VECTORA_LIVE_GITHUB_TOKEN", "").strip()
         or os.environ.get("GITHUB_TOKEN", "").strip()
     )
-
-
-def _live_pull_request_number() -> int:
-    """Use the event PR under Actions and a stable PR for manual runs."""
-    event_path = os.environ.get("GITHUB_EVENT_PATH", "").strip()
-    if event_path:
-        event = json.loads(Path(event_path).read_text(encoding="utf-8"))
-        pull_request = event.get("pull_request")
-        if isinstance(pull_request, dict):
-            number = pull_request.get("number")
-            if isinstance(number, int) and number > 0:
-                return number
-    return 75
 
 
 async def test_github_rest_pr_publico_sem_login_real(
@@ -57,15 +43,16 @@ async def test_github_rest_pr_publico_sem_login_real(
 
 
 async def test_github_rest_pr_com_token_real(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A API REST autentica a leitura do repositório principal."""
+    """A API REST autentica a leitura de um PR pequeno no repositório atual."""
     token = _live_token()
     if not token:
         pytest.skip("defina VECTORA_LIVE_GITHUB_TOKEN para o teste autenticado")
     monkeypatch.setenv("GITHUB_TOKEN", token)
+    owner, repo, pr_number = live_pull_request_target()
     result = await github_fetch_pr_diff(
-        owner="vectora-company",
-        repo="vectora",
-        pr_number=319,
+        owner=owner,
+        repo=repo,
+        pr_number=pr_number,
     )
     assert '"status": "ok"' in result
     assert "diff --git" in result
@@ -119,7 +106,7 @@ async def test_github_fetch_url_com_token_real(
 
 async def test_github_cli_pr_view_real_com_sessao_do_terminal() -> None:
     """O caminho `gh` usa a sessão real já autenticada do terminal."""
-    pr_number = _live_pull_request_number()
+    _, _, pr_number = live_pull_request_target()
     result = await gh_pr_view(
         # The terminal/Actions session is the credential source for this
         # contract.  No Vectora user override is supplied, so the tool may

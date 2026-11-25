@@ -18,6 +18,7 @@ import pytest
 from backend.nodes import tools as _native_tool_catalog
 from backend.tools.context import ToolContext
 from backend.tools.registry import TOOL_REGISTRY
+from tests.live_github import live_pull_request_target
 
 pytestmark = [pytest.mark.live, pytest.mark.asyncio]
 
@@ -46,7 +47,7 @@ async def test_agent_dispatches_public_github_without_token(
 
 
 async def test_agent_dispatches_authenticated_github_with_token() -> None:
-    """A mesma rota usa o token configurado para um futuro repo privado.
+    """A mesma rota usa o token do Actions no PR do repositório atual.
 
     O job autenticado do workflow fornece ``GITHUB_TOKEN``. Falhar quando a
     variável não existe é intencional: este caso não pode virar um ``skip``
@@ -55,8 +56,9 @@ async def test_agent_dispatches_authenticated_github_with_token() -> None:
     token = os.getenv("VECTORA_LIVE_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
     if not token:
         pytest.fail("teste autenticado exige VECTORA_LIVE_GITHUB_TOKEN ou GITHUB_TOKEN")
+    owner, repo, pr_number = live_pull_request_target()
     result = await _spec("github_fetch_pr_diff").ainvoke(
-        {"owner": "vectora-company", "repo": "vectora", "pr_number": 319},
+        {"owner": owner, "repo": repo, "pr_number": pr_number},
         ToolContext(
             user_id="live-authenticated",
             _extra={"allow_global_credentials": True},
