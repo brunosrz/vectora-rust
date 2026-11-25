@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const state = {
   workspaces: [
@@ -39,6 +40,11 @@ vi.mock("@/lib/hooks/use-network-status", () => ({
   useNetworkStatus: () => ({ offline: false }),
 }));
 
+vi.mock("@/lib/api/sandbox", () => ({
+  getSandboxPolicy: vi.fn(async () => ({ env_pass: [] })),
+  putSandboxPolicy: vi.fn(),
+}));
+
 vi.mock("@/lib/paraglide/messages", () => ({
   m: new Proxy(
     {},
@@ -60,6 +66,17 @@ vi.mock("../workspace-trust-dialog", () => ({
 
 import { WorkspaceSelector } from "../workspace-selector";
 
+function renderSelector() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <WorkspaceSelector />
+    </QueryClientProvider>,
+  );
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -67,7 +84,7 @@ afterEach(() => {
 
 describe("WorkspaceSelector", () => {
   it("exibe workspaces e safe-roots já carregados pela raiz", () => {
-    render(<WorkspaceSelector />);
+    renderSelector();
     fireEvent.click(screen.getAllByRole("button")[0]);
 
     expect(screen.getAllByText("Vectora").length).toBeGreaterThanOrEqual(2);
@@ -75,7 +92,7 @@ describe("WorkspaceSelector", () => {
   });
 
   it("abre o diálogo já posicionado na safe-root escolhida", () => {
-    render(<WorkspaceSelector />);
+    renderSelector();
     fireEvent.click(screen.getAllByRole("button")[0]);
     fireEvent.click(screen.getByText("Projetos"));
 
@@ -83,7 +100,7 @@ describe("WorkspaceSelector", () => {
   });
 
   it("permite abrir a edição do projeto local", () => {
-    render(<WorkspaceSelector />);
+    renderSelector();
     fireEvent.click(screen.getAllByRole("button")[0]);
     fireEvent.click(
       screen.getByRole("button", { name: "workspace_edit_title: Vectora" }),
