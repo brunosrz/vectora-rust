@@ -29,10 +29,8 @@ export interface VectoraDesktopBridge {
   readonly appVersion: string;
   /** Abre uma URL no navegador padrão (Stripe portal, dashboard, docs). */
   openExternal: (url: string) => Promise<void>;
-  /** Abre o seletor nativo de pasta. `null` = usuário cancelou. */
-  pickDirectory: () => Promise<string | null>;
-  /** Seleciona backup pelo diálogo nativo e retorna apenas o preview. */
-  backupPickAndInspect: () => Promise<{
+  /** Valida um arquivo de backup escolhido pelo gerenciador do Vectora. */
+  backupInspect: (archivePath: string) => Promise<{
     version: number;
     app_version: string;
     size_bytes: number;
@@ -183,9 +181,8 @@ const bridge: VectoraDesktopBridge = {
   platform: process.platform,
   appVersion: process.env.VECTORA_APP_VERSION ?? "0.0.0",
   openExternal: (url) => ipcRenderer.invoke("vectora:open-external", url),
-  pickDirectory: () => ipcRenderer.invoke("vectora:pick-directory"),
-  backupPickAndInspect: () =>
-    ipcRenderer.invoke("vectora:backup-pick-and-inspect"),
+  backupInspect: (archivePath) =>
+    ipcRenderer.invoke("vectora:backup-inspect", archivePath),
   backupRestore: (categories) =>
     ipcRenderer.invoke("vectora:backup-restore", categories),
   captureScreenshot: () => ipcRenderer.invoke("vectora:capture-screenshot"),

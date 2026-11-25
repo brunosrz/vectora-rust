@@ -118,8 +118,6 @@ interface ChatInputProps {
   onRemoveFile: (fileId: string) => void;
   onFileButtonClick: (e: React.MouseEvent) => void;
   onCaptureScreenshot?: () => void;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 
   // Voice input
@@ -371,8 +369,6 @@ export function ChatInput({
   onRemoveFile,
   onFileButtonClick,
   onCaptureScreenshot,
-  fileInputRef,
-  onFileSelect,
   textareaRef,
   isVoiceListening,
   isVoiceSupported,
@@ -689,15 +685,6 @@ export function ChatInput({
                   </div>
                 )}
                 <div className="flex items-center gap-2 px-2 py-1.5">
-                  {/* Hidden File Input */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    onChange={onFileSelect}
-                    className="hidden"
-                  />
-
                   <Textarea
                     ref={textareaRef}
                     data-testid="chat-input"

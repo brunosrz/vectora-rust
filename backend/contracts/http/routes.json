@@ -2227,6 +2227,13 @@
   },
   {
     "methods": [
+      "GET"
+    ],
+    "name": "browse_file_workspaces_browse_file_get",
+    "path": "/workspaces/browse/file"
+  },
+  {
+    "methods": [
       "POST"
     ],
     "name": "mkdir_view_workspaces_browse_mkdir_post",

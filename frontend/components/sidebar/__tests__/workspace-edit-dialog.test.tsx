@@ -98,6 +98,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 
@@ -111,6 +112,31 @@ describe("WorkspaceEditDialog environment settings", () => {
     expect(screen.getByText("workspace_edit_manual_folders")).toBeVisible();
     expect(screen.getByText("workspace_edit_manual_environment")).toBeVisible();
     expect(screen.getByText("workspace_edit_manual_save")).toBeVisible();
+  });
+
+  it("uses the reusable Vectora file manager to choose workspace folders", async () => {
+    const pickDirectory = vi.fn();
+    vi.stubGlobal("vectora", { pickDirectory });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ path: "/ws-1", parent: null, entries: [] }),
+            { headers: { "Content-Type": "application/json" } },
+          ),
+      ),
+    );
+    renderDialog(workspace("ws-1"));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "workspace_edit_choose_folder" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "file_manager_title_folder" }),
+    ).toBeVisible();
+    expect(pickDirectory).not.toHaveBeenCalled();
   });
 
   it("saves the environment allowlist while preserving the rest of the policy", async () => {

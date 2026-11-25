@@ -740,6 +740,7 @@ async def _resolve_and_authorize_dir(
 async def browse_dir(
     request: Request,
     path: Annotated[str, Query()] = "",
+    include_files: Annotated[bool, Query()] = False,
 ) -> BrowseResponse:
     """Lista subdiretórios de um caminho, respeitando safe-roots.
 
@@ -787,9 +788,9 @@ async def browse_dir(
                 is_dir = item.is_dir()
             except OSError:
                 continue
-            if not is_dir:
+            if not is_dir and not include_files:
                 continue
-            entries.append(DirEntry(name=item.name, path=str(item), is_dir=True))
+            entries.append(DirEntry(name=item.name, path=str(item), is_dir=is_dir))
     except PermissionError:
         pass
 
@@ -1201,12 +1202,72 @@ async def list_workspaces_rest(request: Request) -> ListWorkspacesResponse:
 async def browse_view(
     request: Request,
     path: Annotated[str, Query()] = "",
+    include_files: Annotated[bool, Query()] = False,
 ) -> BrowseResponse:
     """Atalho REST-friendly para ``BrowseDir`` — consumido pelo trust
     dialog. Mantemos o handler Connect-style para clients que falam o
     naming antigo e este alias serve a SPA do chat sem cruzar
     namespaces."""
-    return await browse_dir(request=request, path=path)
+    return await browse_dir(request=request, path=path, include_files=include_files)
+
+
+@view_router.get("/browse/file")
+async def browse_file(request: Request, path: Annotated[str, Query()]) -> Response:
+    """Return a file selected through the Vectora file manager.
+
+    File access follows the same safe-root policy as directory browsing. The
+    endpoint deliberately caps reads because its response is consumed by the
+    renderer for chat attachments and SSH key import.
+    """
+    from fastapi import HTTPException
+
+    from backend.rbac.safe_roots import (
+        SafeRootPersistenceError,
+        get_safe_root_registry,
+    )
+
+    try:
+        file_path = Path(path).expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail="O caminho não é um arquivo.")
+
+    try:
+        parent, _ = await _resolve_and_authorize_dir(
+            str(file_path.parent),
+            _is_privileged(request),
+            get_safe_root_registry(),
+            strict=True,
+        )
+    except SafeRootPersistenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if file_path.parent != parent:
+        raise HTTPException(status_code=403, detail="Arquivo fora das pastas seguras.")
+
+    max_bytes = 50 * 1024 * 1024
+    try:
+        size = file_path.stat().st_size
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
+    if size > max_bytes:
+        raise HTTPException(
+            status_code=413, detail="O arquivo excede o limite de 50 MiB."
+        )
+    try:
+        content = await asyncio.to_thread(file_path.read_bytes)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=403, detail="Não foi possível ler o arquivo."
+        ) from exc
+    import mimetypes
+
+    return Response(
+        content=content,
+        media_type=mimetypes.guess_type(file_path.name)[0]
+        or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{file_path.name}"'},
+    )
 
 
 @view_router.post("/browse/mkdir", response_model=BrowseResponse)

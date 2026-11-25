@@ -115,8 +115,6 @@ function renderStructuredPaste() {
         onPaste={vi.fn()}
         onRemoveFile={vi.fn()}
         onFileButtonClick={vi.fn()}
-        fileInputRef={{ current: null }}
-        onFileSelect={vi.fn()}
         structuredPaste={structuredPaste}
         onStructuredPasteAttach={async () => {
           callbacks.attach();

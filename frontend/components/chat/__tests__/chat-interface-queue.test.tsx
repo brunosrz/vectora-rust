@@ -27,7 +27,6 @@ const h = vi.hoisted(() => ({
   files: [] as unknown[],
   fileApi: {
     removeFile: vi.fn(),
-    handleFileSelect: vi.fn(),
     handlePaste: vi.fn(),
     handleDrop: vi.fn(),
     handleDragOver: vi.fn(),

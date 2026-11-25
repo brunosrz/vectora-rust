@@ -2,7 +2,7 @@
  * File Upload Hook
  *
  * Custom hook for managing file uploads (images, code files, logs, etc.)
- * - Handles drag & drop, paste, and file selection
+ * - Handles drag & drop, paste, and files returned by the Vectora file manager
  * - Validates file types and sizes
  * - Converts files to base64 for API transmission
  * - Manages upload errors and loading states
@@ -22,9 +22,6 @@ export interface UseFileUploadReturn {
   attachedFiles: ImageAttachment[];
   uploadError: string | null;
   isDragging: boolean;
-  handleFileSelect: (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => Promise<void>;
   handlePaste: (event: React.ClipboardEvent) => Promise<void>;
   handleDrop: (event: React.DragEvent) => Promise<void>;
   handleDragOver: (event: React.DragEvent) => void;
@@ -52,17 +49,16 @@ const isImageFile = (file: File): boolean =>
 // ============================================================================
 
 /**
- * Hook to manage file uploads with drag & drop, paste, and file selection support.
+ * Hook to manage file uploads with drag & drop, paste, and managed file selection.
  *
  * @returns File upload state and handlers
  *
  * @example
  * ```tsx
- * const { attachedFiles, handleFileSelect, handlePaste, handleDrop, removeFile } = useFileUpload()
+ * const { attachedFiles, processFiles, handlePaste, handleDrop, removeFile } = useFileUpload()
  *
  * return (
  *   <div onDrop={handleDrop} onPaste={handlePaste}>
- *     <input type="file" onChange={handleFileSelect} />
  *     {attachedFiles.map(file => (
  *       <FilePreview key={file.id} file={file} onRemove={removeFile} />
  *     ))}
@@ -96,22 +92,6 @@ export function useFileUpload(
       }
     },
     [disableImageUploads],
-  );
-
-  /**
-   * Handle file selection from input element.
-   */
-  const handleFileSelect = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const files = event.target.files;
-      if (!files || files.length === 0) return;
-
-      await processFiles(Array.from(files));
-
-      // Reset file input
-      event.target.value = "";
-    },
-    [processFiles],
   );
 
   /**
@@ -213,7 +193,6 @@ export function useFileUpload(
     attachedFiles,
     uploadError,
     isDragging,
-    handleFileSelect,
     handlePaste,
     handleDrop,
     handleDragOver,

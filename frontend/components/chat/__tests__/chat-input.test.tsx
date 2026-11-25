@@ -100,8 +100,6 @@ function baseProps(over: Partial<Props> = {}): Props {
     onPaste: vi.fn(),
     onRemoveFile: vi.fn(),
     onFileButtonClick: vi.fn(),
-    fileInputRef: { current: null },
-    onFileSelect: vi.fn(),
     ...over,
   } as Props;
 }
