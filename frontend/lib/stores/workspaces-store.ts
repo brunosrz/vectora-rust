@@ -153,6 +153,11 @@ interface WorkspacesState {
     path: string,
     opts?: { trust?: boolean; git_init?: boolean },
   ) => Promise<ActionResult<WorkspaceInfo>>;
+  updateProject: (
+    id: string,
+    name: string,
+    path: string,
+  ) => Promise<ActionResult<WorkspaceInfo>>;
   trust: (id: string) => Promise<ActionResult<WorkspaceInfo>>;
   gitInit: (id: string) => Promise<ActionResult<WorkspaceInfo>>;
   browse: (path?: string) => Promise<BrowseResult | null>;
@@ -456,6 +461,34 @@ export const useWorkspacesStore = create<WorkspacesState>()(
           return { ok: false, error: message };
         } finally {
           setPending(set, "create", false);
+        }
+      },
+
+      updateProject: async (id, name, path) => {
+        try {
+          const res = await fetch(`/workspaces/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, path }),
+          });
+          if (!res.ok) throw new Error(await readErrorMessage(res));
+          const payload = await res.json();
+          if (payload?.status !== "ok" || !payload.workspace) {
+            throw new Error(
+              typeof payload?.message === "string"
+                ? payload.message
+                : m.workspaces_error_unexpected_response(),
+            );
+          }
+          const updated = payload.workspace as WorkspaceInfo;
+          set((s) => ({
+            workspaces: s.workspaces.map((workspace) =>
+              workspace.id === id ? updated : workspace,
+            ),
+          }));
+          return { ok: true, data: updated };
+        } catch (err) {
+          return { ok: false, error: toErrorMessage(err) };
         }
       },
 

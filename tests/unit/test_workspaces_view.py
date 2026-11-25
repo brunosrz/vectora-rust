@@ -130,6 +130,34 @@ class TestWorkspaceTree:
         resp = await workspace_tree(workspace_id="nope", path="")
         assert resp.entries == []
 
+    @pytest.mark.asyncio
+    async def test_reports_missing_workspace_root_instead_of_empty_tree(
+        self, tmp_path, monkeypatch
+    ):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.workspaces import workspace_tree
+        from backend.workspace import workspace as ws_mod
+
+        ws = Workspace(
+            id="stale-ws",
+            name="projeto",
+            cwd=str(tmp_path / "removed-mount"),
+            created_at="2024-01-01T00:00:00+00:00",
+            trusted=True,
+        )
+        monkeypatch.setattr(
+            ws_mod.workspace_registry,
+            "get",
+            lambda wid: ws if wid == "stale-ws" else None,
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await workspace_tree(workspace_id="stale-ws", path="")
+
+        assert exc_info.value.status_code == 410
+        assert "Edite o projeto" in exc_info.value.detail
+
 
 # ---------------------------------------------------------------------------
 # /workspaces/{id}/file

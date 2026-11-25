@@ -2290,6 +2290,13 @@
   },
   {
     "methods": [
+      "PATCH"
+    ],
+    "name": "update_local_workspace_rest_workspaces__workspace_id__patch",
+    "path": "/workspaces/{workspace_id}"
+  },
+  {
+    "methods": [
       "GET"
     ],
     "name": "browser_detect_workspaces__workspace_id__browser_detect_get",

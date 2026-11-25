@@ -106,6 +106,11 @@ class CreateWorkspaceRequest(BaseModel):
     git_init: bool = False
 
 
+class UpdateLocalWorkspaceRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    path: str = Field(min_length=1)
+
+
 class MkdirRequest(BaseModel):
     path: str
     name: str
@@ -1164,6 +1169,53 @@ async def create_workspace_rest(
     return await create_workspace(request, body)
 
 
+@view_router.patch("/{workspace_id}", response_model=StatusResponse)
+async def update_local_workspace_rest(
+    request: Request, workspace_id: str, body: UpdateLocalWorkspaceRequest
+) -> StatusResponse:
+    """Edita nome e pasta principal de um projeto local."""
+    from backend.workspace.workspace import workspace_registry
+
+    ws = require_workspace_access(workspace_id, request)
+    if ws is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    if ws.transport != "local":
+        raise HTTPException(
+            status_code=400,
+            detail="A edição da pasta principal está disponível para workspaces locais.",
+        )
+    path = Path(body.path).expanduser()
+    if not path.exists() or not path.is_dir():
+        raise HTTPException(
+            status_code=422,
+            detail="A pasta escolhida não existe ou não está disponível.",
+        )
+    resolved = str(path.resolve())
+    duplicate = next(
+        (
+            other
+            for other in workspace_registry.list_all()
+            if other.id != workspace_id
+            and other.transport == "local"
+            and str(Path(other.cwd).resolve()) == resolved
+        ),
+        None,
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Essa pasta já é a pasta principal de outro projeto.",
+        )
+    updated = workspace_registry.update_local_project(
+        workspace_id, name=body.name, cwd=resolved
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    return StatusResponse(
+        status="ok", message="Projeto atualizado.", workspace=_to_info(updated)
+    )
+
+
 @view_router.post("/set-active", response_model=StatusResponse)
 async def set_active_workspace_rest(
     request: Request, body: SetActiveRequest
@@ -2046,12 +2098,22 @@ async def workspace_tree(
             ) from exc
 
     resolved = _resolve_inside(workspace_id, path)
-    if resolved is None or not resolved.exists() or not resolved.is_dir():
+    if resolved is None:
         return TreeResponse(path=path, entries=[])
 
     from backend.workspace.workspace import workspace_registry
 
     ws = workspace_registry.get(workspace_id)
+    if not resolved.exists() or not resolved.is_dir():
+        if ws is not None and not Path(ws.cwd).is_dir():
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "A pasta principal deste workspace não está disponível. "
+                    "Edite o projeto e escolha a pasta atual."
+                ),
+            )
+        raise HTTPException(status_code=404, detail="Pasta não encontrada.")
     base = Path(ws.cwd) if ws else resolved
 
     entries: list[TreeEntry] = []

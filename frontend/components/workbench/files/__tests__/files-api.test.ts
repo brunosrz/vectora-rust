@@ -45,12 +45,18 @@ describe("fetchTree", () => {
     expect(result).toEqual([{ name: "a" }]);
   });
 
-  it("resposta sem campo entries retorna array vazio; status não-ok retorna null", async () => {
+  it("resposta sem campo entries retorna array vazio", async () => {
     fetchMock.mockResolvedValue(jsonResponse({}));
     expect(await fetchTree("ws1", "")).toEqual([]);
+  });
 
-    fetchMock.mockResolvedValue(jsonResponse({}, 500));
-    expect(await fetchTree("ws1", "")).toBeNull();
+  it("expõe o motivo do backend quando a raiz do workspace não pode ser listada", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ detail: "A pasta principal não está disponível." }, 410),
+    );
+    await expect(fetchTree("ws1", "")).rejects.toThrow(
+      "A pasta principal não está disponível.",
+    );
   });
 });
 

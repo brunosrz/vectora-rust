@@ -43,7 +43,14 @@ export async function fetchTree(
   const res = await fetch(
     `/workspaces/${encodeURIComponent(workspaceId)}/tree?${qs}`,
   );
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof payload.detail === "string"
+        ? payload.detail
+        : `Não foi possível listar os arquivos (${res.status}).`,
+    );
+  }
   const data = await res.json();
   return data.entries ?? [];
 }

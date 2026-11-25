@@ -95,6 +95,27 @@ def test_get_or_create_returns_existing(registry):
     assert ws1.id == ws2.id
 
 
+def test_update_local_project_changes_primary_folder_and_revokes_trust(
+    registry, tmp_path: Path
+):
+    reg, _ = registry
+    original = tmp_path / "original"
+    replacement = tmp_path / "replacement"
+    original.mkdir()
+    replacement.mkdir()
+    ws = reg.create(str(original), trust=True)
+    ws.hooks_approved = True
+
+    updated = reg.update_local_project(ws.id, name="Meu projeto", cwd=str(replacement))
+
+    assert updated is ws
+    assert updated.name == "Meu projeto"
+    assert updated.cwd == str(replacement.resolve())
+    assert updated.trusted is False
+    assert updated.hooks_approved is False
+    assert reg.get_or_create(str(replacement)).id == ws.id
+
+
 def test_get_or_create_persists(registry, tmp_path: Path):
     """Workspace persiste em workspaces.json."""
     reg, json_file = registry

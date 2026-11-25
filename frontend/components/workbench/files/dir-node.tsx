@@ -75,6 +75,7 @@ export function DirNode({
   const [renamingDir, setRenamingDir] = useState(false);
   const [renameDirValue, setRenameDirValue] = useState(name);
   const [dragOver, setDragOver] = useState(false);
+  const [treeError, setTreeError] = useState<string | null>(null);
 
   const handleDragOver = useCallback((e: DragEvent) => {
     if (!e.dataTransfer.types.includes(FS_DRAG_MIME)) return;
@@ -117,8 +118,17 @@ export function DirNode({
   const setFilesEntries = useWorkbenchStore((s) => s.setFilesEntries);
 
   const revalidate = useCallback(async () => {
-    const data = await fetchTree(workspaceId, path);
-    if (data) setFilesEntries(workspaceId, path, data);
+    try {
+      const data = await fetchTree(workspaceId, path);
+      if (data) {
+        setFilesEntries(workspaceId, path, data);
+        setTreeError(null);
+      }
+    } catch (error) {
+      setTreeError(
+        error instanceof Error ? error.message : "Falha ao listar arquivos.",
+      );
+    }
   }, [workspaceId, path, setFilesEntries]);
 
   // rename/move: chamado por FileItem / DirNode filho ao confirmar rename.
@@ -272,6 +282,20 @@ export function DirNode({
 
       {expanded && (
         <div>
+          {depth === 0 && treeError && (
+            <div
+              role="alert"
+              className="mx-2 my-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs"
+            >
+              <p>{treeError}</p>
+              <button
+                className="mt-2 underline"
+                onClick={() => void revalidate()}
+              >
+                {m.workspace_reload()}
+              </button>
+            </div>
+          )}
           {!entries && depth === 0 ? (
             showRootSkeleton && <FileTreeSkeleton />
           ) : !entries ? (
