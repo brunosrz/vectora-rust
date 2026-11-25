@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import stat as stat_module
 from datetime import UTC
 from pathlib import Path
 from typing import Annotated, TypedDict
@@ -54,17 +55,18 @@ class _IntegrityFields(TypedDict):
     retention_class: str
 
 
-def _artifacts_dir(session_id: str) -> Path:
-    """Pasta de artifacts da sessão. Sanitiza o session_id (sem traversal)."""
+def _artifact_dirs(session_id: str) -> tuple[Path, ...]:
+    """Diretórios atuais e legados, na ordem de precedência.
+
+    Sessões podem conter artifacts criados antes e depois da troca do perfil
+    local. Consultar só uma das raízes escondia os antigos assim que a nova
+    raiz recebia qualquer arquivo para a mesma sessão.
+    """
     safe = session_id.replace("/", "").replace("\\", "").replace("..", "")
     configured = settings.vectora_home / "artifacts" / safe
     legacy = Path.home() / ".vectora" / "artifacts" / safe
-    # Releases antigas gravavam direto em ~/.vectora mesmo quando o perfil
-    # ativo era ~/.vectora-dev. Continua lendo esses documentos enquanto novos
-    # artifacts passam a respeitar o diretório configurado.
-    if configured.exists() or not legacy.exists():
-        return configured
-    return legacy
+    # Deduplica quando o perfil ativo já é o diretório legado.
+    return tuple(dict.fromkeys((configured, legacy)))
 
 
 async def _require_session_owner(request: Request | None, session_id: str) -> None:
@@ -142,39 +144,63 @@ async def list_artifacts(
         return ListArtifactsResponse(artifacts=[])
     await _require_session_owner(request, session_id)
 
-    base = _artifacts_dir(session_id)
-    if not base.exists() or not base.is_dir():
+    bases = _artifact_dirs(session_id)
+    existing_bases: list[Path] = []
+    for base in bases:
+        try:
+            mode = base.stat().st_mode
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            logger.exception("Não foi possível acessar artifacts em %s", base)
+            raise HTTPException(
+                status_code=500,
+                detail="Não foi possível ler os artifacts desta conversa.",
+            ) from exc
+        if not stat_module.S_ISDIR(mode):
+            raise HTTPException(
+                status_code=500,
+                detail="O caminho de artifacts desta conversa não é uma pasta.",
+            )
+        existing_bases.append(base)
+    if not existing_bases:
         return ListArtifactsResponse(artifacts=[])
 
-    items: list[ArtifactMetadata] = []
-    try:
-        files = sorted(
-            (p for p in base.glob("*.md") if p.is_file()),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-    except OSError:
-        files = []
-
-    for path in files:
+    # A raiz configurada vem primeiro; o mesmo slug antigo nunca substitui o
+    # arquivo atual, mas slugs que só existem na raiz legada continuam visíveis.
+    markdown_by_slug: dict[str, ArtifactMetadata] = {}
+    media_by_name: dict[str, ArtifactMetadata] = {}
+    for base in existing_bases:
         try:
-            stat = path.stat()
-        except OSError:
-            continue
-        title = path.stem.replace("-", " ").strip() or path.stem
-        items.append(
-            ArtifactMetadata(
-                title=title,
-                path=str(path),
-                session_id=session_id,
-                created_at=_format_mtime(stat.st_mtime),
-                artifact_type=_read_artifact_type(path),
-                content_preview=_read_preview(path),
-                **_read_integrity(path),
+            files = sorted(
+                (p for p in base.glob("*.md") if p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
             )
-        )
+            for path in files:
+                if path.stem in markdown_by_slug:
+                    continue
+                stat = path.stat()
+                title = path.stem.replace("-", " ").strip() or path.stem
+                markdown_by_slug[path.stem] = ArtifactMetadata(
+                    title=title,
+                    path=str(path),
+                    session_id=session_id,
+                    created_at=_format_mtime(stat.st_mtime),
+                    artifact_type=_read_artifact_type(path),
+                    content_preview=_read_preview(path),
+                    **_read_integrity(path),
+                )
+            for artifact in await asyncio.to_thread(_media_artifacts, base, session_id):
+                media_by_name.setdefault(Path(artifact.path).name, artifact)
+        except OSError as exc:
+            logger.exception("Não foi possível ler artifacts em %s", base)
+            raise HTTPException(
+                status_code=500,
+                detail="Não foi possível ler os artifacts desta conversa.",
+            ) from exc
 
-    items.extend(await asyncio.to_thread(_media_artifacts, base, session_id))
+    items = [*markdown_by_slug.values(), *media_by_name.values()]
     items.sort(key=lambda a: a.created_at, reverse=True)
     return ListArtifactsResponse(artifacts=items)
 
@@ -229,9 +255,11 @@ async def get_artifact(
 ) -> ArtifactContent:
     """Devolve o markdown completo de um artifact."""
     await _require_session_owner(request, session_id)
-    base = _artifacts_dir(session_id)
     safe_slug = slug.replace("/", "").replace("\\", "").replace("..", "")
-    path = base / f"{safe_slug}.md"
+    candidates = [base / f"{safe_slug}.md" for base in _artifact_dirs(session_id)]
+    path = next(
+        (candidate for candidate in candidates if candidate.is_file()), candidates[0]
+    )
 
     if not path.exists() or not path.is_file():
         return ArtifactContent(
@@ -280,7 +308,12 @@ async def get_media_artifact(
     await _require_session_owner(request, session_id)
     safe_session = _safe_path_segment(session_id)
     safe_filename = _safe_path_segment(filename)
-    path = _artifacts_dir(safe_session) / "media" / safe_filename
+    candidates = [
+        base / "media" / safe_filename for base in _artifact_dirs(safe_session)
+    ]
+    path = next(
+        (candidate for candidate in candidates if candidate.is_file()), candidates[0]
+    )
 
     if not path.is_file():
         raise HTTPException(status_code=404, detail="mídia não encontrada")

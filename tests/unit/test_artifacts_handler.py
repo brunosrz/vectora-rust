@@ -53,6 +53,66 @@ def _write_artifact(home: Path, session_id: str, slug: str, content: str) -> Pat
 
 class TestListArtifacts:
     @pytest.mark.asyncio
+    async def test_storage_read_failure_is_not_reported_as_an_empty_plan(
+        self, fake_home, monkeypatch
+    ):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.artifacts import list_artifacts
+
+        configured = fake_home / "artifacts" / "unreadable-session"
+        original_stat = Path.stat
+
+        def fail_for_configured_root(path: Path, *args, **kwargs):
+            if path == configured:
+                raise PermissionError("storage unavailable")
+            return original_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", fail_for_configured_root)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_artifacts(session_id="unreadable-session")
+
+        assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_merges_configured_and_legacy_artifacts_for_same_session(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        from backend.api.handlers.artifacts import get_artifact, list_artifacts
+
+        legacy_home = tmp_path / "legacy-home"
+        monkeypatch.setattr(Path, "home", lambda: legacy_home)
+        current_path = _write_artifact(
+            fake_home, "mixed-session", "shared-plan", "# Current version"
+        )
+        _write_artifact(
+            legacy_home / ".vectora",
+            "mixed-session",
+            "shared-plan",
+            "# Legacy duplicate",
+        )
+        _write_artifact(
+            legacy_home / ".vectora",
+            "mixed-session",
+            "legacy-plan",
+            "# Legacy only",
+        )
+
+        response = await list_artifacts(session_id="mixed-session")
+        by_slug = {Path(item.path).stem: item for item in response.artifacts}
+
+        assert set(by_slug) == {"shared-plan", "legacy-plan"}
+        assert Path(by_slug["shared-plan"].path) == current_path
+        assert "Current version" in (by_slug["shared-plan"].content_preview or "")
+        assert "Legacy only" in (by_slug["legacy-plan"].content_preview or "")
+
+        legacy_content = await get_artifact(
+            slug="legacy-plan", session_id="mixed-session"
+        )
+        assert legacy_content.content == "# Legacy only"
+
+    @pytest.mark.asyncio
     async def test_reads_legacy_artifact_directory_when_profile_home_changed(
         self, fake_home, tmp_path, monkeypatch
     ):
@@ -329,7 +389,7 @@ class TestMediaNaListagem:
         (base / "media" / "gato.png").write_bytes(b"\x89PNG-fake")
         (base / "media" / "voz.mp3").write_bytes(b"ID3-fake")
 
-        monkeypatch.setattr(mod, "_artifacts_dir", lambda _s: base)
+        monkeypatch.setattr(mod, "_artifact_dirs", lambda _s: (base,))
 
         out = await mod.list_artifacts(session_id="sessao-1")
         tipos = {a.title: a.artifact_type for a in out.artifacts}
@@ -356,7 +416,7 @@ class TestMediaNaListagem:
         base = tmp_path / "sessao-2"
         base.mkdir(parents=True)
         (base / "spec.md").write_text("# Spec", encoding="utf-8")
-        monkeypatch.setattr(mod, "_artifacts_dir", lambda _s: base)
+        monkeypatch.setattr(mod, "_artifact_dirs", lambda _s: (base,))
 
         out = await mod.list_artifacts(session_id="sessao-2")
 
@@ -371,7 +431,7 @@ class TestMediaNaListagem:
         base = tmp_path / "sessao-3"
         (base / "media").mkdir(parents=True)
         (base / "guia.md").write_text("# Guia", encoding="utf-8")
-        monkeypatch.setattr(mod, "_artifacts_dir", lambda _s: base)
+        monkeypatch.setattr(mod, "_artifact_dirs", lambda _s: (base,))
 
         def _explode(_self):
             """Executa a operação  explode."""
