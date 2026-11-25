@@ -1094,6 +1094,19 @@ def _fake_request(user_id: str = "u1"):
 
 
 class TestLocalWorkspaceUpdate:
+    def test_resolves_project_directory_inside_safe_root(self, tmp_path):
+        from backend.api.handlers import workspaces as handlers
+
+        approved_root = tmp_path / "approved"
+        project = approved_root / "project"
+        project.mkdir(parents=True)
+
+        resolved = handlers._resolve_project_directory(
+            str(project), [approved_root.resolve()], privileged=False
+        )
+
+        assert resolved == project.resolve()
+
     @pytest.mark.asyncio
     async def test_rejects_project_path_outside_safe_roots(self, monkeypatch, tmp_path):
         from types import SimpleNamespace
@@ -1143,6 +1156,24 @@ class TestLocalWorkspaceUpdate:
                 handlers.UpdateLocalWorkspaceRequest(
                     name="Project", path=str(outside_path)
                 ),
+            )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.parametrize("relative_path", ["../outside", "../approved-sibling"])
+    def test_rejects_project_path_that_escapes_safe_root(self, tmp_path, relative_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+
+        approved_root = tmp_path / "approved"
+        requested = approved_root / relative_path
+        approved_root.mkdir()
+        requested.resolve().mkdir(parents=True, exist_ok=True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            handlers._resolve_project_directory(
+                str(requested), [approved_root.resolve()], privileged=False
             )
 
         assert exc_info.value.status_code == 403

@@ -122,24 +122,18 @@ def _resolve_project_directory(
     path is never probed on disk; then resolve the candidate under the
     authorized root and verify again to reject symlink escapes.
     """
-    expanded = os.path.expanduser(requested_path)
-    if not os.path.isabs(expanded):
+    requested = Path(requested_path).expanduser()
+    if not requested.is_absolute():
         raise HTTPException(
             status_code=422, detail="Escolha um caminho absoluto para o projeto."
         )
-    normalized = os.path.normpath(expanded)
-    target_key = os.path.normcase(os.path.abspath(normalized))
     selected_root: Path | None = None
-    relative_path: str | None = None
     for root in approved_roots:
-        root_key = os.path.normcase(os.path.abspath(os.fspath(root)))
         try:
-            if os.path.commonpath((target_key, root_key)) != root_key:
-                continue
+            relative_path = requested.relative_to(root)
         except ValueError:
             continue
         selected_root = root
-        relative_path = os.path.relpath(normalized, os.fspath(root))
         break
 
     if selected_root is None and not privileged:
@@ -147,17 +141,23 @@ def _resolve_project_directory(
             status_code=403,
             detail="Caminho fora das pastas seguras configuradas.",
         )
-    base = selected_root or Path(os.path.abspath(os.path.sep))
-    relative_path = relative_path or os.path.relpath(normalized, os.fspath(base))
-    candidate = base / relative_path
+    base = selected_root or Path(requested.anchor)
+    candidate = requested if selected_root is None else base / relative_path
     try:
         resolved = candidate.resolve(strict=True)
+        resolved_root = base.resolve(strict=True)
     except (OSError, RuntimeError):
         raise HTTPException(
             status_code=422,
             detail="A pasta escolhida não existe ou não está disponível.",
         ) from None
-    if selected_root is not None and not resolved.is_relative_to(selected_root):
+    resolved_text = str(resolved)
+    root_text = str(resolved_root)
+    if os.name == "nt":
+        resolved_text = resolved_text.casefold()
+        root_text = root_text.casefold()
+    root_prefix = f"{root_text.rstrip(os.sep)}{os.sep}"
+    if resolved_text != root_text and not resolved_text.startswith(root_prefix):
         raise HTTPException(
             status_code=403,
             detail="O caminho escolhido aponta para fora das pastas seguras.",
@@ -2195,9 +2195,13 @@ async def workspace_tree(
     ws = workspace_registry.get(workspace_id)
     base = Path(ws.cwd) if ws else resolved
     if ws is not None and ws.transport == "local":
-        try:
-            resolved.relative_to(base.resolve())
-        except (OSError, ValueError):
+        resolved_text = str(resolved.resolve())
+        root_text = str(base.resolve())
+        if os.name == "nt":
+            resolved_text = resolved_text.casefold()
+            root_text = root_text.casefold()
+        root_prefix = f"{root_text.rstrip(os.sep)}{os.sep}"
+        if resolved_text != root_text and not resolved_text.startswith(root_prefix):
             return TreeResponse(path=path, entries=[])
     if not resolved.exists() or not resolved.is_dir():
         if ws is not None and not Path(ws.cwd).is_dir():

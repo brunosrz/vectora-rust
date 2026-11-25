@@ -254,9 +254,11 @@ class WorkspaceRegistry:
         ws = self._workspaces.get(workspace_id)
         if ws is None or ws.transport != "local":
             return None
-        resolved = str(Path(cwd).expanduser().resolve())
+        if not Path(cwd).is_absolute():
+            raise ValueError("A pasta principal precisa ser um caminho absoluto.")
+        resolved = cwd
         ws.name = name.strip() or Path(resolved).name or "workspace"
-        if str(Path(ws.cwd).resolve()) != resolved:
+        if ws.cwd != resolved:
             ws.cwd = resolved
             ws.trusted = False
             ws.trusted_at = None
