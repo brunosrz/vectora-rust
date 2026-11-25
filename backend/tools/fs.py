@@ -311,14 +311,29 @@ def _workspace_root(ctx: ToolContext) -> tuple[Path, Any]:
     return Path(ws.cwd), ws
 
 
+def _root_for_path(ws: Any, requested: str) -> tuple[Path, str]:
+    """Select a secondary project root using its explicit virtual prefix."""
+    match = re.match(r"^@root-([0-9a-f]{8})(?:/(.*))?$", requested)
+    if match:
+        from backend.workspace.workspace import WorkspaceRegistry
+
+        root_id, relative = match.groups()
+        for source_root in getattr(ws, "source_roots", []):
+            if WorkspaceRegistry.derive_id(source_root) == root_id:
+                return Path(source_root), relative or ""
+        return Path(ws.cwd), "../__invalid_workspace_root__"
+    return Path(ws.cwd), requested
+
+
 def _confine(path: str, ctx: ToolContext) -> tuple[Path | None, str]:
     """Resolve ``path`` dentro do workspace ativo.
 
     Retorna (resolved_path, "") em sucesso ou (None, error_message) se o path
     escapar do workspace.
     """
-    root, _ws = _workspace_root(ctx)
-    resolved = resolve_within_workspace(path, root)
+    _root, ws = _workspace_root(ctx)
+    root, relative = _root_for_path(ws, path)
+    resolved = resolve_within_workspace(relative, root)
     if resolved is None:
         return None, (
             f"Error: Path '{path}' fora do workspace '{root}'. "
@@ -587,6 +602,7 @@ async def file_edit(
     if resolved is None:
         logger.warning("file_edit blocked by scope check", extra={"path": file_path})
         return err
+    root, _ = _root_for_path(ws, file_path)
 
     policy = resolve_policy(root)
     workspace_id = str(getattr(ws, "id", root))
@@ -704,6 +720,7 @@ async def file_write(file_path: str, content: str, ctx: ToolContext) -> str:
     if resolved is None:
         logger.warning("file_write blocked by scope check", extra={"path": file_path})
         return err
+    root, _ = _root_for_path(ws, file_path)
 
     policy = resolve_policy(root)
 
@@ -755,8 +772,8 @@ async def file_create_dir(path: str, ctx: ToolContext) -> str:
     resolved, err = _confine(path, ctx)
     if resolved is None:
         return err
+    root, _ = _root_for_path(_active_workspace(ctx), path)
     try:
-        root, _ = _workspace_root(ctx)
         await asyncio.to_thread(_assert_no_symlink_components, resolved, root)
         await asyncio.to_thread(_mkdir_confined, resolved, root)
         return f"[OK] Diretório criado: {path}"
@@ -782,11 +799,11 @@ async def file_delete(path: str, ctx: ToolContext, permanent: bool = False) -> s
     resolved, err = _confine(path, ctx)
     if resolved is None:
         return err
+    root, _ = _root_for_path(_active_workspace(ctx), path)
     if not resolved.exists():
         return f"Error: caminho não encontrado: {path}"
     try:
         if permanent:
-            root, _ = _workspace_root(ctx)
             await asyncio.to_thread(_delete_confined, resolved, root)
         else:
             import send2trash
@@ -818,12 +835,17 @@ async def file_move(from_path: str, to_path: str, ctx: ToolContext) -> str:
         return source_err
     if target is None:
         return target_err
+    ws = _active_workspace(ctx)
+    source_root, _ = _root_for_path(ws, from_path)
+    target_root, _ = _root_for_path(ws, to_path)
+    if source_root != target_root:
+        return "Error: movimentação entre pastas de origem diferentes não é suportada."
     if not source.exists():
         return f"Error: origem não encontrada: {from_path}"
     if target.exists():
         return f"Error: destino já existe: {to_path}"
     try:
-        root, _ = _workspace_root(ctx)
+        root = source_root
         await asyncio.to_thread(_assert_no_symlink_components, source, root)
         await asyncio.to_thread(_assert_no_symlink_components, target, root)
         await asyncio.to_thread(_mkdir_confined, target.parent, root)
@@ -904,7 +926,6 @@ async def grep(pattern: str, ctx: ToolContext, path: str = ".") -> str:
     resolved, err = _confine(path, ctx)
     if resolved is None:
         return err
-
     try:
         results = await asyncio.to_thread(_grep_sync, pattern, resolved)
         logger.info(
@@ -956,7 +977,8 @@ async def list_dir(
         recursive: Se True, lista recursivamente
 
     Returns:
-        Lista de arquivos e pastas com prefixo [DIR] ou [FILE]
+        Lista de arquivos e pastas com prefixo [DIR] ou [FILE]. Pastas de
+        origem adicionais aparecem com o caminho virtual `@root-<id>`.
     """
     _root, ws = _workspace_root(ctx)
     if getattr(ws, "transport", "local") != "local":
@@ -991,6 +1013,13 @@ async def list_dir(
             return f"Error: '{path}' is not a directory"
 
         items = await asyncio.to_thread(_list_dir_sync, dir_path, recursive)
+        if path in {".", ""}:
+            from backend.workspace.workspace import WorkspaceRegistry
+
+            items.extend(
+                f"[DIR] @root-{WorkspaceRegistry.derive_id(source_root)} ({Path(source_root).name})"
+                for source_root in getattr(ws, "source_roots", [])
+            )
 
         logger.info(
             "list_dir completed",

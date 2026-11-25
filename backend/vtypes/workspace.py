@@ -12,6 +12,10 @@ class Workspace(BaseModel):
     id: str = Field(description="ID do workspace (sha256[:8] do cwd).")
     name: str = Field(description="Nome do workspace/projeto.")
     cwd: str = Field(description="Diretório de trabalho correspondente.")
+    source_roots: list[str] = Field(
+        default_factory=list,
+        description="Pastas locais secundárias associadas ao projeto.",
+    )
     created_at: str = Field(description="Timestamp ISO 8601 de criação.")
     bucket_names: list[str] = Field(
         default_factory=list, description="Buckets ativos associados."

@@ -15,6 +15,7 @@ const state = {
       git_current_branch: null,
       git_default_branch: null,
       transport: "local",
+      source_roots: ["C:/Shared"],
     },
   ],
   active_id: "ws-1",
@@ -90,5 +91,6 @@ describe("WorkspaceSelector", () => {
 
     expect(screen.getByText("workspace_edit_description")).toBeInTheDocument();
     expect(screen.getByDisplayValue("C:/Vectora")).toBeInTheDocument();
+    expect(screen.getByText("C:/Shared")).toBeInTheDocument();
   });
 });
