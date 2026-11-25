@@ -121,6 +121,24 @@ class TestWorkspaceTree:
         assert resp.entries == []
 
     @pytest.mark.asyncio
+    async def test_returns_empty_for_symlink_outside_workspace(self, trusted_ws):
+        from backend.api.handlers.workspaces import workspace_tree
+
+        wsid, root = trusted_ws
+        outside = root.parent / "outside-workspace"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("secret", encoding="utf-8")
+        link = root / "escape"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink is unavailable: {exc}")
+
+        resp = await workspace_tree(workspace_id=wsid, path="escape")
+
+        assert resp.entries == []
+
+    @pytest.mark.asyncio
     async def test_returns_empty_for_unknown_workspace(self, trusted_ws):
         from backend.api.handlers.workspaces import workspace_tree
 
@@ -1125,6 +1143,28 @@ class TestLocalWorkspaceUpdate:
                 handlers.UpdateLocalWorkspaceRequest(
                     name="Project", path=str(outside_path)
                 ),
+            )
+
+        assert exc_info.value.status_code == 403
+
+    def test_rejects_project_symlink_outside_safe_roots(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+
+        approved_root = tmp_path / "approved"
+        outside = tmp_path / "outside"
+        approved_root.mkdir()
+        outside.mkdir()
+        link = approved_root / "escape"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink is unavailable: {exc}")
+
+        with pytest.raises(HTTPException) as exc_info:
+            handlers._resolve_project_directory(
+                str(link), [approved_root.resolve()], privileged=False
             )
 
         assert exc_info.value.status_code == 403

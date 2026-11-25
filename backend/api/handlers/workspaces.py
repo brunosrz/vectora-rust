@@ -22,6 +22,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import os
 import re
 from collections.abc import AsyncGenerator, Callable, Mapping
 from pathlib import Path
@@ -109,6 +110,64 @@ class CreateWorkspaceRequest(BaseModel):
 class UpdateLocalWorkspaceRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     path: str = Field(min_length=1)
+
+
+def _resolve_project_directory(
+    requested_path: str, approved_roots: list[Path], *, privileged: bool
+) -> Path:
+    """Resolve a selected project path only after lexical root authorization.
+
+    The UI sends absolute paths, but a member may select only below an
+    approved safe root. Normalize and compare strings first so a rejected
+    path is never probed on disk; then resolve the candidate under the
+    authorized root and verify again to reject symlink escapes.
+    """
+    expanded = os.path.expanduser(requested_path)
+    if not os.path.isabs(expanded):
+        raise HTTPException(
+            status_code=422, detail="Escolha um caminho absoluto para o projeto."
+        )
+    normalized = os.path.normpath(expanded)
+    target_key = os.path.normcase(os.path.abspath(normalized))
+    selected_root: Path | None = None
+    relative_path: str | None = None
+    for root in approved_roots:
+        root_key = os.path.normcase(os.path.abspath(os.fspath(root)))
+        try:
+            if os.path.commonpath((target_key, root_key)) != root_key:
+                continue
+        except ValueError:
+            continue
+        selected_root = root
+        relative_path = os.path.relpath(normalized, os.fspath(root))
+        break
+
+    if selected_root is None and not privileged:
+        raise HTTPException(
+            status_code=403,
+            detail="Caminho fora das pastas seguras configuradas.",
+        )
+    base = selected_root or Path(os.path.abspath(os.path.sep))
+    relative_path = relative_path or os.path.relpath(normalized, os.fspath(base))
+    candidate = base / relative_path
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError):
+        raise HTTPException(
+            status_code=422,
+            detail="A pasta escolhida não existe ou não está disponível.",
+        ) from None
+    if selected_root is not None and not resolved.is_relative_to(selected_root):
+        raise HTTPException(
+            status_code=403,
+            detail="O caminho escolhido aponta para fora das pastas seguras.",
+        )
+    if not resolved.is_dir():
+        raise HTTPException(
+            status_code=422,
+            detail="A pasta escolhida não existe ou não está disponível.",
+        )
+    return resolved
 
 
 class MkdirRequest(BaseModel):
@@ -1190,28 +1249,16 @@ async def update_local_workspace_rest(
             status_code=400,
             detail="A edição da pasta principal está disponível para workspaces locais.",
         )
-    try:
-        resolved_path = Path(body.path).expanduser().resolve(strict=True)
-    except (OSError, RuntimeError):
-        resolved_path = None
-    if resolved_path is None or not resolved_path.is_dir():
-        raise HTTPException(
-            status_code=422,
-            detail="A pasta escolhida não existe ou não está disponível.",
-        )
     safe_roots = get_safe_root_registry()
     privileged = _is_privileged(request)
     try:
         active_roots = await asyncio.to_thread(safe_roots.all_roots)
-        is_allowed = any(
-            resolved_path.is_relative_to(Path(root.path).resolve())
-            for root in active_roots
+        approved_roots = [
+            Path(root.path).expanduser().resolve() for root in active_roots
+        ]
+        resolved_path = _resolve_project_directory(
+            body.path, approved_roots, privileged=privileged
         )
-        if not privileged and not is_allowed:
-            raise HTTPException(
-                status_code=403,
-                detail="Caminho fora das pastas seguras configuradas.",
-            )
     except SafeRootPersistenceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     resolved = str(resolved_path)
@@ -2146,6 +2193,12 @@ async def workspace_tree(
     from backend.workspace.workspace import workspace_registry
 
     ws = workspace_registry.get(workspace_id)
+    base = Path(ws.cwd) if ws else resolved
+    if ws is not None and ws.transport == "local":
+        try:
+            resolved.relative_to(base.resolve())
+        except (OSError, ValueError):
+            return TreeResponse(path=path, entries=[])
     if not resolved.exists() or not resolved.is_dir():
         if ws is not None and not Path(ws.cwd).is_dir():
             raise HTTPException(
@@ -2156,8 +2209,6 @@ async def workspace_tree(
                 ),
             )
         raise HTTPException(status_code=404, detail="Pasta não encontrada.")
-    base = Path(ws.cwd) if ws else resolved
-
     entries: list[TreeEntry] = []
     try:
         for item in sorted(
