@@ -102,6 +102,17 @@ afterEach(() => {
 });
 
 describe("WorkspaceEditDialog environment settings", () => {
+  it("shows a contextual manual for configuring the project", () => {
+    renderDialog(workspace("ws-1"));
+
+    fireEvent.click(screen.getByText("workspace_edit_manual_title"));
+
+    expect(screen.getByText("workspace_edit_manual_open")).toBeVisible();
+    expect(screen.getByText("workspace_edit_manual_folders")).toBeVisible();
+    expect(screen.getByText("workspace_edit_manual_environment")).toBeVisible();
+    expect(screen.getByText("workspace_edit_manual_save")).toBeVisible();
+  });
+
   it("saves the environment allowlist while preserving the rest of the policy", async () => {
     renderDialog(workspace("ws-1"));
 

@@ -231,6 +231,18 @@ export function WorkspaceEditDialog({
             {m.workspace_edit_description()}
           </DialogDescription>
         </DialogHeader>
+        <details className="rounded-md border px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium">
+            {m.workspace_edit_manual_title()}
+          </summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+            <li>{m.workspace_edit_manual_open()}</li>
+            <li>{m.workspace_edit_manual_name()}</li>
+            <li>{m.workspace_edit_manual_folders()}</li>
+            <li>{m.workspace_edit_manual_environment()}</li>
+            <li>{m.workspace_edit_manual_save()}</li>
+          </ol>
+        </details>
         <label className="grid gap-1.5 text-sm">
           {m.workspace_edit_name()}
           <Input
