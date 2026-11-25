@@ -1688,6 +1688,7 @@
   "sidebar_untitled_chat": "Conversa sem título",
   "sidebar_workspace_collapse": "Recolher pasta",
   "sidebar_workspace_expand": "Expandir pasta",
+  "sidebar_workspace_new_session": "Nova sessão neste workspace",
   "sidebar_workspace_thread_count": "{n} sessões",
   "skills_confirm_remove": "Remover esta skill?",
   "skills_empty": "Nenhuma skill instalada.",

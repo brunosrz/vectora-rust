@@ -24,6 +24,7 @@ interface ThreadListProps {
   onRenameThread: (threadId: string, title: string) => void;
   onTogglePinThread: (threadId: string, pinned: boolean) => void;
   onToggleWorkspace: (workspaceId: string) => void;
+  onNewWorkspaceSession: (workspaceId: string) => void;
   onRefresh?: () => Promise<unknown>;
   paging?: ThreadsPaging;
 }
@@ -43,6 +44,7 @@ export const ThreadList = memo(function ThreadList({
   onRenameThread,
   onTogglePinThread,
   onToggleWorkspace,
+  onNewWorkspaceSession,
   onRefresh,
   paging,
 }: ThreadListProps) {
@@ -131,6 +133,7 @@ export const ThreadList = memo(function ThreadList({
                 onDelete={onDeleteThread}
                 onRename={onRenameThread}
                 onTogglePin={onTogglePinThread}
+                onNewSession={onNewWorkspaceSession}
               />
             ))}
 

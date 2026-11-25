@@ -3,7 +3,7 @@
 Reusa ``ArtifactMetadata`` (``src/types/documents.py``) e o layout em
 disco produzido por ``create_artifact`` (``src/tools/fs.py``):
 
-    ~/.vectora/artifacts/<session_id>/<slug>.md
+    <settings.vectora_home>/artifacts/<session_id>/<slug>.md
 """
 
 from __future__ import annotations
@@ -57,7 +57,14 @@ class _IntegrityFields(TypedDict):
 def _artifacts_dir(session_id: str) -> Path:
     """Pasta de artifacts da sessão. Sanitiza o session_id (sem traversal)."""
     safe = session_id.replace("/", "").replace("\\", "").replace("..", "")
-    return settings.vectora_home / "artifacts" / safe
+    configured = settings.vectora_home / "artifacts" / safe
+    legacy = Path.home() / ".vectora" / "artifacts" / safe
+    # Releases antigas gravavam direto em ~/.vectora mesmo quando o perfil
+    # ativo era ~/.vectora-dev. Continua lendo esses documentos enquanto novos
+    # artifacts passam a respeitar o diretório configurado.
+    if configured.exists() or not legacy.exists():
+        return configured
+    return legacy
 
 
 async def _require_session_owner(request: Request | None, session_id: str) -> None:

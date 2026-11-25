@@ -2,7 +2,7 @@
 
 import { memo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ChevronDown, ChevronRight, Folder, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, Pencil, Plus } from "lucide-react";
 import type { Thread } from "@/lib/hooks/threads";
 import type { WorkspaceInfo } from "@/lib/stores/workspaces-store";
 import { m } from "@/lib/paraglide/messages";
@@ -23,6 +23,7 @@ interface WorkspaceGroupProps {
   onDelete: (threadId: string, e: React.MouseEvent) => void;
   onRename: (threadId: string, title: string) => void;
   onTogglePin: (threadId: string, pinned: boolean) => void;
+  onNewSession: (workspaceId: string) => void;
 }
 
 export const WorkspaceGroup = memo(function WorkspaceGroup({
@@ -36,6 +37,7 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
   onDelete,
   onRename,
   onTogglePin,
+  onNewSession,
 }: WorkspaceGroupProps) {
   const reducedMotion = useReducedMotion();
   const expanded = isSearching || !isCollapsed;
@@ -88,15 +90,26 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
           </span>
         </button>
         {workspace.transport === "local" && (
-          <button
-            type="button"
-            className="rounded p-1.5 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover:opacity-100"
-            title={m.workspace_edit_title()}
-            aria-label={`${m.workspace_edit_title()}: ${workspace.name}`}
-            onClick={editProject}
-          >
-            <Pencil className="size-3.5" />
-          </button>
+          <>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+              title={m.sidebar_workspace_new_session()}
+              aria-label={`${m.sidebar_workspace_new_session()}: ${workspace.name}`}
+              onClick={() => onNewSession(workspace.id)}
+            >
+              <Plus className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+              title={m.workspace_edit_title()}
+              aria-label={`${m.workspace_edit_title()}: ${workspace.name}`}
+              onClick={editProject}
+            >
+              <Pencil className="size-3.5" />
+            </button>
+          </>
         )}
       </div>
       <AnimatePresence initial={false}>

@@ -53,6 +53,26 @@ def _write_artifact(home: Path, session_id: str, slug: str, content: str) -> Pat
 
 class TestListArtifacts:
     @pytest.mark.asyncio
+    async def test_reads_legacy_artifact_directory_when_profile_home_changed(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        from backend.api.handlers.artifacts import list_artifacts
+
+        legacy_home = tmp_path / "legacy-home"
+        monkeypatch.setattr(Path, "home", lambda: legacy_home)
+        legacy_path = _write_artifact(
+            legacy_home / ".vectora", "legacy-session", "saved-plan", "# Existing plan"
+        )
+
+        response = await list_artifacts(session_id="legacy-session")
+
+        assert [Path(item.path).name for item in response.artifacts] == [
+            "saved-plan.md"
+        ]
+        assert response.artifacts[0].content_preview == "# Existing plan"
+        assert legacy_path.is_file()
+
+    @pytest.mark.asyncio
     async def test_empty_for_unknown_session(self, fake_home):
         """Verifica o comportamento de empty for unknown session."""
         from backend.api.handlers.artifacts import list_artifacts

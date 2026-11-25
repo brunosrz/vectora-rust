@@ -574,18 +574,33 @@ function SessionPage() {
     [goTo, threads, setChatMode],
   );
 
-  const handleNewChat = useCallback(() => {
-    // Chat: cria sessão direto (sem workspace/folders). Dev: dialog de workspace.
-    // Reset do fundo: fecha janelas de arquivo da sessão anterior para a nova
-    // conversa não herdar o conteúdo visual da atual.
-    useWindowsStore.getState().closeAll();
-    if (chatMode) {
-      void navigate({ to: "/session/$threadId", params: { threadId: "new" } });
-      setIsMobileSidebarOpen(false);
-      return;
-    }
-    setShowNewChatDialog(true);
-  }, [chatMode, navigate]);
+  const handleNewChat = useCallback(
+    (workspaceId?: string) => {
+      // Chat: cria sessão direto (sem workspace/folders). Dev: dialog de workspace.
+      // Reset do fundo: fecha janelas de arquivo da sessão anterior para a nova
+      // conversa não herdar o conteúdo visual da atual.
+      useWindowsStore.getState().closeAll();
+      if (chatMode) {
+        void navigate({
+          to: "/session/$threadId",
+          params: { threadId: "new" },
+        });
+        setIsMobileSidebarOpen(false);
+        return;
+      }
+      if (workspaceId) {
+        signalWorkspaceChoiceForNewSession(workspaceId);
+        void navigate({
+          to: "/session/$threadId",
+          params: { threadId: "new" },
+        });
+        setIsMobileSidebarOpen(false);
+        return;
+      }
+      setShowNewChatDialog(true);
+    },
+    [chatMode, navigate],
+  );
 
   const handleConfirmNewChat = useCallback(
     (workspaceId: string | null) => {

@@ -1688,6 +1688,7 @@
   "sidebar_untitled_chat": "Chat sin título",
   "sidebar_workspace_collapse": "Contraer carpeta",
   "sidebar_workspace_expand": "Expandir carpeta",
+  "sidebar_workspace_new_session": "Nueva sesión en este espacio de trabajo",
   "sidebar_workspace_thread_count": "{n} sesiones",
   "skills_confirm_remove": "¿Quitar esta skill?",
   "skills_empty": "Sin skills instaladas.",
