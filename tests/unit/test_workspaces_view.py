@@ -1075,6 +1075,61 @@ def _fake_request(user_id: str = "u1"):
     return req
 
 
+class TestLocalWorkspaceUpdate:
+    @pytest.mark.asyncio
+    async def test_rejects_project_path_outside_safe_roots(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+        from backend.rbac import safe_roots as safe_roots_module
+        from backend.vtypes import Workspace
+        from backend.workspace import workspace as workspace_module
+
+        allowed_root = tmp_path / "allowed"
+        current_path = allowed_root / "current"
+        outside_path = tmp_path / "outside"
+        current_path.mkdir(parents=True)
+        outside_path.mkdir()
+        workspace = Workspace(
+            id="project",
+            name="Project",
+            cwd=str(current_path),
+            created_at="2026-01-01T00:00:00Z",
+            trusted=True,
+            owner_id="u1",
+        )
+        monkeypatch.setattr(
+            workspace_module.workspace_registry,
+            "get",
+            lambda workspace_id: workspace if workspace_id == workspace.id else None,
+        )
+        monkeypatch.setattr(
+            workspace_module.workspace_registry, "list_all", lambda: [workspace]
+        )
+        monkeypatch.setattr(
+            safe_roots_module,
+            "get_safe_root_registry",
+            lambda: SimpleNamespace(
+                all_roots=lambda: [SimpleNamespace(path=str(allowed_root))]
+            ),
+        )
+        request = _fake_request()
+        request.state.user.role = "member"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await handlers.update_local_workspace_rest(
+                request,
+                workspace.id,
+                handlers.UpdateLocalWorkspaceRequest(
+                    name="Project", path=str(outside_path)
+                ),
+            )
+
+        assert exc_info.value.status_code == 403
+
+
 class TestMemorySearchUnified:
     """GET /workspaces/{id}/memory/search — busca combinada em fatos +
     skills + buckets RAG, consumida pela busca da Memory Tab."""

@@ -1174,6 +1174,12 @@ async def update_local_workspace_rest(
     request: Request, workspace_id: str, body: UpdateLocalWorkspaceRequest
 ) -> StatusResponse:
     """Edita nome e pasta principal de um projeto local."""
+    import asyncio
+
+    from backend.rbac.safe_roots import (
+        SafeRootPersistenceError,
+        get_safe_root_registry,
+    )
     from backend.workspace.workspace import workspace_registry
 
     ws = require_workspace_access(workspace_id, request)
@@ -1184,13 +1190,31 @@ async def update_local_workspace_rest(
             status_code=400,
             detail="A edição da pasta principal está disponível para workspaces locais.",
         )
-    path = Path(body.path).expanduser()
-    if not path.exists() or not path.is_dir():
+    try:
+        resolved_path = Path(body.path).expanduser().resolve(strict=True)
+    except (OSError, RuntimeError):
+        resolved_path = None
+    if resolved_path is None or not resolved_path.is_dir():
         raise HTTPException(
             status_code=422,
             detail="A pasta escolhida não existe ou não está disponível.",
         )
-    resolved = str(path.resolve())
+    safe_roots = get_safe_root_registry()
+    privileged = _is_privileged(request)
+    try:
+        active_roots = await asyncio.to_thread(safe_roots.all_roots)
+        is_allowed = any(
+            resolved_path.is_relative_to(Path(root.path).resolve())
+            for root in active_roots
+        )
+        if not privileged and not is_allowed:
+            raise HTTPException(
+                status_code=403,
+                detail="Caminho fora das pastas seguras configuradas.",
+            )
+    except SafeRootPersistenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    resolved = str(resolved_path)
     duplicate = next(
         (
             other
@@ -1206,6 +1230,16 @@ async def update_local_workspace_rest(
             status_code=409,
             detail="Essa pasta já é a pasta principal de outro projeto.",
         )
+    if privileged:
+        try:
+            await asyncio.to_thread(
+                safe_roots.add,
+                str(resolved_path),
+                resolved_path.name,
+                str(_user_id(request)),
+            )
+        except SafeRootPersistenceError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
     updated = workspace_registry.update_local_project(
         workspace_id, name=body.name, cwd=resolved
     )
@@ -2071,6 +2105,14 @@ async def workspace_tree(
     `path` é relativo ao workspace. Sem path → raiz. Diretórios típicos de
     build/cache são ocultados para enxugar a árvore.
     """
+    normalized_path = path.replace("\\", "/")
+    if (
+        "\x00" in normalized_path
+        or normalized_path.startswith("/")
+        or re.match(r"^[A-Za-z]:", normalized_path)
+        or ".." in normalized_path.split("/")
+    ):
+        return TreeResponse(path=path, entries=[])
     remote = await _remote_fs_context(workspace_id, path)
     if remote is not None:
         ws, transport, remote_path = remote
