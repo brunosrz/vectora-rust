@@ -147,9 +147,12 @@ def _resolve_project_directory(
             status_code=403,
             detail="Caminho fora das pastas seguras configuradas.",
         )
-    base = selected_root or requested.anchor
-    resolved_text = os.path.realpath(expanded)
+    base = selected_root or Path(requested.anchor)
+    relative_path = requested.relative_to(PurePath(base))
     root_text = os.path.realpath(base)
+    resolved_text = os.path.realpath(
+        os.path.join(root_text, os.fspath(relative_path))  # noqa: PTH118
+    )
     resolved_key = os.path.normcase(resolved_text)
     root_key = os.path.normcase(root_text)
     root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
@@ -2156,19 +2159,19 @@ async def workspace_tree(
         or re.match(r"^[A-Za-z]:", normalized_path)
         or ".." in normalized_path.split("/")
     ):
-        return TreeResponse(path=path, entries=[])
-    remote = await _remote_fs_context(workspace_id, path)
+        return TreeResponse(path=normalized_path, entries=[])
+    remote = await _remote_fs_context(workspace_id, normalized_path)
     if remote is not None:
         ws, transport, remote_path = remote
         try:
             info = await _remote_fs_stat(transport, ws, remote_path)
             if not info.get("is_dir"):
-                return TreeResponse(path=path, entries=[])
+                return TreeResponse(path=normalized_path, entries=[])
             remote_entries = await transport.list_dir(remote_path)
             entries = [
                 TreeEntry(
                     name=item.name,
-                    path=f"{path.rstrip('/')}/{item.name}".lstrip("/"),
+                    path=f"{normalized_path.rstrip('/')}/{item.name}".lstrip("/"),
                     kind="dir" if item.is_dir else "file",
                     size=item.size,
                 )
@@ -2176,16 +2179,16 @@ async def workspace_tree(
                 if not (item.is_dir and item.name in _IGNORED_DIR_NAMES)
             ]
             entries.sort(key=lambda item: (item.kind != "dir", item.name.lower()))
-            return TreeResponse(path=path, entries=entries)
+            return TreeResponse(path=normalized_path, entries=entries)
         except Exception as exc:
             logger.warning("remote workspace_tree failed", exc_info=True)
             raise HTTPException(
                 status_code=503, detail="Workspace remoto indisponível."
             ) from exc
 
-    resolved = _resolve_inside(workspace_id, path)
+    resolved = _resolve_inside(workspace_id, normalized_path)
     if resolved is None:
-        return TreeResponse(path=path, entries=[])
+        return TreeResponse(path=normalized_path, entries=[])
 
     from backend.workspace.workspace import workspace_registry
 
@@ -2198,7 +2201,7 @@ async def workspace_tree(
         root_key = os.path.normcase(root_text)
         root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
         if resolved_key != root_key and not resolved_key.startswith(root_prefix):
-            return TreeResponse(path=path, entries=[])
+            return TreeResponse(path=normalized_path, entries=[])
         resolved = Path(resolved_text)
     if not resolved.exists() or not resolved.is_dir():
         if ws is not None and not Path(ws.cwd).is_dir():

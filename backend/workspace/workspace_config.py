@@ -267,7 +267,16 @@ def load_workspace_config(cwd: str | Path) -> WorkspaceConfig | None:
     Retorna ``None`` se o arquivo não existir ou não puder ser interpretado
     (loga um aviso e degrada — config de workspace nunca derruba a sessão).
     """
-    path = Path(cwd) / WORKSPACE_CONFIG_FILENAME
+    root_text = os.path.realpath(os.fspath(cwd))
+    path_text = os.path.realpath(
+        os.path.join(root_text, WORKSPACE_CONFIG_FILENAME)  # noqa: PTH118
+    )
+    root_key = os.path.normcase(root_text)
+    path_key = os.path.normcase(path_text)
+    root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
+    if not path_key.startswith(root_prefix):
+        return None
+    path = Path(path_text)
     if not path.is_file():
         return None
     try:

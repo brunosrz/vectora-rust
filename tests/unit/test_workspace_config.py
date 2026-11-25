@@ -69,6 +69,20 @@ def test_load_workspace_config_returns_none_when_missing(tmp_path):
     assert load_workspace_config(tmp_path) is None
 
 
+def test_load_workspace_config_rejects_symlink_outside_workspace(tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.toml"
+    outside.write_text('[workspace]\nname = "outside"\n', encoding="utf-8")
+    config_path = tmp_path / "vectora.toml"
+    try:
+        config_path.symlink_to(outside)
+    except OSError as exc:
+        import pytest
+
+        pytest.skip(f"symlink is unavailable: {exc}")
+
+    assert load_workspace_config(tmp_path) is None
+
+
 def test_load_workspace_config_parses_and_resolves_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MEUPROJETO_POSTGRES_DSN", "postgresql://x/y")
     (tmp_path / "vectora.toml").write_text(
