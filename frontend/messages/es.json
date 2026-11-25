@@ -1641,6 +1641,7 @@
   "sidebar_clear_search": "Limpiar búsqueda",
   "sidebar_collapse": "Contraer",
   "sidebar_ctx_delete": "Eliminar",
+  "sidebar_ctx_edit_workspace": "Editar workspace",
   "sidebar_ctx_pin": "Fijar",
   "sidebar_ctx_rename": "Renombrar",
   "sidebar_ctx_resume": "Abrir en este dispositivo",
