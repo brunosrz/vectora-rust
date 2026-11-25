@@ -273,9 +273,12 @@ async def get_artifact(
     try:
         content = path.read_text(encoding="utf-8", errors="replace")
         created = _format_mtime(path.stat().st_mtime)
-    except OSError:
-        content = ""
-        created = ""
+    except OSError as exc:
+        logger.exception("Não foi possível abrir o artifact %s", path)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível abrir este artifact. Tente novamente.",
+        ) from exc
 
     return ArtifactContent(
         title=safe_slug.replace("-", " ").strip() or safe_slug,

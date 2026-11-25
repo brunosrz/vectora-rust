@@ -311,6 +311,33 @@ class TestListArtifacts:
 
 class TestGetArtifact:
     @pytest.mark.asyncio
+    async def test_read_failure_is_not_returned_as_empty_content(
+        self, fake_home, monkeypatch
+    ):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.artifacts import get_artifact
+
+        path = _write_artifact(fake_home, "unreadable", "plan", "# Existing plan")
+        original_read_text = Path.read_text
+
+        def fail_for_artifact(file_path: Path, *args, **kwargs):
+            if file_path == path:
+                raise PermissionError("storage unavailable")
+            return original_read_text(file_path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_for_artifact)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_artifact("plan", session_id="unreadable")
+
+        assert exc_info.value.status_code == 500
+        assert (
+            exc_info.value.detail
+            == "Não foi possível abrir este artifact. Tente novamente."
+        )
+
+    @pytest.mark.asyncio
     async def test_returns_content(self, fake_home):
         """Verifica o comportamento de returns content."""
         from backend.api.handlers.artifacts import get_artifact
