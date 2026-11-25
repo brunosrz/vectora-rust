@@ -4841,19 +4841,29 @@ async def nine_router_model_modalities(model_id: str) -> set[str] | None:
                 )
                 response.raise_for_status()
                 data = response.json()
-            _nine_router_catalog_cache["models"] = [
-                NineRouterModelInfo(
-                    id=item["id"],
-                    name=item.get("name", item["id"]),
-                    input_modalities=list(
-                        item.get("architecture", {}).get("input_modalities")
-                        or item.get("input_modalities")
-                        or []
-                    ),
+            catalog: list[tuple[str, set[str] | None]] = []
+            for item in data.get("data", []):
+                if not isinstance(item, dict) or not item.get("id"):
+                    continue
+                architecture = item.get("architecture")
+                modalities = (
+                    architecture.get("input_modalities")
+                    if isinstance(architecture, dict)
+                    else None
                 )
-                for item in data.get("data", [])
-                if item.get("id")
-            ]
+                if modalities is None:
+                    modalities = item.get("input_modalities")
+                # Catálogos OpenAI-compatible nem sempre publicam as
+                # modalidades. Lista ausente/vazia significa desconhecido;
+                # só uma lista explícita (por exemplo, ["text"]) permite
+                # afirmar que o modelo não aceita imagens.
+                known_modalities = (
+                    _normalize_modalities(modalities)
+                    if isinstance(modalities, list) and modalities
+                    else None
+                )
+                catalog.append((str(item["id"]), known_modalities))
+            _nine_router_catalog_cache["models"] = catalog
             _nine_router_catalog_cache["fetched_at"] = now
         except Exception:
             logger.debug(
@@ -4863,9 +4873,9 @@ async def nine_router_model_modalities(model_id: str) -> set[str] | None:
                 now - _OPENROUTER_CATALOG_TTL_S + _CATALOG_FAILURE_BACKOFF_S
             )
 
-    for model in _nine_router_catalog_cache["models"]:
-        if model.id == model_id:
-            return _normalize_modalities(model.input_modalities)
+    for catalog_model_id, modalities in _nine_router_catalog_cache["models"]:
+        if catalog_model_id == model_id:
+            return modalities
     return None
 
 

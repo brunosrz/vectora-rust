@@ -729,7 +729,11 @@ export function ChatInput({
                           data-testid="chat-send"
                           variant="ghost"
                           size="sm"
-                          disabled={!input.trim() || !userId || offline}
+                          disabled={
+                            (!input.trim() && attachedFiles.length === 0) ||
+                            !userId ||
+                            offline
+                          }
                           className="h-[38px] w-[38px] p-0 shrink-0 rounded-full bg-muted/40 text-primary hover:bg-muted disabled:opacity-40 disabled:bg-muted disabled:text-muted-foreground"
                           type="button"
                           aria-label={m.tooltip_chat_send()}

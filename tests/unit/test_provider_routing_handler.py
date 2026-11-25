@@ -2835,6 +2835,62 @@ class TestNineRouterDiscovery:
         assert mock_ctx.get.await_args.kwargs["params"] == {"kind": "chat"}
 
 
+@pytest.mark.asyncio
+async def test_nine_router_model_without_modalities_is_unknown(
+    clean_nine_router_config,
+):
+    """Catálogo sem metadados não deve bloquear imagem como se fosse texto-only."""
+    from backend.api.handlers import provider_routing as pr
+    from backend.settings import CapabilityState, settings
+
+    object.__setattr__(settings, "nine_router_base_url", "http://localhost:20128/v1")
+    object.__setattr__(settings, "nine_router_api_key", "test-key")
+    pr.invalidate_catalog_cache()
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {"data": [{"id": "vision/model"}]}
+    mock_context = AsyncMock()
+    mock_context.__aenter__ = AsyncMock(return_value=mock_context)
+    mock_context.__aexit__ = AsyncMock(return_value=False)
+    mock_context.get = AsyncMock(return_value=response)
+
+    try:
+        with patch("httpx.AsyncClient", return_value=mock_context):
+            state = await pr.nine_router_model_supports_image("vision/model")
+        assert state is CapabilityState.UNKNOWN
+    finally:
+        pr.invalidate_catalog_cache()
+
+
+@pytest.mark.asyncio
+async def test_nine_router_explicit_text_modality_is_unsupported(
+    clean_nine_router_config,
+):
+    """Uma declaração explícita de texto continua identificando modelo sem visão."""
+    from backend.api.handlers import provider_routing as pr
+    from backend.settings import CapabilityState, settings
+
+    object.__setattr__(settings, "nine_router_base_url", "http://localhost:20128/v1")
+    object.__setattr__(settings, "nine_router_api_key", "test-key")
+    pr.invalidate_catalog_cache()
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {
+        "data": [{"id": "text/model", "architecture": {"input_modalities": ["text"]}}]
+    }
+    mock_context = AsyncMock()
+    mock_context.__aenter__ = AsyncMock(return_value=mock_context)
+    mock_context.__aexit__ = AsyncMock(return_value=False)
+    mock_context.get = AsyncMock(return_value=response)
+
+    try:
+        with patch("httpx.AsyncClient", return_value=mock_context):
+            state = await pr.nine_router_model_supports_image("text/model")
+        assert state is CapabilityState.UNSUPPORTED
+    finally:
+        pr.invalidate_catalog_cache()
+
+
 class TestNineRouterRegisteredModels:
     def test_register_list_and_delete(self, client):
         """Verifica o comportamento de register list and delete."""
