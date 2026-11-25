@@ -1245,13 +1245,19 @@ async def browse_file(request: Request, path: Annotated[str, Query()]) -> Respon
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     try:
-        file_path = (parent / filename).resolve(strict=True)
+        parent_path = os.path.realpath(parent)
+        candidate_path = Path(parent_path) / filename
+        resolved_path = os.path.realpath(candidate_path)
     except OSError as exc:
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
+    safe_prefix = (
+        parent_path if parent_path.endswith(os.sep) else f"{parent_path}{os.sep}"
+    )
+    if not resolved_path.startswith(safe_prefix):
+        raise HTTPException(status_code=403, detail="Arquivo fora das pastas seguras.")
+    file_path = Path(resolved_path)
     if not file_path.is_file():
         raise HTTPException(status_code=400, detail="O caminho não é um arquivo.")
-    if file_path.parent != parent:
-        raise HTTPException(status_code=403, detail="Arquivo fora das pastas seguras.")
 
     max_bytes = 50 * 1024 * 1024
     try:
