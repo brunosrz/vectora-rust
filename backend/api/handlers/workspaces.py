@@ -25,7 +25,7 @@ import logging
 import os
 import re
 from collections.abc import AsyncGenerator, Callable, Mapping
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -122,15 +122,21 @@ def _resolve_project_directory(
     path is never probed on disk; then resolve the candidate under the
     authorized root and verify again to reject symlink escapes.
     """
-    requested = Path(requested_path).expanduser()
-    if not requested.is_absolute():
+    expanded = os.path.expanduser(requested_path)  # noqa: PTH111
+    if not os.path.isabs(expanded):  # noqa: PTH117
         raise HTTPException(
             status_code=422, detail="Escolha um caminho absoluto para o projeto."
+        )
+    requested = PurePath(expanded)
+    if ".." in requested.parts:
+        raise HTTPException(
+            status_code=403,
+            detail="O caminho escolhido não pode subir acima da pasta selecionada.",
         )
     selected_root: Path | None = None
     for root in approved_roots:
         try:
-            relative_path = requested.relative_to(root)
+            requested.relative_to(root)
         except ValueError:
             continue
         selected_root = root
@@ -141,27 +147,18 @@ def _resolve_project_directory(
             status_code=403,
             detail="Caminho fora das pastas seguras configuradas.",
         )
-    base = selected_root or Path(requested.anchor)
-    candidate = requested if selected_root is None else base / relative_path
-    try:
-        resolved = candidate.resolve(strict=True)
-        resolved_root = base.resolve(strict=True)
-    except (OSError, RuntimeError):
-        raise HTTPException(
-            status_code=422,
-            detail="A pasta escolhida não existe ou não está disponível.",
-        ) from None
-    resolved_text = str(resolved)
-    root_text = str(resolved_root)
-    if os.name == "nt":
-        resolved_text = resolved_text.casefold()
-        root_text = root_text.casefold()
-    root_prefix = f"{root_text.rstrip(os.sep)}{os.sep}"
-    if resolved_text != root_text and not resolved_text.startswith(root_prefix):
+    base = selected_root or requested.anchor
+    resolved_text = os.path.realpath(expanded)
+    root_text = os.path.realpath(base)
+    resolved_key = os.path.normcase(resolved_text)
+    root_key = os.path.normcase(root_text)
+    root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
+    if resolved_key != root_key and not resolved_key.startswith(root_prefix):
         raise HTTPException(
             status_code=403,
             detail="O caminho escolhido aponta para fora das pastas seguras.",
         )
+    resolved = Path(resolved_text)
     if not resolved.is_dir():
         raise HTTPException(
             status_code=422,
@@ -2195,14 +2192,14 @@ async def workspace_tree(
     ws = workspace_registry.get(workspace_id)
     base = Path(ws.cwd) if ws else resolved
     if ws is not None and ws.transport == "local":
-        resolved_text = str(resolved.resolve())
-        root_text = str(base.resolve())
-        if os.name == "nt":
-            resolved_text = resolved_text.casefold()
-            root_text = root_text.casefold()
-        root_prefix = f"{root_text.rstrip(os.sep)}{os.sep}"
-        if resolved_text != root_text and not resolved_text.startswith(root_prefix):
+        resolved_text = os.path.realpath(resolved)
+        root_text = os.path.realpath(base)
+        resolved_key = os.path.normcase(resolved_text)
+        root_key = os.path.normcase(root_text)
+        root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
+        if resolved_key != root_key and not resolved_key.startswith(root_prefix):
             return TreeResponse(path=path, entries=[])
+        resolved = Path(resolved_text)
     if not resolved.exists() or not resolved.is_dir():
         if ws is not None and not Path(ws.cwd).is_dir():
             raise HTTPException(
