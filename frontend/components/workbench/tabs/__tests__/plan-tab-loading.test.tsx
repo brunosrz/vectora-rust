@@ -134,4 +134,43 @@ describe("PlanTab loading outcomes", () => {
     expect(await screen.findByText("Plano de execução")).toBeInTheDocument();
     expect(screen.queryByText("workbench_plan_empty")).not.toBeInTheDocument();
   });
+
+  it("lists every plan saved in the active local workspace", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              artifacts: [
+                {
+                  title: "Plano de execução: arquitetura reutilizável",
+                  path: "/workspace/.vectora/plans/plano-de-execucao.md",
+                  session_id: "thread-plan",
+                  created_at: "2026-11-25T12:00:00Z",
+                  artifact_type: "workspace_plan",
+                },
+                {
+                  title: "Plano: arquitetura reutilizável",
+                  path: "/workspace/.vectora/plans/plano-de-refatoracao.md",
+                  session_id: "thread-plan",
+                  created_at: "2026-11-24T12:00:00Z",
+                  artifact_type: "workspace_plan",
+                },
+              ],
+            }),
+          ),
+      ),
+    );
+
+    renderPlanTab();
+
+    expect(
+      await screen.findByText("Plano de execução: arquitetura reutilizável"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Plano: arquitetura reutilizável"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("workbench_plan_empty")).not.toBeInTheDocument();
+  });
 });

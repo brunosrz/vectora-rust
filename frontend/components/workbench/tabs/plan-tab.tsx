@@ -70,11 +70,15 @@ export async function fetchArtifacts(threadId: string): Promise<PlanItem[]> {
   return data.artifacts ?? [];
 }
 
-async function fetchArtifactContent(
+export async function fetchArtifactContent(
   threadId: string,
-  slug: string,
+  item: PlanItem,
 ): Promise<string | null> {
   const qs = new URLSearchParams({ session_id: threadId });
+  if (item.artifact_type === "workspace_plan") {
+    qs.set("source", "workspace_plan");
+  }
+  const slug = fileSlug(item.path);
   const res = await fetch(`/artifacts/${encodeURIComponent(slug)}?${qs}`, {
     signal: AbortSignal.timeout(15_000),
   });
@@ -86,6 +90,13 @@ async function fetchArtifactContent(
 function fileSlug(path: string): string {
   const last = path.split(/[/\\]/).pop() ?? "";
   return last.replace(/\.md$/i, "");
+}
+
+function planItemSlug(item: PlanItem): string {
+  const slug = fileSlug(item.path);
+  return item.artifact_type === "workspace_plan"
+    ? `workspace-plan-${slug}`
+    : slug;
 }
 
 export function shouldShowPlanLoadSpinner(
@@ -100,6 +111,7 @@ export function shouldShowPlanLoadSpinner(
 // Tipo desconhecido/ausente (artifact legado sem sidecar) cai no fallback.
 const TYPE_ICON: Record<string, { icon: LucideIcon; className: string }> = {
   plan: { icon: ClipboardList, className: "text-blue-400" },
+  workspace_plan: { icon: ClipboardList, className: "text-blue-400" },
   spec: { icon: FileCode2, className: "text-purple-400" },
   task_list: { icon: CheckSquare, className: "text-amber-400" },
   overview: { icon: LayoutList, className: "text-sky-400" },
@@ -399,7 +411,7 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
   // artifacts.
   const entries = useMemo(() => {
     const artifactEntries = items.map((item) => ({
-      slug: fileSlug(item.path),
+      slug: planItemSlug(item),
       timestamp: new Date(item.created_at).getTime() || 0,
       item,
     }));
@@ -433,11 +445,11 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
       for (const slug of added) {
         if (slug === TODOS_SLUG) continue;
         const item = items.find(
-          (candidate) => fileSlug(candidate.path) === slug,
+          (candidate) => planItemSlug(candidate) === slug,
         );
+        if (!item) continue;
         if (contentsBySlug[slug] !== undefined) {
-          if (item)
-            onOpenPlanDocument?.(item, contentsBySlug[slug], undefined, "open");
+          onOpenPlanDocument?.(item, contentsBySlug[slug], undefined, "open");
           continue;
         }
         const requestKey = `${threadId}:${slug}`;
@@ -445,7 +457,7 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
           (contentRequestEpoch.current.get(requestKey) ?? 0) + 1;
         contentRequestEpoch.current.set(requestKey, requestEpoch);
         const requestThreadId = threadId;
-        void fetchArtifactContent(threadId, slug)
+        void fetchArtifactContent(threadId, item)
           .then((content) => {
             if (
               requestThreadId !== activeThreadRef.current ||

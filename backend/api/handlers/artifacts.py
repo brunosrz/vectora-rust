@@ -15,7 +15,7 @@ import logging
 import stat as stat_module
 from datetime import UTC
 from pathlib import Path
-from typing import Annotated, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -80,6 +80,112 @@ async def _require_session_owner(request: Request | None, session_id: str) -> No
     from backend.api.handlers.threads import _assert_existing_thread_ownership
 
     await _assert_existing_thread_ownership(session_id, request)
+
+
+async def _workspace_plans_dir(session_id: str, request: Request | None) -> Path | None:
+    """Resolve the local plan directory for the workspace attached to a thread."""
+    if request is None:
+        return None
+
+    from backend.api.handlers.threads import _get_session_store, _user_id
+
+    session_store = await _get_session_store()
+    session = await session_store.get_session(session_id, user_id=_user_id(request))
+    workspace_id = str(session.get("workspace_id") or "") if session else ""
+    if not workspace_id:
+        return None
+
+    from backend.api.handlers.workspaces import require_workspace_access
+    from backend.workspace.workspace import workspace_registry
+
+    workspace = workspace_registry.get(workspace_id)
+    if workspace is None:
+        return None
+    require_workspace_access(workspace_id, request)
+    if workspace.transport != "local":
+        return None
+
+    try:
+        workspace_root = Path(workspace.cwd).resolve(strict=True)
+        plans_dir = workspace_root / ".vectora" / "plans"
+        plans_stat = plans_dir.stat()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        logger.exception("Não foi possível acessar planos locais em %s", workspace.cwd)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível ler os planos deste workspace.",
+        ) from exc
+
+    if not stat_module.S_ISDIR(plans_stat.st_mode):
+        raise HTTPException(
+            status_code=500,
+            detail="O caminho de planos deste workspace não é uma pasta.",
+        )
+    try:
+        resolved_plans_dir = plans_dir.resolve(strict=True)
+        resolved_plans_dir.relative_to(workspace_root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="A pasta de planos aponta para fora do workspace.",
+        ) from exc
+    except OSError as exc:
+        logger.exception("Não foi possível resolver planos locais em %s", plans_dir)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível ler os planos deste workspace.",
+        ) from exc
+    return resolved_plans_dir
+
+
+def _workspace_plan_artifacts(
+    plans_dir: Path, session_id: str
+) -> list[ArtifactMetadata]:
+    """Build metadata for regular Markdown plans stored in a local workspace."""
+    try:
+        paths = sorted(
+            (
+                path
+                for path in plans_dir.iterdir()
+                if path.suffix.lower() == ".md"
+                and not path.is_symlink()
+                and path.is_file()
+            ),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        artifacts: list[ArtifactMetadata] = []
+        for path in paths:
+            stat = path.stat()
+            preview = _read_preview(path)
+            heading = next(
+                (
+                    line.lstrip("#").strip()
+                    for line in (preview or "").splitlines()
+                    if line.startswith("#")
+                ),
+                "",
+            )
+            artifacts.append(
+                ArtifactMetadata(
+                    title=heading or path.stem.replace("-", " ").strip(),
+                    path=str(path),
+                    session_id=session_id,
+                    created_at=_format_mtime(stat.st_mtime),
+                    artifact_type="workspace_plan",
+                    content_preview=preview,
+                    byte_size=stat.st_size,
+                )
+            )
+        return artifacts
+    except OSError as exc:
+        logger.exception("Não foi possível listar planos locais em %s", plans_dir)
+        raise HTTPException(
+            status_code=500,
+            detail="Não foi possível ler os planos deste workspace.",
+        ) from exc
 
 
 def _read_preview(path: Path, limit: int = 200) -> str | None:
@@ -163,9 +269,6 @@ async def list_artifacts(
                 detail="O caminho de artifacts desta conversa não é uma pasta.",
             )
         existing_bases.append(base)
-    if not existing_bases:
-        return ListArtifactsResponse(artifacts=[])
-
     # A raiz configurada vem primeiro; o mesmo slug antigo nunca substitui o
     # arquivo atual, mas slugs que só existem na raiz legada continuam visíveis.
     markdown_by_slug: dict[str, ArtifactMetadata] = {}
@@ -200,7 +303,16 @@ async def list_artifacts(
                 detail="Não foi possível ler os artifacts desta conversa.",
             ) from exc
 
-    items = [*markdown_by_slug.values(), *media_by_name.values()]
+    workspace_plans: list[ArtifactMetadata] = []
+    plans_dir = await _workspace_plans_dir(session_id, request)
+    if plans_dir is not None:
+        workspace_plans = _workspace_plan_artifacts(plans_dir, session_id)
+
+    items = [
+        *markdown_by_slug.values(),
+        *media_by_name.values(),
+        *workspace_plans,
+    ]
     items.sort(key=lambda a: a.created_at, reverse=True)
     return ListArtifactsResponse(artifacts=items)
 
@@ -251,11 +363,45 @@ def _media_artifacts(base: Path, session_id: str) -> list[ArtifactMetadata]:
 async def get_artifact(
     slug: str,
     session_id: Annotated[str, Query()],
+    source: Annotated[Literal["artifact", "workspace_plan"], Query()] = "artifact",
     request: Request = None,  # ty: ignore[invalid-parameter-default]
 ) -> ArtifactContent:
     """Devolve o markdown completo de um artifact."""
     await _require_session_owner(request, session_id)
     safe_slug = slug.replace("/", "").replace("\\", "").replace("..", "")
+    if source == "workspace_plan":
+        plans_dir = await _workspace_plans_dir(session_id, request)
+        if plans_dir is None:
+            raise HTTPException(status_code=404, detail="Plano não encontrado.")
+        path = plans_dir / f"{safe_slug}.md"
+        if path.is_symlink() or not path.is_file():
+            raise HTTPException(status_code=404, detail="Plano não encontrado.")
+        try:
+            resolved_path = path.resolve(strict=True)
+            resolved_path.relative_to(plans_dir)
+            content = resolved_path.read_text(encoding="utf-8", errors="replace")
+            created = _format_mtime(resolved_path.stat().st_mtime)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail="O plano aponta para fora do workspace.",
+            ) from exc
+        except OSError as exc:
+            logger.exception("Não foi possível abrir o plano local %s", path)
+            raise HTTPException(
+                status_code=500,
+                detail="Não foi possível abrir este plano. Tente novamente.",
+            ) from exc
+        return ArtifactContent(
+            title=resolved_path.stem.replace("-", " ").strip(),
+            slug=safe_slug,
+            session_id=session_id,
+            created_at=created,
+            content=content,
+            artifact_type="workspace_plan",
+            **_read_integrity(resolved_path),
+        )
+
     candidates = [base / f"{safe_slug}.md" for base in _artifact_dirs(session_id)]
     path = next(
         (candidate for candidate in candidates if candidate.is_file()), candidates[0]
