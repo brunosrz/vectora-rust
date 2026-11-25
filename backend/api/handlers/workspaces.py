@@ -1226,22 +1226,30 @@ async def browse_file(request: Request, path: Annotated[str, Query()]) -> Respon
         get_safe_root_registry,
     )
 
-    try:
-        file_path = Path(path).expanduser().resolve(strict=True)
-    except OSError as exc:
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
-    if not file_path.is_file():
-        raise HTTPException(status_code=400, detail="O caminho não é um arquivo.")
-
+    # Autorize o diretório antes de montar o caminho final. O nome é reduzido
+    # ao basename para impedir que segmentos fornecidos pelo cliente escapem
+    # do diretório autorizado; a resolução abaixo ainda bloqueia symlinks.
+    requested_path = PurePath(path)
+    filename = requested_path.name
+    if not filename or filename in {".", ".."}:
+        raise HTTPException(status_code=400, detail="O caminho do arquivo é inválido.")
+    requested_parent = str(requested_path.parent)
     try:
         parent, _ = await _resolve_and_authorize_dir(
-            str(file_path.parent),
+            requested_parent,
             _is_privileged(request),
             get_safe_root_registry(),
             strict=True,
         )
     except SafeRootPersistenceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        file_path = (parent / filename).resolve(strict=True)
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail="O caminho não é um arquivo.")
     if file_path.parent != parent:
         raise HTTPException(status_code=403, detail="Arquivo fora das pastas seguras.")
 

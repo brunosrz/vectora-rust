@@ -280,7 +280,7 @@ class TestWorkspaceHandlers:
         assert "file.txt" not in names
 
         file_result = await browse_dir(
-            cast(Request, fake_request), path=str(tmp_path), include_files=True
+            cast("Request", fake_request), path=str(tmp_path), include_files=True
         )
         assert "file.txt" in {entry.name for entry in file_result.entries}
 
@@ -296,7 +296,7 @@ class TestWorkspaceHandlers:
         selected = tmp_path / "note.txt"
         selected.write_text("Vectora file manager", encoding="utf-8")
         fake_request = SimpleNamespace(state=SimpleNamespace(user=None))
-        response = await browse_file(cast(Request, fake_request), path=str(selected))
+        response = await browse_file(cast("Request", fake_request), path=str(selected))
         assert response.body == b"Vectora file manager"
         assert response.media_type == "text/plain"
 
@@ -312,6 +312,29 @@ class TestWorkspaceHandlers:
         with pytest.raises(HTTPException) as error:
             await browse_file(fake_request, path=str(tmp_path))  # ty: ignore[invalid-argument-type]
         assert error.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_browse_file_rejects_symlink_outside_selected_directory(
+        self, tmp_path
+    ):
+        from types import SimpleNamespace
+        from typing import cast
+
+        from fastapi import HTTPException, Request
+
+        from backend.api.handlers.workspaces import browse_file
+
+        selected_dir = tmp_path / "selected"
+        selected_dir.mkdir()
+        private_file = tmp_path / "private.txt"
+        private_file.write_text("outside", encoding="utf-8")
+        selected_link = selected_dir / "linked.txt"
+        selected_link.symlink_to(private_file)
+        fake_request = SimpleNamespace(state=SimpleNamespace(user=None))
+
+        with pytest.raises(HTTPException) as error:
+            await browse_file(cast("Request", fake_request), path=str(selected_link))
+        assert error.value.status_code == 403
 
     @pytest.mark.asyncio
     async def test_browse_file_enforces_safe_roots(self, monkeypatch, tmp_path):
