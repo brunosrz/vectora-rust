@@ -43,12 +43,13 @@ def test_sem_policy_spawna_shell_padrao_sem_bwrap(_fake_backend, tmp_path):
 
 
 def test_shell_configurado_inexistente_usa_shell_posix_disponivel(monkeypatch):
+    available_shells = {"bash": None, "sh": "/bin/sh"}
     monkeypatch.setattr(pty_mod, "_IS_WINDOWS", False)
     monkeypatch.setenv("SHELL", "/missing/configured-shell")
     monkeypatch.setattr(
         pty_mod.shutil,
         "which",
-        lambda command: {"bash": None, "sh": "/bin/sh"}.get(command),
+        available_shells.get,
     )
 
     assert pty_mod._default_shell() == ["/bin/sh"]
