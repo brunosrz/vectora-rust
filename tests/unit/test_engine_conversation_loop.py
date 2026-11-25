@@ -2132,8 +2132,10 @@ async def test_agent_receives_godot_errors_repairs_causal_files_and_revalidates(
             if 'var health: int = "inválido"' in script or not scene_exists:
                 return (
                     1,
-                    "ERROR: Parse error in scripts/player.gd\n"
-                    "ERROR: Missing resource res://scenes/bullet.tscn",
+                    (
+                        "ERROR: Parse error in scripts/player.gd\n"
+                        "ERROR: Missing resource res://scenes/bullet.tscn"
+                    ),
                     False,
                 )
         return 0, "", False
