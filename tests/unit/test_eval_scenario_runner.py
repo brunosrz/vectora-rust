@@ -228,10 +228,12 @@ def test_fixture_suite_runs_each_catalog_scenario_and_keeps_unsupported_distinct
         "fixture = json.loads(Path(os.environ['VECTORA_EVAL_FIXTURE_PATH']).read_text())\n"
         "assert isinstance(fixture, dict)\n"
         "status = 'unsupported' if scenario['scenario_id'] == 'memory-recall-v1' else 'passed'\n"
+        "assertions = [{'name': name, 'status': status, "
+        "'reason': 'provider approval evidence unavailable' if status == 'unsupported' else None} "
+        "for name in scenario['success_criteria']]\n"
         "Path(os.environ['VECTORA_EVAL_RESULT_PATH']).write_text(json.dumps({"
         "'schema_version': 1, 'scenario_id': scenario['scenario_id'], "
-        "'assertions': [{'name': 'fixture contract loaded', 'status': status, "
-        "'reason': 'provider approval evidence unavailable' if status == 'unsupported' else None}]}))\n",
+        "'assertions': assertions}))\n",
         encoding="utf-8",
     )
 

@@ -2090,6 +2090,8 @@ async def test_agent_receives_godot_errors_repairs_causal_files_and_revalidates(
     import shutil
     from pathlib import Path
 
+    from backend.sandbox.policy import DISABLED_POLICY
+    from backend.tools import fs as fs_tools
     from backend.tools import godot as godot_tools
     from backend.vtypes import Workspace
     from backend.workspace import workspace as workspace_module
@@ -2142,6 +2144,9 @@ async def test_agent_receives_godot_errors_repairs_causal_files_and_revalidates(
 
     monkeypatch.setattr(godot_tools.shutil, "which", lambda _name: "/usr/bin/godot")
     monkeypatch.setattr(godot_tools, "_run_engine", run_engine)
+    # This test covers the agent's repair loop, not the host's bwrap setup.
+    # Keep file tools deterministic on runners where bubblewrap is unavailable.
+    monkeypatch.setattr(fs_tools, "resolve_policy", lambda _root: DISABLED_POLICY)
     registry = ToolRegistry()
     _register(registry, "validate_godot_project")
     _register(registry, "file_edit")
