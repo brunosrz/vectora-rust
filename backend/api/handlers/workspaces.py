@@ -150,19 +150,20 @@ def _resolve_project_directory(
     base = selected_root or Path(requested.anchor)
     relative_path = requested.relative_to(PurePath(base))
     root_text = os.path.realpath(base)
-    resolved_text = os.path.realpath(
-        os.path.join(root_text, os.fspath(relative_path))  # noqa: PTH118
+    base_path = os.path.normcase(root_text)
+    fullpath = os.path.normcase(
+        os.path.realpath(
+            os.path.join(root_text, os.fspath(relative_path))  # noqa: PTH118
+        )
     )
-    resolved_key = os.path.normcase(resolved_text)
-    root_key = os.path.normcase(root_text)
-    root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
-    if resolved_key != root_key and not resolved_key.startswith(root_prefix):
+    base_prefix = f"{base_path.rstrip(os.sep)}{os.sep}"
+    if fullpath != base_path and not fullpath.startswith(base_prefix):
         raise HTTPException(
             status_code=403,
             detail="O caminho escolhido aponta para fora das pastas seguras.",
         )
-    resolved = Path(resolved_text)
-    if not resolved.is_dir():
+    resolved = Path(fullpath)
+    if not os.path.isdir(fullpath):  # noqa: PTH112
         raise HTTPException(
             status_code=422,
             detail="A pasta escolhida não existe ou não está disponível.",
@@ -2194,16 +2195,14 @@ async def workspace_tree(
 
     ws = workspace_registry.get(workspace_id)
     base = Path(ws.cwd) if ws else resolved
+    fullpath = os.path.normcase(os.path.realpath(resolved))
     if ws is not None and ws.transport == "local":
-        resolved_text = os.path.realpath(resolved)
-        root_text = os.path.realpath(base)
-        resolved_key = os.path.normcase(resolved_text)
-        root_key = os.path.normcase(root_text)
-        root_prefix = f"{root_key.rstrip(os.sep)}{os.sep}"
-        if resolved_key != root_key and not resolved_key.startswith(root_prefix):
+        root_path = os.path.normcase(os.path.realpath(base))
+        base_path = f"{root_path.rstrip(os.sep)}{os.sep}"
+        if fullpath != root_path and not fullpath.startswith(base_path):
             return TreeResponse(path=normalized_path, entries=[])
-        resolved = Path(resolved_text)
-    if not resolved.exists() or not resolved.is_dir():
+        resolved = Path(fullpath)
+    if not os.path.exists(fullpath) or not os.path.isdir(fullpath):  # noqa: PTH110, PTH112
         if ws is not None and not Path(ws.cwd).is_dir():
             raise HTTPException(
                 status_code=410,
