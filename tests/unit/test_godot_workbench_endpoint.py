@@ -45,7 +45,11 @@ async def test_validates_only_the_requested_workspace_project(monkeypatch):
     result = await validate_workspace_godot_project(
         "ws",
         _request(),
-        GodotValidationRequest(project_path="games/platformer", expected_version="4.6"),
+        GodotValidationRequest(
+            project_path="games/platformer",
+            expected_version="4.6",
+            executable_path="/opt/godot/Godot",
+        ),
     )
 
     assert result["status"] == "passed"
@@ -58,6 +62,7 @@ async def test_validates_only_the_requested_workspace_project(monkeypatch):
     }
     assert context.workspace_id == "ws"
     assert context.user_id == "user-1"
+    assert context._extra["godot_executable_path"] == "/opt/godot/Godot"
 
 
 @pytest.mark.asyncio

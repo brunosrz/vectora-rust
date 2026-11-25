@@ -186,6 +186,60 @@ async def test_validation_requires_matching_installed_engine(
     runner.assert_awaited_once()
 
 
+async def test_validation_uses_user_selected_executable_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = _project(tmp_path / "game")
+    executable = tmp_path / "Godot"
+    executable.write_text("binary placeholder", encoding="utf-8")
+    executable.chmod(0o755)
+    monkeypatch.setattr(godot, "_require_trust", lambda _ctx: "")
+    monkeypatch.setattr(godot, "_require_local", lambda _ctx: None)
+    monkeypatch.setattr(godot, "_confine", lambda _path, _ctx: (project_dir, ""))
+    monkeypatch.setattr(godot.shutil, "which", lambda _name: None)
+    runner = AsyncMock(
+        side_effect=[
+            (0, "Godot Engine v4.6.3.stable.official", False),
+            (0, "", False),
+            (0, "", False),
+        ]
+    )
+    monkeypatch.setattr(godot, "_run_engine", runner)
+
+    result = json.loads(
+        await godot.validate_godot_project(
+            ToolContext(_extra={"godot_executable_path": str(executable)}),
+            timeout_seconds=30,
+        )
+    )
+
+    assert result["status"] == "passed"
+    assert runner.await_args_list[0].args[0] == str(executable.resolve())
+
+
+async def test_validation_rejects_missing_user_selected_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = _project(tmp_path / "game")
+    monkeypatch.setattr(godot, "_require_trust", lambda _ctx: "")
+    monkeypatch.setattr(godot, "_require_local", lambda _ctx: None)
+    monkeypatch.setattr(godot, "_confine", lambda _path, _ctx: (project_dir, ""))
+    runner = AsyncMock()
+    monkeypatch.setattr(godot, "_run_engine", runner)
+
+    result = json.loads(
+        await godot.validate_godot_project(
+            ToolContext(
+                _extra={"godot_executable_path": str(tmp_path / "missing-Godot")}
+            )
+        )
+    )
+
+    assert result["status"] == "error"
+    assert result["stage"] == "engine_discovery"
+    runner.assert_not_awaited()
+
+
 async def test_validation_reports_import_errors_even_when_engine_exits_zero(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

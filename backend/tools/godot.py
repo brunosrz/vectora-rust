@@ -212,12 +212,36 @@ async def validate_godot_project(
             }
         )
 
-    configured_binary = os.environ.get("VECTORA_GODOT_EXECUTABLE", "").strip()
-    executable = (
-        shutil.which(configured_binary)
-        if configured_binary
-        else shutil.which("godot") or shutil.which("godot4")
-    )
+    selected_path = str(ctx._extra.get("godot_executable_path") or "").strip()
+    if selected_path:
+        try:
+            selected_executable = Path(selected_path).expanduser().resolve(strict=True)
+        except OSError:
+            selected_executable = None
+        executable = (
+            str(selected_executable)
+            if selected_executable is not None
+            and selected_executable.is_file()
+            and (os.name == "nt" or os.access(selected_executable, os.X_OK))
+            else None
+        )
+        if not executable:
+            return json.dumps(
+                {
+                    "status": "error",
+                    "stage": "engine_discovery",
+                    "code": "godot_unavailable",
+                    "message": "O executável Godot selecionado não existe ou não pode ser executado.",
+                },
+                ensure_ascii=False,
+            )
+    else:
+        configured_binary = os.environ.get("VECTORA_GODOT_EXECUTABLE", "").strip()
+        executable = (
+            shutil.which(configured_binary)
+            if configured_binary
+            else shutil.which("godot") or shutil.which("godot4")
+        )
     if not executable:
         return json.dumps(
             {

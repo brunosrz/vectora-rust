@@ -204,6 +204,7 @@ class GodotValidationRequest(BaseModel):
 
     project_path: str = Field(default=".", min_length=1, max_length=4096)
     expected_version: str | None = Field(default=None, max_length=32)
+    executable_path: str | None = Field(default=None, max_length=4096)
     timeout_seconds: int = Field(default=120, ge=10, le=120)
 
 
@@ -1118,7 +1119,11 @@ async def validate_workspace_godot_project(
                     "expected_version": body.expected_version,
                     "timeout_seconds": body.timeout_seconds,
                 },
-                ToolContext(user_id=user_id, workspace_id=workspace_id),
+                ToolContext(
+                    user_id=user_id,
+                    workspace_id=workspace_id,
+                    _extra={"godot_executable_path": body.executable_path},
+                ),
             ),
             timeout=body.timeout_seconds * 3 + 10,
         )
