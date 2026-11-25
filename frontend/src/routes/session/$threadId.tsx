@@ -576,6 +576,11 @@ function SessionPage() {
 
   const handleNewChat = useCallback(
     (workspaceId?: string) => {
+      // Botões de UI podem encaminhar o evento do React como primeiro
+      // argumento. O callback também recebe workspaceId do seletor; nunca
+      // trate um evento como ID nem o persista no estado da nova sessão.
+      const selectedWorkspaceId =
+        typeof workspaceId === "string" ? workspaceId : undefined;
       // Chat: cria sessão direto (sem workspace/folders). Dev: dialog de workspace.
       // Reset do fundo: fecha janelas de arquivo da sessão anterior para a nova
       // conversa não herdar o conteúdo visual da atual.
@@ -588,8 +593,8 @@ function SessionPage() {
         setIsMobileSidebarOpen(false);
         return;
       }
-      if (workspaceId) {
-        signalWorkspaceChoiceForNewSession(workspaceId);
+      if (selectedWorkspaceId) {
+        signalWorkspaceChoiceForNewSession(selectedWorkspaceId);
         void navigate({
           to: "/session/$threadId",
           params: { threadId: "new" },
