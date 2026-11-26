@@ -336,6 +336,7 @@ export function useStreamHandler({
 }: UseStreamHandlerProps): UseStreamHandlerReturn {
   // AbortController para interromper o stream quando shouldInterruptRef === true
   const abortRef = useRef<AbortController | null>(null);
+  const toolNamesByIdRef = useRef(new Map<string, string>());
 
   const processStream = useCallback(
     async (
@@ -458,7 +459,13 @@ export function useStreamHandler({
 
         const sequence = createSequenceGuard();
         for await (const event of withTrailingEvents(events, (trailing) =>
-          handleEvent(trailing, activeId, setMessages, threadId),
+          handleEvent(
+            trailing,
+            activeId,
+            setMessages,
+            toolNamesByIdRef.current,
+            threadId,
+          ),
         )) {
           // Primeiro evento do stream = conexão SSE de fato estabelecida
           if (!sseConnected) {
@@ -555,7 +562,13 @@ export function useStreamHandler({
             continue;
           }
 
-          await handleEvent(event, activeId, setMessages, threadId);
+          await handleEvent(
+            event,
+            activeId,
+            setMessages,
+            toolNamesByIdRef.current,
+            threadId,
+          );
 
           if (event.type === "hitl") {
             // Pausa deliberada pra aprovação humana — o backend encerra o
@@ -783,7 +796,13 @@ export function useStreamHandler({
 
         const sequence = createSequenceGuard();
         for await (const event of withTrailingEvents(events, (trailing) =>
-          handleEvent(trailing, assistantMessageId, setMessages, threadId),
+          handleEvent(
+            trailing,
+            assistantMessageId,
+            setMessages,
+            toolNamesByIdRef.current,
+            threadId,
+          ),
         )) {
           // Primeiro evento do stream = conexão SSE de fato estabelecida
           if (!sseConnected) {
@@ -834,7 +853,13 @@ export function useStreamHandler({
             continue;
           }
 
-          await handleEvent(event, assistantMessageId, setMessages, threadId);
+          await handleEvent(
+            event,
+            assistantMessageId,
+            setMessages,
+            toolNamesByIdRef.current,
+            threadId,
+          );
 
           if (event.type === "hitl") {
             // Pausa deliberada pra aprovação humana — ver comentário
@@ -975,6 +1000,7 @@ async function handleEvent(
   event: StreamEvent,
   assistantMessageId: string,
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  toolNamesById: Map<string, string>,
   threadId?: string,
 ): Promise<void> {
   switch (event.type) {
@@ -1011,6 +1037,7 @@ async function handleEvent(
     }
 
     case "tool_call": {
+      toolNamesById.set(event.tool_call_id, event.tool_name);
       const toolCall = buildToolCall({
         id: event.tool_call_id,
         name: event.tool_name,
@@ -1059,14 +1086,13 @@ async function handleEvent(
 
     case "tool_result": {
       const output = parseToolOutput(event.content_json);
-
-      let resolvedToolName: string | undefined;
+      const resolvedToolName = toolNamesById.get(event.tool_call_id);
+      toolNamesById.delete(event.tool_call_id);
       setMessages((prev) =>
         updateMessageInList(prev, assistantMessageId, (item) => ({
           ...item,
           toolCalls: (item.toolCalls ?? []).map((tc) => {
             if (tc.id !== event.tool_call_id) return tc;
-            resolvedToolName = tc.name;
             return { ...tc, output, isError: event.is_error };
           }),
         })),

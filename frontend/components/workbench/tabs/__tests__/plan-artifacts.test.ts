@@ -38,6 +38,9 @@ describe("fetchArtifacts", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "session_id=thread-1",
     );
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      credentials: "include",
+    });
   });
 });
 
@@ -65,6 +68,9 @@ describe("fetchArtifactContent", () => {
     expect(url.pathname).toBe("/artifacts/plano-local");
     expect(url.searchParams.get("session_id")).toBe("thread-1");
     expect(url.searchParams.get("source")).toBe("workspace_plan");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      credentials: "include",
+    });
   });
 });
 
