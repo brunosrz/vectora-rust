@@ -707,11 +707,28 @@ async def _resolve_and_authorize_dir(
                 ) from exc
             fullpath = os.path.normcase(home)
 
-        # Usuário privilegiado navega a partir da raiz do volume; os demais,
-        # só dentro de uma raiz segura.
+        # A raiz precisa vir de uma origem confiável, nunca do caminho pedido.
+        # Em Windows, limita a navegação privilegiada a uma unidade montada;
+        # nos demais sistemas, a raiz do filesystem é fixa.
         safe_root_id: str | None = None
-        root_text = Path(fullpath).anchor
-        if not privileged:
+        root_text = str(Path(os.sep).resolve())
+        if privileged and os.name == "nt":
+            requested_anchor = os.path.normcase(Path(fullpath).anchor)
+            root_text = next(
+                (
+                    entry.path
+                    for entry in _list_drives()
+                    if entry.kind == "drive"
+                    and os.path.normcase(entry.path) == requested_anchor
+                ),
+                "",
+            )
+            if not root_text:
+                raise HTTPException(
+                    status_code=403,
+                    detail="A unidade solicitada não está montada.",
+                )
+        elif not privileged:
             containing = await asyncio.to_thread(registry.is_under_safe_root, fullpath)
             if containing is None:
                 if path:
@@ -741,10 +758,7 @@ async def _resolve_and_authorize_dir(
                 detail="Caminho fora das pastas seguras configuradas.",
             )
 
-        # O fluxo privilegiado é intencionalmente livre; nos demais, `fullpath`
-        # já foi resolvido e confirmado pelo SafeRootRegistry acima. O CodeQL
-        # não modela essa autorização baseada no papel do usuário.
-        # codeql[py/path-injection]
+        # Confirma que o caminho canônico pertence à raiz confiável selecionada.
         if os.path.isdir(fullpath):  # noqa: PTH112
             # ``normcase`` só serve à comparação; ``realpath`` devolve a
             # grafia real do disco no Windows.
