@@ -374,8 +374,10 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
   );
 
   const setPlanItems = useWorkbenchStore((s) => s.setPlanItems);
+  const invalidatePlan = useWorkbenchStore((s) => s.invalidatePlan);
   const togglePlanOpenSlug = useWorkbenchStore((s) => s.togglePlanOpenSlug);
   const setPlanContent = useWorkbenchStore((s) => s.setPlanContent);
+  const checkedPlanThreadRef = useRef<string | null>(null);
 
   const isPlanStale = useCallback(
     () => Date.now() - fetchedAt > WORKBENCH_STALE_MS,
@@ -404,6 +406,15 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
       }
     },
   });
+
+  // Um cache vazio pode ter sido carregado antes de um plano ser salvo no
+  // workspace (inclusive por outra ferramenta). Revalida uma vez ao reabrir
+  // a aba, sem repetir a consulta depois de uma resposta vazia nova.
+  useEffect(() => {
+    if (checkedPlanThreadRef.current === threadId) return;
+    checkedPlanThreadRef.current = threadId;
+    if (fetchedAt > 0 && items.length === 0) invalidatePlan(threadId);
+  }, [fetchedAt, invalidatePlan, items.length, threadId]);
 
   // write_todos (TodoListMiddleware) vira UMA entrada sintética no
   // Accordion (não um item por tarefa) — sempre a mais recente, já que é o

@@ -1390,5 +1390,9 @@ function invalidateWorkbenchFor(
       // Sinaliza pendência para a aba que não está montada no momento.
       useWorkbenchStore.getState().markPending(ws.id);
     }
+    // Planos do workspace também são arquivos Markdown comuns; `file_write`,
+    // `file_edit` e comandos de terminal podem criá-los ou alterá-los sem
+    // passar por `create_artifact`.
+    if (threadId) useWorkbenchStore.getState().invalidatePlan(threadId);
   }
 }

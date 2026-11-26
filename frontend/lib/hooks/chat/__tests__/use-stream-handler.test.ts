@@ -1159,6 +1159,81 @@ describe("useStreamHandler.processStream", () => {
     expect(useWorkbenchStore.getState().plan["t1"]?.fetchedAt).toBe(0);
   });
 
+  it("invalida o cache do Plan depois de uma escrita bem-sucedida no workspace", async () => {
+    useWorkbenchStore.getState().setPlanItems("t1", [
+      {
+        title: "Planos já listados",
+        path: "/workspace/.vectora/plans/antigo.md",
+        session_id: "t1",
+        created_at: "2025-01-01",
+        artifact_type: "workspace_plan",
+      },
+    ]);
+    expect(useWorkbenchStore.getState().plan["t1"]?.fetchedAt).toBeGreaterThan(
+      0,
+    );
+
+    streamChatMock.mockReturnValue(
+      gen([
+        {
+          type: "tool_call",
+          tool_name: "file_write",
+          tool_call_id: "tc-plan-write",
+          args_json: '{"path":".vectora/plans/novo-plano.md"}',
+        },
+        {
+          type: "tool_result",
+          tool_call_id: "tc-plan-write",
+          content_json: '".vectora/plans/novo-plano.md"',
+        },
+        { type: "done", thread_id: "t1", run_id: "run-plan-write" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("salve o plano", "a-plan-write");
+
+    expect(useWorkbenchStore.getState().plan["t1"]?.fetchedAt).toBe(0);
+  });
+
+  it("mantém o cache do Plan quando a escrita do workspace falha", async () => {
+    useWorkbenchStore.getState().setPlanItems("t1", [
+      {
+        title: "Plano existente",
+        path: "/workspace/.vectora/plans/existente.md",
+        session_id: "t1",
+        created_at: "2025-01-01",
+        artifact_type: "workspace_plan",
+      },
+    ]);
+    const fetchedAtBefore = useWorkbenchStore.getState().plan["t1"]?.fetchedAt;
+
+    streamChatMock.mockReturnValue(
+      gen([
+        {
+          type: "tool_call",
+          tool_name: "file_write",
+          tool_call_id: "tc-plan-write-error",
+          args_json: '{"path":".vectora/plans/novo-plano.md"}',
+        },
+        {
+          type: "tool_result",
+          tool_call_id: "tc-plan-write-error",
+          content_json: '"falha ao gravar"',
+          is_error: true,
+        },
+        { type: "done", thread_id: "t1", run_id: "run-plan-write-error" },
+      ]),
+    );
+
+    const { result } = run();
+    await result.current.processStream("salve o plano", "a-plan-write-error");
+
+    expect(useWorkbenchStore.getState().plan["t1"]?.fetchedAt).toBe(
+      fetchedAtBefore,
+    );
+  });
+
   it("tool_result com erro NÃO invalida o cache do workbench", async () => {
     useWorkbenchStore.getState().setPlanItems("t1", [
       {
