@@ -53,6 +53,8 @@ vi.mock("@/lib/paraglide/messages", () => ({
 
 vi.mock("@/lib/api/vectora-client", () => ({
   approveThreadDAG: vi.fn(),
+  authenticatedFetch: (path: string, init?: RequestInit) =>
+    fetch(path, { ...init, credentials: "include" }),
   cancelThreadDAG: vi.fn(),
   getThreadActivity: vi.fn(async () => ({ files_touched: [] })),
   getThreadDAG: vi.fn(async () => null),

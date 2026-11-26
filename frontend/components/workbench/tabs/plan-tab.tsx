@@ -41,11 +41,11 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { VECTORA_API_URL } from "@/lib/constants/api";
 import { useWorkbenchSWR } from "@/lib/hooks/workbench/use-swr";
 import { useChatInputStore } from "@/lib/stores/chat-input-store";
 import {
   approveThreadDAG,
+  authenticatedFetch,
   cancelThreadDAG,
   getThreadActivity,
   getThreadDAG,
@@ -63,8 +63,7 @@ import { useSettingsStore } from "@/lib/stores/settings-store";
 
 export async function fetchArtifacts(threadId: string): Promise<PlanItem[]> {
   const qs = new URLSearchParams({ session_id: threadId });
-  const res = await fetch(`${VECTORA_API_URL}/artifacts/?${qs}`, {
-    credentials: "include",
+  const res = await authenticatedFetch(`/artifacts/?${qs}`, {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`Artifact request failed (${res.status})`);
@@ -81,12 +80,9 @@ export async function fetchArtifactContent(
     qs.set("source", "workspace_plan");
   }
   const slug = fileSlug(item.path);
-  const res = await fetch(
-    `${VECTORA_API_URL}/artifacts/${encodeURIComponent(slug)}?${qs}`,
-    {
-      credentials: "include",
-      signal: AbortSignal.timeout(15_000),
-    },
+  const res = await authenticatedFetch(
+    `/artifacts/${encodeURIComponent(slug)}?${qs}`,
+    { signal: AbortSignal.timeout(15_000) },
   );
   if (!res.ok) throw new Error(`Artifact request failed (${res.status})`);
   const data = await res.json();
