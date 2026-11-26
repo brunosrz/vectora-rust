@@ -741,6 +741,10 @@ async def _resolve_and_authorize_dir(
                 detail="Caminho fora das pastas seguras configuradas.",
             )
 
+        # O fluxo privilegiado é intencionalmente livre; nos demais, `fullpath`
+        # já foi resolvido e confirmado pelo SafeRootRegistry acima. O CodeQL
+        # não modela essa autorização baseada no papel do usuário.
+        # codeql[py/path-injection]
         if os.path.isdir(fullpath):  # noqa: PTH112
             # ``normcase`` só serve à comparação; ``realpath`` devolve a
             # grafia real do disco no Windows.

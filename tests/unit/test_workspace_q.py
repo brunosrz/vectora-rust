@@ -360,7 +360,9 @@ class TestWorkspaceHandlers:
         assert error.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_resolve_dir_hides_missing_paths_outside_safe_roots(self, tmp_path):
+    async def test_resolve_dir_rejects_paths_outside_safe_roots_before_isdir(
+        self, monkeypatch, tmp_path
+    ):
         from typing import cast
 
         from fastapi import HTTPException
@@ -372,6 +374,16 @@ class TestWorkspaceHandlers:
             def is_under_safe_root(self, _path):
                 return None
 
+        filesystem_probes = []
+
+        def unexpected_isdir(path):
+            filesystem_probes.append(path)
+            raise AssertionError("caminho não autorizado não deve ser consultado")
+
+        monkeypatch.setattr(
+            "backend.api.handlers.workspaces.os.path.isdir", unexpected_isdir
+        )
+
         with pytest.raises(HTTPException) as error:
             await _resolve_and_authorize_dir(
                 str(tmp_path / "missing"),
@@ -380,6 +392,28 @@ class TestWorkspaceHandlers:
                 strict=True,
             )
         assert error.value.status_code == 403
+        assert filesystem_probes == []
+
+    @pytest.mark.asyncio
+    async def test_resolve_dir_allows_member_inside_safe_root(self, tmp_path):
+        from typing import cast
+
+        from backend.api.handlers.workspaces import _resolve_and_authorize_dir
+        from backend.rbac.safe_roots import SafeRootRegistry
+
+        class Registry:
+            def is_under_safe_root(self, _path):
+                return SimpleNamespace(id="safe-root", path=str(tmp_path))
+
+        result, root_id = await _resolve_and_authorize_dir(
+            str(tmp_path),
+            False,
+            cast("SafeRootRegistry", Registry()),
+            strict=True,
+        )
+
+        assert result == tmp_path.resolve()
+        assert root_id == "safe-root"
 
     @pytest.mark.asyncio
     async def test_mkdir_creates_subdir_then_relists(self, tmp_path):
