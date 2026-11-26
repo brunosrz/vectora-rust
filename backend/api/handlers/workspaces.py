@@ -694,46 +694,62 @@ async def _resolve_and_authorize_dir(
     """
     from fastapi import HTTPException
 
-    base = Path(path).expanduser() if path else Path.home()
-    try:
-        base = base.resolve()
-    except OSError as exc:
-        if strict:
-            raise HTTPException(
-                status_code=404,
-                detail="Diretório pai não encontrado.",
-            ) from exc
-        base = Path.home()
+    home = str(Path.home())
+    requested = os.path.expanduser(path) if path else home  # noqa: PTH111
+    while True:
+        try:
+            fullpath = os.path.normcase(os.path.realpath(requested))
+        except OSError as exc:
+            if strict:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Diretório pai não encontrado.",
+                ) from exc
+            fullpath = os.path.normcase(home)
 
-    if not base.exists() or not base.is_dir():
+        # Usuário privilegiado navega a partir da raiz do volume; os demais,
+        # só dentro de uma raiz segura.
+        safe_root_id: str | None = None
+        root_text = Path(fullpath).anchor
+        if not privileged:
+            containing = await asyncio.to_thread(registry.is_under_safe_root, fullpath)
+            if containing is None:
+                if path:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Caminho fora das pastas seguras configuradas.",
+                    )
+                containing = await asyncio.to_thread(
+                    registry.closest_safe_root_for, home
+                )
+                if containing is None:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Nenhuma pasta segura configurada. "
+                        "Peça ao admin para adicionar uma.",
+                    )
+                fullpath = os.path.normcase(os.path.realpath(containing.path))
+            safe_root_id = containing.id
+            root_text = containing.path
+
+        # Confirma o confinamento antes de qualquer acesso ao caminho pedido.
+        root_path = os.path.normcase(os.path.realpath(root_text))
+        root_prefix = f"{root_path.rstrip(os.sep)}{os.sep}"
+        if fullpath != root_path and not fullpath.startswith(root_prefix):
+            raise HTTPException(
+                status_code=403,
+                detail="Caminho fora das pastas seguras configuradas.",
+            )
+
+        if os.path.isdir(fullpath):  # noqa: PTH112
+            # ``normcase`` só serve à comparação; ``realpath`` devolve a
+            # grafia real do disco no Windows.
+            return Path(os.path.realpath(fullpath)), safe_root_id
         if strict:
             raise HTTPException(status_code=404, detail="Diretório pai não encontrado.")
-        base = Path.home()
-
-    safe_root_id: str | None = None
-    if not privileged:
-        containing = await asyncio.to_thread(registry.is_under_safe_root, str(base))
-        if containing is None:
-            if path:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Caminho fora das pastas seguras configuradas.",
-                )
-            fallback = await asyncio.to_thread(
-                registry.closest_safe_root_for, str(Path.home())
-            )
-            if fallback is None:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Nenhuma pasta segura configurada. "
-                    "Peça ao admin para adicionar uma.",
-                )
-            base = Path(fallback.path)
-            safe_root_id = fallback.id
-        else:
-            safe_root_id = containing.id
-
-    return base, safe_root_id
+        if requested == home:
+            return Path(fullpath), safe_root_id
+        requested = home
 
 
 @router.get("/BrowseDir", response_model=BrowseResponse)

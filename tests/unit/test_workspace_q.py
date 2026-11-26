@@ -360,6 +360,28 @@ class TestWorkspaceHandlers:
         assert error.value.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_resolve_dir_hides_missing_paths_outside_safe_roots(self, tmp_path):
+        from typing import cast
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers.workspaces import _resolve_and_authorize_dir
+        from backend.rbac.safe_roots import SafeRootRegistry
+
+        class Registry:
+            def is_under_safe_root(self, _path):
+                return None
+
+        with pytest.raises(HTTPException) as error:
+            await _resolve_and_authorize_dir(
+                str(tmp_path / "missing"),
+                False,
+                cast("SafeRootRegistry", Registry()),
+                strict=True,
+            )
+        assert error.value.status_code == 403
+
+    @pytest.mark.asyncio
     async def test_mkdir_creates_subdir_then_relists(self, tmp_path):
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
 
