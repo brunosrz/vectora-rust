@@ -187,14 +187,14 @@ def _fit_required_message(message: VMessage, budget: int) -> VMessage:
     remaining = max_chars
     bounded = []
     for block in message.content:
-        if not block.is_textual or not block.text:
+        if not block.is_textual:
             bounded.append(block)
+            continue
+        if not block.text or remaining <= 0:
             continue
         excerpt = block.text[:remaining]
         remaining -= len(excerpt)
         bounded.append(replace(block, text=excerpt))
-        if remaining <= 0:
-            break
     bounded.append(
         ContentBlock(
             kind="text", text="\n[mensagem truncada pelo orçamento de contexto]"
@@ -206,14 +206,14 @@ def _fit_required_message(message: VMessage, budget: int) -> VMessage:
         remaining = max_chars
         bounded = []
         for block in message.content:
-            if not block.is_textual or not block.text:
+            if not block.is_textual:
                 bounded.append(block)
+                continue
+            if not block.text or remaining <= 0:
                 continue
             excerpt = block.text[:remaining]
             remaining -= len(excerpt)
             bounded.append(replace(block, text=excerpt))
-            if remaining <= 0:
-                break
         bounded.append(
             ContentBlock(kind="text", text="\n[truncado pelo orçamento de contexto]")
         )

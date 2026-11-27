@@ -42,6 +42,41 @@ def test_transcript_hash_consistency() -> None:
     assert len(h1) == 64
 
 
+def test_required_user_message_keeps_images_when_long_text_is_fitted() -> None:
+    from backend.services.context_compaction import _message_tokens
+
+    latest = VMessage(
+        role=MessageRole.USER,
+        content=[
+            ContentBlock(kind="text", text="pedido importante " * 500),
+            ContentBlock(
+                kind="image_url",
+                image_url="data:image/png;base64,abc",
+                attachment_name="captura.png",
+            ),
+        ],
+    )
+    planner = ContextPlanner(memory_store=MemoryStore())
+    image_only_cost = _message_tokens(
+        VMessage(
+            role=MessageRole.USER,
+            content=[latest.content[1]],
+        )
+    )
+
+    planned = planner.plan_context(
+        [_msg(MessageRole.ASSISTANT, "resposta anterior"), latest],
+        max_tokens=image_only_cost + 100,
+    )
+
+    retained_user = next(
+        message for message in planned.messages if message.role is MessageRole.USER
+    )
+    assert any(block.kind == "image_url" for block in retained_user.content)
+    assert "pedido importante" in retained_user.text()
+    assert "truncad" in retained_user.text()
+
+
 def test_context_projection_validity() -> None:
     """Verifica o comportamento de context projection validity."""
     proj = ContextProjection(
