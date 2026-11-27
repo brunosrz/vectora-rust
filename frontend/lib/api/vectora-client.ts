@@ -393,6 +393,28 @@ async function tryRefreshToken(): Promise<boolean> {
   }
 }
 
+/** Faz uma chamada autenticada e renova a sessão uma vez quando ela expirou. */
+export async function authenticatedFetch(
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
+  const request = () =>
+    fetch(`${VECTORA_API_URL}${path}`, {
+      ...init,
+      credentials: "include",
+    });
+
+  let response = await request();
+  if (response.status === 401) {
+    if (!(await tryRefreshToken())) {
+      redirectToLogin();
+      throw new Error(m.api_error_session_expired());
+    }
+    response = await request();
+  }
+  return response;
+}
+
 /**
  * Redireciona para login quando o refresh falha.
  * No-op em SSR (sem window).

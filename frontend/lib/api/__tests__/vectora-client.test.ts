@@ -7,6 +7,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
+  authenticatedFetch,
   getHistory,
   generateTitle,
   countThreads,
@@ -197,6 +198,22 @@ describe("auth no postRpc", () => {
   it("erro não-401 lança com o status", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ detail: "boom" }, 500));
     await expect(listThreads()).rejects.toThrow(/500/);
+  });
+
+  it("renova a sessão expirada antes de carregar um recurso autenticado", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({}, 401))
+      .mockResolvedValueOnce(jsonResponse({}, 200))
+      .mockResolvedValueOnce(jsonResponse({ artifacts: [{ title: "Plano" }] }));
+
+    const response = await authenticatedFetch("/artifacts/?session_id=t1");
+
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(String(fetchMock.mock.calls[1][0])).toContain("/auth/refresh");
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      credentials: "include",
+    });
   });
 });
 

@@ -9,18 +9,24 @@ let artifacts: Array<{
   session_id: string;
   created_at: string;
 }> = [];
+let planFetchedAt = 0;
+const invalidatePlan = vi.fn(() => {
+  planFetchedAt = 0;
+});
 
 const planState = {
   getPlan: () => ({
     items: artifacts,
     openSlugs: [],
     contentsBySlug: {},
-    fetchedAt: 0,
+    fetchedAt: planFetchedAt,
   }),
   getTodos: () => [],
   setPlanItems: (_threadId: string, next: typeof artifacts) => {
     artifacts = next;
+    planFetchedAt = Date.now();
   },
+  invalidatePlan,
   togglePlanOpenSlug: vi.fn(),
   setPlanContent: vi.fn(),
 };
@@ -47,6 +53,8 @@ vi.mock("@/lib/paraglide/messages", () => ({
 
 vi.mock("@/lib/api/vectora-client", () => ({
   approveThreadDAG: vi.fn(),
+  authenticatedFetch: (path: string, init?: RequestInit) =>
+    fetch(path, { ...init, credentials: "include" }),
   cancelThreadDAG: vi.fn(),
   getThreadActivity: vi.fn(async () => ({ files_touched: [] })),
   getThreadDAG: vi.fn(async () => null),
@@ -67,6 +75,8 @@ function renderPlanTab() {
 
 beforeEach(() => {
   artifacts = [];
+  planFetchedAt = 0;
+  invalidatePlan.mockClear();
 });
 
 afterEach(() => {
@@ -172,5 +182,34 @@ describe("PlanTab loading outcomes", () => {
       screen.getByText("Plano: arquitetura reutilizável"),
     ).toBeInTheDocument();
     expect(screen.queryByText("workbench_plan_empty")).not.toBeInTheDocument();
+  });
+
+  it("revalidates a cached empty list when the Plan tab is reopened", async () => {
+    planFetchedAt = Date.now();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              artifacts: [
+                {
+                  title: "Plano criado no workspace",
+                  path: "/workspace/.vectora/plans/plano.md",
+                  session_id: "thread-plan",
+                  created_at: "2026-11-25T12:00:00Z",
+                  artifact_type: "workspace_plan",
+                },
+              ],
+            }),
+          ),
+      ),
+    );
+
+    renderPlanTab();
+
+    await waitFor(() =>
+      expect(invalidatePlan).toHaveBeenCalledWith("thread-plan"),
+    );
   });
 });

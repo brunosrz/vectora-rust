@@ -45,6 +45,7 @@ import { useWorkbenchSWR } from "@/lib/hooks/workbench/use-swr";
 import { useChatInputStore } from "@/lib/stores/chat-input-store";
 import {
   approveThreadDAG,
+  authenticatedFetch,
   cancelThreadDAG,
   getThreadActivity,
   getThreadDAG,
@@ -62,7 +63,7 @@ import { useSettingsStore } from "@/lib/stores/settings-store";
 
 export async function fetchArtifacts(threadId: string): Promise<PlanItem[]> {
   const qs = new URLSearchParams({ session_id: threadId });
-  const res = await fetch(`/artifacts/?${qs}`, {
+  const res = await authenticatedFetch(`/artifacts/?${qs}`, {
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`Artifact request failed (${res.status})`);
@@ -79,9 +80,10 @@ export async function fetchArtifactContent(
     qs.set("source", "workspace_plan");
   }
   const slug = fileSlug(item.path);
-  const res = await fetch(`/artifacts/${encodeURIComponent(slug)}?${qs}`, {
-    signal: AbortSignal.timeout(15_000),
-  });
+  const res = await authenticatedFetch(
+    `/artifacts/${encodeURIComponent(slug)}?${qs}`,
+    { signal: AbortSignal.timeout(15_000) },
+  );
   if (!res.ok) throw new Error(`Artifact request failed (${res.status})`);
   const data = await res.json();
   return data.content ?? null;
@@ -374,8 +376,10 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
   );
 
   const setPlanItems = useWorkbenchStore((s) => s.setPlanItems);
+  const invalidatePlan = useWorkbenchStore((s) => s.invalidatePlan);
   const togglePlanOpenSlug = useWorkbenchStore((s) => s.togglePlanOpenSlug);
   const setPlanContent = useWorkbenchStore((s) => s.setPlanContent);
+  const checkedPlanThreadRef = useRef<string | null>(null);
 
   const isPlanStale = useCallback(
     () => Date.now() - fetchedAt > WORKBENCH_STALE_MS,
@@ -404,6 +408,15 @@ export function PlanTab({ threadId, onOpenPlanDocument }: PlanTabProps) {
       }
     },
   });
+
+  // Um cache vazio pode ter sido carregado antes de um plano ser salvo no
+  // workspace (inclusive por outra ferramenta). Revalida uma vez ao reabrir
+  // a aba, sem repetir a consulta depois de uma resposta vazia nova.
+  useEffect(() => {
+    if (checkedPlanThreadRef.current === threadId) return;
+    checkedPlanThreadRef.current = threadId;
+    if (fetchedAt > 0 && items.length === 0) invalidatePlan(threadId);
+  }, [fetchedAt, invalidatePlan, items.length, threadId]);
 
   // write_todos (TodoListMiddleware) vira UMA entrada sintética no
   // Accordion (não um item por tarefa) — sempre a mais recente, já que é o
