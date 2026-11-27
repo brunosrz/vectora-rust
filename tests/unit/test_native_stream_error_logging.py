@@ -21,6 +21,7 @@ import pytest
 from backend.api.native_stream import stream_engine_events
 from backend.engine.stream_events import ErrorSignal, EventSink, MessageBreak
 from backend.persistence.native.ledger import LedgerEventTypeLiteral, ThreadLedgerEvent
+from backend.vtypes.contracts import JsonObject
 from backend.vtypes.message import MessageRole, VMessage, text_message
 
 
@@ -72,7 +73,7 @@ class TestErroDeExecucaoFicaLogado:
                     event_key=str(kwargs["event_key"]),
                     type=cast("LedgerEventTypeLiteral", str(kwargs["event_type"])),
                     run_id=str(kwargs["run_id"]),
-                    payload=cast("dict[str, object]", kwargs["payload"]),
+                    payload=cast("JsonObject", kwargs["payload"]),
                 )
                 self.ledger_events[event.event_key] = event
 

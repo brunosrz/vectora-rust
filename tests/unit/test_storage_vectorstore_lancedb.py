@@ -48,7 +48,9 @@ def _fts_query(df: pd.DataFrame) -> MagicMock:
 
 class TestLanceDBBackendSearchText:
     @pytest.mark.asyncio
-    async def test_search_text_retorna_hits_do_indice_fts(self, backend, mock_db):
+    async def test_search_text_retorna_hits_do_indice_fts(
+        self, backend, mock_db
+    ) -> None:
         """Verifica o comportamento de search text retorna hits do indice fts."""
         table = fake_async_table()
         table.create_index = AsyncMock()
@@ -76,7 +78,7 @@ class TestLanceDBBackendSearchText:
     @pytest.mark.asyncio
     async def test_search_text_colecao_inexistente_retorna_vazio_sem_propagar(
         self, backend, mock_db
-    ):
+    ) -> None:
         """Verifica o comportamento de search text colecao inexistente retorna vazio sem propagar."""
         mock_db.open_table.side_effect = RuntimeError("tabela não existe")
 
@@ -87,7 +89,7 @@ class TestLanceDBBackendSearchText:
     @pytest.mark.asyncio
     async def test_search_text_create_index_falhando_ainda_tenta_buscar(
         self, backend, mock_db
-    ):
+    ) -> None:
         """`create_index` falha quando o índice já existe (comportamento
         normal em rodadas subsequentes) — não pode impedir a busca."""
         table = fake_async_table()
@@ -105,7 +107,7 @@ class TestLanceDBBackendSearchText:
     @pytest.mark.asyncio
     async def test_search_text_fts_indisponivel_retorna_vazio_sem_propagar(
         self, backend, mock_db
-    ):
+    ) -> None:
         """Verifica o comportamento de search text fts indisponivel retorna vazio sem propagar."""
         table = fake_async_table()
         table.create_index = AsyncMock()
@@ -167,7 +169,9 @@ class TestLanceDBBackendListRows:
     an array with more than one element is ambiguous"."""
 
     @pytest.mark.asyncio
-    async def test_linha_com_vetor_multi_elemento_nao_lanca(self, backend, mock_db):
+    async def test_linha_com_vetor_multi_elemento_nao_lanca(
+        self, backend, mock_db
+    ) -> None:
         """Verifica o comportamento de linha com vetor multi elemento nao lanca."""
         table = fake_async_table()
         df = pd.DataFrame(
@@ -189,7 +193,7 @@ class TestLanceDBBackendListRows:
         assert rows[0].vector == pytest.approx([0.1, 0.2, 0.3])
 
     @pytest.mark.asyncio
-    async def test_linha_sem_vetor_vira_lista_vazia(self, backend, mock_db):
+    async def test_linha_sem_vetor_vira_lista_vazia(self, backend, mock_db) -> None:
         """Coluna `vector` ausente na linha vem como escalar `NaN` (float)
         do pandas, não `None` — `list(NaN)` também lançaria sem o guard."""
         table = fake_async_table()
@@ -213,7 +217,7 @@ class TestLanceDBBackendListRows:
     @pytest.mark.asyncio
     async def test_colecao_inexistente_retorna_vazio_sem_propagar(
         self, backend, mock_db
-    ):
+    ) -> None:
         """Verifica o comportamento de colecao inexistente retorna vazio sem propagar."""
         mock_db.open_table = AsyncMock(side_effect=RuntimeError("tabela não existe"))
 

@@ -20,7 +20,7 @@ async def _timed_out(
 
 
 @pytest.mark.asyncio
-async def test_run_starts_codespace_before_running_command(monkeypatch):
+async def test_run_starts_codespace_before_running_command(monkeypatch) -> None:
     calls: list[tuple[str, ...]] = []
     start_process = AsyncMock()
     start_process.returncode = 0
@@ -49,7 +49,9 @@ async def test_run_starts_codespace_before_running_command(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_run_does_not_open_ssh_when_codespace_start_times_out(monkeypatch):
+async def test_run_does_not_open_ssh_when_codespace_start_times_out(
+    monkeypatch,
+) -> None:
     process = AsyncMock()
     process.kill = AsyncMock()
     process.wait = AsyncMock(return_value=0)
@@ -69,7 +71,9 @@ async def test_run_does_not_open_ssh_when_codespace_start_times_out(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_run_reports_missing_gh_without_running_remote_command(monkeypatch):
+async def test_run_reports_missing_gh_without_running_remote_command(
+    monkeypatch,
+) -> None:
     ensure_started = AsyncMock(side_effect=FileNotFoundError("gh"))
     create_process = AsyncMock()
     monkeypatch.setattr(codespace, "ensure_started", ensure_started)
@@ -87,7 +91,7 @@ async def test_run_reports_missing_gh_without_running_remote_command(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_ensure_started_timeout_terminates_start_process(monkeypatch):
+async def test_ensure_started_timeout_terminates_start_process(monkeypatch) -> None:
     process = AsyncMock()
     process.kill = AsyncMock()
     process.wait = AsyncMock(return_value=0)

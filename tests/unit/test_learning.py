@@ -37,7 +37,7 @@ def _distill_json(skills: list | None = None, facts: list | None = None) -> str:
 @pytest.mark.asyncio
 async def test_distill_transcript_empty_input_returns_empty_result_without_llm_call(
     monkeypatch,
-):
+) -> None:
     load_llm_mock = MagicMock()
     monkeypatch.setattr("backend.services.utils.load_native_llm", load_llm_mock)
 
@@ -48,7 +48,9 @@ async def test_distill_transcript_empty_input_returns_empty_result_without_llm_c
 
 
 @pytest.mark.asyncio
-async def test_distill_transcript_happy_path_returns_skills_and_facts(monkeypatch):
+async def test_distill_transcript_happy_path_returns_skills_and_facts(
+    monkeypatch,
+) -> None:
     expected = DistillationResult(
         skills=[
             SkillDraft(
@@ -80,7 +82,9 @@ async def test_distill_transcript_happy_path_returns_skills_and_facts(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_distill_transcript_llm_failure_degrades_to_empty_result(monkeypatch):
+async def test_distill_transcript_llm_failure_degrades_to_empty_result(
+    monkeypatch,
+) -> None:
     llm = MagicMock()
     llm.agenerate = AsyncMock(side_effect=RuntimeError("modelo indisponível"))
     monkeypatch.setattr(
@@ -92,7 +96,7 @@ async def test_distill_transcript_llm_failure_degrades_to_empty_result(monkeypat
     assert result == DistillationResult()
 
 
-def test_dedupe_skill_drafts_removes_names_already_installed():
+def test_dedupe_skill_drafts_removes_names_already_installed() -> None:
     drafts = [
         SkillDraft(name="Debug de streaming", description="d", content="c"),
         SkillDraft(name="Nova skill", description="d2", content="c2"),
@@ -103,7 +107,7 @@ def test_dedupe_skill_drafts_removes_names_already_installed():
     assert [d.name for d in result] == ["Nova skill"]
 
 
-def test_dedupe_skill_drafts_no_existing_names_keeps_all_drafts():
+def test_dedupe_skill_drafts_no_existing_names_keeps_all_drafts() -> None:
     drafts = [SkillDraft(name="A", description="d", content="c")]
 
     result = dedupe_skill_drafts(drafts, set())
@@ -111,13 +115,13 @@ def test_dedupe_skill_drafts_no_existing_names_keeps_all_drafts():
     assert result == drafts
 
 
-def test_dedupe_skill_drafts_empty_drafts_list_returns_empty():
+def test_dedupe_skill_drafts_empty_drafts_list_returns_empty() -> None:
     result = dedupe_skill_drafts([], {"algo"})
 
     assert result == []
 
 
-def test_dedupe_skill_drafts_matches_case_and_whitespace_insensitively():
+def test_dedupe_skill_drafts_matches_case_and_whitespace_insensitively() -> None:
     # "quase idênticos" — mesma skill com capitalização/espaços diferentes
     # não deve virar uma entrada nova (duplicata disfarçada).
     drafts = [
@@ -129,7 +133,7 @@ def test_dedupe_skill_drafts_matches_case_and_whitespace_insensitively():
     assert result == []
 
 
-def test_dedupe_skill_drafts_duplicate_names_within_input_both_removed():
+def test_dedupe_skill_drafts_duplicate_names_within_input_both_removed() -> None:
     drafts = [
         SkillDraft(name="Skill X", description="d1", content="c1"),
         SkillDraft(name="skill x", description="d2", content="c2"),
@@ -140,7 +144,7 @@ def test_dedupe_skill_drafts_duplicate_names_within_input_both_removed():
     assert result == []
 
 
-def test_dedupe_skill_drafts_preserves_order_of_kept_drafts():
+def test_dedupe_skill_drafts_preserves_order_of_kept_drafts() -> None:
     drafts = [
         SkillDraft(name="Mantida 1", description="d", content="c"),
         SkillDraft(name="Removida", description="d", content="c"),
@@ -153,7 +157,9 @@ def test_dedupe_skill_drafts_preserves_order_of_kept_drafts():
 
 
 @pytest.mark.asyncio
-async def test_distill_transcript_whitespace_only_never_touches_llm(monkeypatch):
+async def test_distill_transcript_whitespace_only_never_touches_llm(
+    monkeypatch,
+) -> None:
     # Borda adicional: transcript só com quebras de linha/tabs — mesmo
     # tratamento de vazio, sem chamar load_llm.
     load_llm_mock = MagicMock()
@@ -168,7 +174,7 @@ async def test_distill_transcript_whitespace_only_never_touches_llm(monkeypatch)
 @pytest.mark.asyncio
 async def test_distill_transcript_llm_returns_no_reusable_pattern_yields_empty_lists(
     monkeypatch,
-):
+) -> None:
     # "Se o transcript não tiver nenhum padrão reutilizável... devolva
     # listas vazias — isso é um resultado válido, não uma falha."
     monkeypatch.setattr(
@@ -185,7 +191,7 @@ async def test_distill_transcript_llm_returns_no_reusable_pattern_yields_empty_l
 @pytest.mark.asyncio
 async def test_distill_transcript_llm_returns_dict_is_validated_into_result(
     monkeypatch,
-):
+) -> None:
     # Nem todo provider devolve JSON limpo — dict bruto deve validar via
     # model_validate, não rejeitado.
     json_text = _distill_json(
@@ -206,7 +212,7 @@ async def test_distill_transcript_llm_returns_dict_is_validated_into_result(
 @pytest.mark.asyncio
 async def test_distill_transcript_llm_returns_malformed_payload_degrades_to_empty(
     monkeypatch,
-):
+) -> None:
     # Payload malformado (JSON com shape errado) — não propaga
     # ValidationError, degrada como qualquer outra falha de LLM.
     monkeypatch.setattr(
@@ -220,7 +226,9 @@ async def test_distill_transcript_llm_returns_malformed_payload_degrades_to_empt
 
 
 @pytest.mark.asyncio
-async def test_distill_transcript_truncates_input_beyond_20000_chars(monkeypatch):
+async def test_distill_transcript_truncates_input_beyond_20000_chars(
+    monkeypatch,
+) -> None:
     huge_transcript = "a" * 25000
     captured_messages: list = []
 
@@ -242,7 +250,9 @@ async def test_distill_transcript_truncates_input_beyond_20000_chars(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_distill_transcript_llm_timeout_degrades_to_empty_result(monkeypatch):
+async def test_distill_transcript_llm_timeout_degrades_to_empty_result(
+    monkeypatch,
+) -> None:
     llm = MagicMock()
     llm.agenerate = AsyncMock(side_effect=TimeoutError("llm demorou demais"))
     monkeypatch.setattr(
@@ -254,7 +264,7 @@ async def test_distill_transcript_llm_timeout_degrades_to_empty_result(monkeypat
     assert result == DistillationResult()
 
 
-def test_dedupe_skill_drafts_nome_com_espacos_internos_nao_e_colapsado():
+def test_dedupe_skill_drafts_nome_com_espacos_internos_nao_e_colapsado() -> None:
     # Borda: normalização é só strip+lower nas pontas, não colapsa espaços
     # internos duplicados — "debug  streaming" != "debug streaming".
     drafts = [SkillDraft(name="Debug  Streaming", description="d", content="c")]
@@ -264,7 +274,9 @@ def test_dedupe_skill_drafts_nome_com_espacos_internos_nao_e_colapsado():
     assert [d.name for d in result] == ["Debug  Streaming"]
 
 
-def test_dedupe_skill_drafts_existing_names_tambem_normalizado_com_espacos_nas_pontas():
+def test_dedupe_skill_drafts_existing_names_tambem_normalizado_com_espacos_nas_pontas() -> (
+    None
+):
     # O lado `existing_names` também passa por strip+lower, não só os
     # drafts — nome vindo do backend com espaço residual ainda casa.
     drafts = [SkillDraft(name="minha skill", description="d", content="c")]
@@ -274,7 +286,7 @@ def test_dedupe_skill_drafts_existing_names_tambem_normalizado_com_espacos_nas_p
     assert result == []
 
 
-def test_dedupe_skill_drafts_muitos_drafts_e_muitos_existentes_ordem_trocada():
+def test_dedupe_skill_drafts_muitos_drafts_e_muitos_existentes_ordem_trocada() -> None:
     # Ordem trocada: existing_names é um set (sem ordem); drafts mantêm a
     # ordem de entrada independente da ordem de iteração do set.
     drafts = [
@@ -291,7 +303,7 @@ def test_dedupe_skill_drafts_muitos_drafts_e_muitos_existentes_ordem_trocada():
 @pytest.mark.asyncio
 async def test_distill_transcript_transcript_so_com_um_caractere_ainda_chama_llm(
     monkeypatch,
-):
+) -> None:
     # Borda: um único caractere não-vazio passa pela checagem `.strip()`
     # e chega a chamar o LLM — só string vazia/whitespace pula a chamada.
     llm = _fake_native_llm(_distill_json())
@@ -310,7 +322,7 @@ async def test_distill_transcript_transcript_so_com_um_caractere_ainda_chama_llm
 # ---------------------------------------------------------------------------
 
 
-def test_dedupe_fact_drafts_removes_facts_already_saved():
+def test_dedupe_fact_drafts_removes_facts_already_saved() -> None:
     facts = ["Usuário prefere respostas em português brasileiro", "Fato novo"]
 
     result = dedupe_fact_drafts(
@@ -320,7 +332,7 @@ def test_dedupe_fact_drafts_removes_facts_already_saved():
     assert result == ["Fato novo"]
 
 
-def test_dedupe_fact_drafts_no_existing_facts_keeps_all_drafts():
+def test_dedupe_fact_drafts_no_existing_facts_keeps_all_drafts() -> None:
     facts = ["Fato A", "Fato B"]
 
     result = dedupe_fact_drafts(facts, [])
@@ -328,13 +340,13 @@ def test_dedupe_fact_drafts_no_existing_facts_keeps_all_drafts():
     assert result == facts
 
 
-def test_dedupe_fact_drafts_empty_drafts_list_returns_empty():
+def test_dedupe_fact_drafts_empty_drafts_list_returns_empty() -> None:
     result = dedupe_fact_drafts([], ["algo"])
 
     assert result == []
 
 
-def test_dedupe_fact_drafts_matches_case_and_edge_whitespace_insensitively():
+def test_dedupe_fact_drafts_matches_case_and_edge_whitespace_insensitively() -> None:
     # Mesma normalização de dedupe_skill_drafts: strip+lower nas pontas —
     # não colapsa espaços internos duplicados.
     facts = ["  Prefere DARK mode  "]
@@ -344,7 +356,7 @@ def test_dedupe_fact_drafts_matches_case_and_edge_whitespace_insensitively():
     assert result == []
 
 
-def test_dedupe_fact_drafts_internal_double_spaces_not_collapsed():
+def test_dedupe_fact_drafts_internal_double_spaces_not_collapsed() -> None:
     facts = ["Prefere  dark mode"]
 
     result = dedupe_fact_drafts(facts, ["prefere dark mode"])
@@ -352,7 +364,7 @@ def test_dedupe_fact_drafts_internal_double_spaces_not_collapsed():
     assert result == ["Prefere  dark mode"]
 
 
-def test_dedupe_fact_drafts_duplicate_facts_within_input_both_removed():
+def test_dedupe_fact_drafts_duplicate_facts_within_input_both_removed() -> None:
     facts = ["Fato X", "fato x"]
 
     result = dedupe_fact_drafts(facts, ["fato x"])
@@ -360,7 +372,7 @@ def test_dedupe_fact_drafts_duplicate_facts_within_input_both_removed():
     assert result == []
 
 
-def test_dedupe_fact_drafts_preserves_order_of_kept_facts():
+def test_dedupe_fact_drafts_preserves_order_of_kept_facts() -> None:
     facts = ["Mantido 1", "Removido", "Mantido 2"]
 
     result = dedupe_fact_drafts(facts, ["removido"])
@@ -368,7 +380,9 @@ def test_dedupe_fact_drafts_preserves_order_of_kept_facts():
     assert result == ["Mantido 1", "Mantido 2"]
 
 
-def test_dedupe_fact_drafts_existing_facts_also_normalized_with_edge_whitespace():
+def test_dedupe_fact_drafts_existing_facts_also_normalized_with_edge_whitespace() -> (
+    None
+):
     facts = ["minha preferência"]
 
     result = dedupe_fact_drafts(facts, ["  Minha Preferência  "])

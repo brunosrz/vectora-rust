@@ -43,7 +43,7 @@ async def test_approval_requires_a_non_empty_human_actor(tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_upsert_draft_refreshes_only_unapproved_plan_and_reads_execution(
     tmp_path,
-):
+) -> None:
     db = await aiosqlite.connect(tmp_path / "dag-draft-view.db")
     store = DAGStore(db)
     await store.setup()
@@ -83,8 +83,10 @@ async def test_upsert_draft_refreshes_only_unapproved_plan_and_reads_execution(
     view = await store.get_plan(plan_id)
     assert view is not None
     assert view["status"] == "approved"
-    assert view["execution"]["stages"][0]["status"] == "passed"
-    assert view["execution"]["stages"][0]["output"] == {"summary": "ok"}
+    execution_view = view["execution"]
+    assert execution_view is not None
+    assert execution_view.get("stages", [])[0]["status"] == "passed"
+    assert execution_view.get("stages", [])[0]["output"] == {"summary": "ok"}
     await db.close()
 
 
@@ -458,7 +460,9 @@ async def test_dag_binds_execution_to_plan_run_and_rejects_reused_key_for_other_
 
 
 @pytest.mark.asyncio
-async def test_dag_rejects_mutated_approved_plan_before_creating_execution(tmp_path):
+async def test_dag_rejects_mutated_approved_plan_before_creating_execution(
+    tmp_path,
+) -> None:
     """A plan aprovado não pode ser alterado entre aprovação e execução."""
     db = await aiosqlite.connect(tmp_path / "dag-integrity.db")
     store = DAGStore(db)
@@ -589,6 +593,8 @@ async def test_dag_cancel_releases_a_claimed_stage_that_has_not_started(
     )
     plan = await store.get_plan(plan_id)
     assert plan is not None
-    assert plan["execution"]["status"] == "cancelled"
-    assert plan["execution"]["stages"][0]["status"] == "cancelled"
+    execution_view = plan["execution"]
+    assert execution_view is not None
+    assert execution_view["status"] == "cancelled"
+    assert execution_view.get("stages", [])[0]["status"] == "cancelled"
     await db.close()

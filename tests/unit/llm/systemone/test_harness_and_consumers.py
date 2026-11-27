@@ -58,6 +58,7 @@ from backend.tools.systemone_tools import (
     systemone_list_patterns,
     systemone_propose_kanban_transition,
 )
+from backend.vtypes.contracts import JsonObject
 from backend.vtypes.documents import Document
 
 
@@ -833,7 +834,7 @@ async def test_revoked_decision_model_requires_human_without_provider_call(
             "decision_model_revoked": True,
         },
     )
-    args = {"path": "secret.txt"}
+    args: JsonObject = {"path": "secret.txt"}
     assert await precompute_tool_risk_assessment(
         harness, tool_name="file_read", ctx=ctx, args=args
     )
@@ -1185,7 +1186,7 @@ async def test_disabled_decision_surface_combination_never_probes_provider(
             },
         },
     )
-    args = {"target": "sensitive-resource"}
+    args: JsonObject = {"target": "sensitive-resource"}
     applicable_surfaces = decision_model_surfaces_for_tool(ctx, tool_name)
     assert applicable_surfaces
     assert not decision_model_enabled_for(ctx, applicable_surfaces)
@@ -1295,7 +1296,7 @@ async def test_systemone_tools_enforce_registered_patterns_and_authenticated_con
 
 
 @pytest.mark.asyncio
-async def test_kanban_decision_tool_respects_surface_preference(monkeypatch):
+async def test_kanban_decision_tool_respects_surface_preference(monkeypatch) -> None:
     from backend.tools import systemone_tools
 
     ctx = ToolContext(

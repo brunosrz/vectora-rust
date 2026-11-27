@@ -12,7 +12,7 @@ from backend.workspace import skills, skills_lock
 
 
 @pytest.fixture(autouse=True)
-def _isolated_skills_dir(tmp_path, monkeypatch):
+def _isolated_skills_dir(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         skills,
         "_skills_dir",
@@ -149,14 +149,7 @@ def test_lock_entry_rejeita_espacos_em_versoes_e_constraints(
 
     entry = skills._skill_lock_entry(skill)
     with pytest.raises(ValueError):
-        skills_lock.resolve_dependencies(
-            {
-                "n": (
-                    str(entry["version"]),
-                    entry["requires_skills"],
-                )
-            }
-        )
+        skills_lock.resolve_dependencies(skills._candidates({"n": entry}))
 
 
 def test_runtime_skill_install_uses_session_scoped_memory(tmp_path) -> None:

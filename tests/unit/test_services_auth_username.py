@@ -37,7 +37,7 @@ def isolate_db(tmp_path, monkeypatch):
     monkeypatch.setattr(auth_mod, "_get_db", _patched_get_db)
     yield
 
-    async def _close():
+    async def _close() -> None:
         if auth_mod._db_conn is not None:
             await auth_mod._db_conn.close()
             auth_mod._db_conn = None
@@ -51,12 +51,12 @@ def _signup(**kw):
     return asyncio.run(auth_svc.signup(**kw))
 
 
-def test_signup_deriva_username_do_nome():
+def test_signup_deriva_username_do_nome() -> None:
     user, _, _ = _signup(email="a@x.com", password="12345678", name="Bruno Soares")
     assert user.username == "brunosoares"
 
 
-def test_segundo_mesmo_nome_recebe_sufixo_de_colisao():
+def test_segundo_mesmo_nome_recebe_sufixo_de_colisao() -> None:
     _signup(email="a@x.com", password="12345678", name="Bruno")
     user2, _, _ = _signup(email="b@x.com", password="12345678", name="Bruno")
     assert user2.username != "bruno"
@@ -66,14 +66,14 @@ def test_segundo_mesmo_nome_recebe_sufixo_de_colisao():
     assert len(suffix) == 4 and suffix.isdigit()
 
 
-def test_signup_com_username_explicito_persiste():
+def test_signup_com_username_explicito_persiste() -> None:
     user, _, _ = _signup(
         email="a@x.com", password="12345678", name="Bruno", username="brunocoder"
     )
     assert user.username == "brunocoder"
 
 
-def test_signup_username_explicito_ja_em_uso_falha():
+def test_signup_username_explicito_ja_em_uso_falha() -> None:
     from backend.rbac.auth import UsernameTakenError
 
     _signup(email="a@x.com", password="12345678", name="Bruno", username="dev")
@@ -83,7 +83,7 @@ def test_signup_username_explicito_ja_em_uso_falha():
         _signup(email="b@x.com", password="12345678", name="Outro", username="dev")
 
 
-def test_username_taken_reflete_estado_do_banco():
+def test_username_taken_reflete_estado_do_banco() -> None:
     from backend.rbac import auth as auth_svc
 
     assert asyncio.run(auth_svc.username_taken("bruno")) is False
@@ -93,7 +93,7 @@ def test_username_taken_reflete_estado_do_banco():
     assert asyncio.run(auth_svc.username_taken("Bruno")) is True
 
 
-def test_suggest_username_devolve_variacao_livre():
+def test_suggest_username_devolve_variacao_livre() -> None:
     from backend.rbac import auth as auth_svc
 
     assert asyncio.run(auth_svc.suggest_username("Bruno")) == "bruno"
@@ -102,7 +102,7 @@ def test_suggest_username_devolve_variacao_livre():
     assert sug.startswith("bruno#") and sug.split("#", 1)[1].isdigit()
 
 
-def test_signin_carrega_username_gravado():
+def test_signin_carrega_username_gravado() -> None:
     from backend.rbac import auth as auth_svc
 
     _signup(email="a@x.com", password="12345678", name="Bruno Soares")
@@ -110,7 +110,7 @@ def test_signin_carrega_username_gravado():
     assert user.username == "brunosoares"
 
 
-def test_get_user_by_id_carrega_username_gravado():
+def test_get_user_by_id_carrega_username_gravado() -> None:
     from backend.rbac import auth as auth_svc
 
     created, _, _ = _signup(email="a@x.com", password="12345678", name="Bruno Soares")
@@ -119,7 +119,7 @@ def test_get_user_by_id_carrega_username_gravado():
     assert fetched.username == "brunosoares"
 
 
-def test_backfill_gera_username_para_row_legada():
+def test_backfill_gera_username_para_row_legada() -> None:
     """Row inserida sem username (schema legado) ganha um no _ensure_schema."""
     from backend.rbac import auth as auth_svc
 

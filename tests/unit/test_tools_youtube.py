@@ -24,6 +24,7 @@ from backend.tools.youtube import (
     get_transcript,
     youtube_frame_at,
 )
+from backend.vtypes.contracts import JsonObject
 
 # ---------------------------------------------------------------------------
 # _extract_video_id — parsing puro
@@ -31,7 +32,9 @@ from backend.tools.youtube import (
 
 
 class TestExtractVideoId:
-    def test_reconhece_as_formas_comuns_de_url_e_rejeita_o_que_nao_e_video(self):
+    def test_reconhece_as_formas_comuns_de_url_e_rejeita_o_que_nao_e_video(
+        self,
+    ) -> None:
         casos = {
             "https://www.youtube.com/watch?v=jNQXAC9IVRw": "jNQXAC9IVRw",
             "https://youtu.be/jNQXAC9IVRw": "jNQXAC9IVRw",
@@ -56,8 +59,8 @@ class TestExtractVideoId:
 
 
 class TestFormatTranscript:
-    def test_formata_com_timestamps_mmss_e_ignora_entradas_vazias(self):
-        entries = [
+    def test_formata_com_timestamps_mmss_e_ignora_entradas_vazias(self) -> None:
+        entries: list[JsonObject] = [
             {"text": "primeiro", "start": 1.2, "duration": 2.0},
             {"text": "  ", "start": 5.0, "duration": 1.0},  # só espaço — some
             {"text": "depois de um minuto", "start": 61.0, "duration": 3.0},
@@ -89,11 +92,11 @@ class TestGetTranscript:
 
         assert mod._audio_suffix(mime_type) == expected_suffix
 
-    async def test_url_invalida_devolve_erro_sem_tocar_em_rede(self):
+    async def test_url_invalida_devolve_erro_sem_tocar_em_rede(self) -> None:
         result = json.loads(await get_transcript(url="https://example.com/x"))
         assert "error" in result
 
-    async def test_com_captions_publicas_usa_o_caminho_leve(self, monkeypatch):
+    async def test_com_captions_publicas_usa_o_caminho_leve(self, monkeypatch) -> None:
         """Caminho feliz: legendas existem — nunca baixa áudio nenhum."""
         import backend.tools.youtube as mod
 
@@ -123,7 +126,7 @@ class TestGetTranscript:
 
     async def test_sem_captions_cai_pro_fallback_de_audio_sem_baixar_video(
         self, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: vídeo sem legendas (exceção da lib) — cai pro
         fallback de áudio, chamando transcribe_audio (LLM), não algum
         download de vídeo."""
@@ -153,7 +156,7 @@ class TestGetTranscript:
         assert args[0][0] == b"audio-bytes"
         assert args[0][2] == "audio/webm"
 
-    async def test_falha_nos_dois_caminhos_vira_erro_tipado(self, monkeypatch):
+    async def test_falha_nos_dois_caminhos_vira_erro_tipado(self, monkeypatch) -> None:
         """Erro/borda: sem legendas E sem conseguir baixar áudio (ex.: vídeo
         indisponível/geobloqueado) — erro legível, nunca traceback cru."""
         import backend.tools.youtube as mod
@@ -183,7 +186,7 @@ class TestGetTranscript:
 
 @pytest.mark.asyncio
 class TestYoutubeFrameAt:
-    async def test_timestamp_negativo_e_erro_sem_tocar_em_rede(self):
+    async def test_timestamp_negativo_e_erro_sem_tocar_em_rede(self) -> None:
         result = json.loads(
             await youtube_frame_at(
                 ctx=ToolContext(thread_id="t1"),
@@ -193,7 +196,7 @@ class TestYoutubeFrameAt:
         )
         assert "error" in result
 
-    async def test_url_invalida_e_erro_sem_tocar_em_rede(self):
+    async def test_url_invalida_e_erro_sem_tocar_em_rede(self) -> None:
         result = json.loads(
             await youtube_frame_at(
                 ctx=ToolContext(thread_id="t1"),
@@ -205,7 +208,7 @@ class TestYoutubeFrameAt:
 
     async def test_baixa_so_um_trecho_curto_e_extrai_o_frame(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Prova que o fluxo é: baixar CLIPE curto (nunca o vídeo inteiro)
         → extrair frame do clipe → persistir → devolver url servível."""
         import backend.tools.youtube as mod
@@ -255,7 +258,7 @@ class TestYoutubeFrameAt:
 
     async def test_aceita_url_de_outra_plataforma_suportada_pelo_ytdlp(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """`video_id` (regex do YouTube) nunca deveria ser um requisito pra
         extrair frame — `_download_clip_sync` já recebe a `url` original e
         funciona com qualquer extrator do yt-dlp. Prova com uma URL do
@@ -293,7 +296,9 @@ class TestYoutubeFrameAt:
 
         assert "error" not in result
 
-    async def test_falha_no_download_do_clipe_vira_erro_tipado(self, monkeypatch):
+    async def test_falha_no_download_do_clipe_vira_erro_tipado(
+        self, monkeypatch
+    ) -> None:
         """Erro/borda: vídeo indisponível/geobloqueado — erro legível, nunca
         traceback cru."""
         import backend.tools.youtube as mod
@@ -324,7 +329,7 @@ class TestYoutubeFrameAt:
 
 @pytest.mark.live
 @pytest.mark.asyncio
-async def test_get_transcript_video_publico_real_via_captions():
+async def test_get_transcript_video_publico_real_via_captions() -> None:
     """ "Me at the zoo" (jNQXAC9IVRw) — primeiro vídeo do YouTube, público,
     permanente, com legendas em inglês. Prova o caminho leve fim a fim
     contra a API real, sem baixar áudio/vídeo nenhum."""
@@ -342,7 +347,7 @@ async def test_get_transcript_video_publico_real_via_captions():
 
 @pytest.mark.live
 @pytest.mark.asyncio
-async def test_youtube_frame_at_video_publico_real_extrai_frame_de_verdade():
+async def test_youtube_frame_at_video_publico_real_extrai_frame_de_verdade() -> None:
     """Baixa um clipe curto real de "Me at the zoo" e extrai um frame PNG
     real — prova o fluxo completo (yt-dlp + ffmpeg) contra a rede/binário
     de verdade, sem nenhum mock."""
@@ -365,7 +370,7 @@ async def test_youtube_frame_at_video_publico_real_extrai_frame_de_verdade():
 
 @pytest.mark.live
 @pytest.mark.asyncio
-async def test_youtube_frame_at_video_youtube_ultracurto_menos_de_15s():
+async def test_youtube_frame_at_video_youtube_ultracurto_menos_de_15s() -> None:
     """ "Shortest Video on Youtube" (tPEE9ZwTmy0) — 1 segundo, público,
     permanente. Prova o requisito de vídeo <15s no próprio YouTube, além
     do "Me at the zoo" (19s) usado acima."""
@@ -388,7 +393,7 @@ async def test_youtube_frame_at_video_youtube_ultracurto_menos_de_15s():
 
 @pytest.mark.live
 @pytest.mark.asyncio
-async def test_youtube_frame_at_plataforma_nao_youtube_archive_org():
+async def test_youtube_frame_at_plataforma_nao_youtube_archive_org() -> None:
     """Internet Archive ("test.m4v", ~10.78s) — hospedagem sem fins
     lucrativos, sem login, permanente. Vimeo foi descartado como
     plataforma de teste: seus fixtures antigos (mantidos no próprio

@@ -42,7 +42,7 @@ def _ok_response(text: str = "Olá", **extra) -> dict:
 
 
 class TestAgenerate:
-    async def test_prompt_simples_devolve_conteudo(self):
+    async def test_prompt_simples_devolve_conteudo(self) -> None:
         def handler(_req):
             return httpx.Response(200, json=_ok_response("Olá da OpenAI"))
 
@@ -53,7 +53,7 @@ class TestAgenerate:
         assert resultado.text() == "Olá da OpenAI"
         assert resultado.role == MessageRole.ASSISTANT
 
-    async def test_resposta_sem_output_vira_erro_tipado(self):
+    async def test_resposta_sem_output_vira_erro_tipado(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"id": "resp_1"})
 
@@ -62,7 +62,9 @@ class TestAgenerate:
 
 
 class TestConversaoDeMensagens:
-    async def test_roles_traduzidos_e_tool_message_vira_function_call_output(self):
+    async def test_roles_traduzidos_e_tool_message_vira_function_call_output(
+        self,
+    ) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -90,7 +92,7 @@ class TestConversaoDeMensagens:
         assert tipos[-1] == "function_call_output"
         assert capturado["input"][-1]["call_id"] == "call_1"
 
-    async def test_bloco_de_imagem_nao_e_descartado(self):
+    async def test_bloco_de_imagem_nao_e_descartado(self) -> None:
         """Regressão: `_to_openai_input` usava `msg.text()`, que só
         concatena blocos `text` — um anexo de imagem desaparecia do payload
         sem erro nem log."""
@@ -119,7 +121,7 @@ class TestConversaoDeMensagens:
             "image_url": "data:image/png;base64,abc",
         } in partes
 
-    async def test_mensagem_de_role_desconhecido_falha(self):
+    async def test_mensagem_de_role_desconhecido_falha(self) -> None:
         def handler(_req):
             return httpx.Response(200, json=_ok_response())
 
@@ -131,7 +133,7 @@ class TestConversaoDeMensagens:
 
 
 class TestToolCalling:
-    async def test_strict_schema_normaliza_opcionais(self):
+    async def test_strict_schema_normaliza_opcionais(self) -> None:
         """`strict:true` exige `additionalProperties:false` e todo campo em
         `required` — campos opcionais viram `type:[tipo, "null"]`."""
         capturado: dict = {}
@@ -165,7 +167,7 @@ class TestToolCalling:
         assert tool["parameters"]["additionalProperties"] is False
         assert set(tool["parameters"]["required"]) == {"query", "limit"}
 
-    async def test_tool_call_nao_streaming_volta_montada(self):
+    async def test_tool_call_nao_streaming_volta_montada(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -191,7 +193,7 @@ class TestToolCalling:
         ]
         assert resultado.finish_reason == "tool_calls"
 
-    async def test_arguments_invalido_nao_derruba_a_resposta(self):
+    async def test_arguments_invalido_nao_derruba_a_resposta(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -217,7 +219,7 @@ class TestToolCalling:
 
 
 class TestStreaming:
-    async def test_chunks_de_texto_saem_na_ordem(self):
+    async def test_chunks_de_texto_saem_na_ordem(self) -> None:
         body = (
             b'data: {"type":"response.output_text.delta","delta":"Oi"}\n\n'
             b'data: {"type":"response.output_text.delta","delta":" mundo"}\n\n'
@@ -239,7 +241,7 @@ class TestStreaming:
 
         assert text == "Oi mundo"
 
-    async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
+    async def test_stream_sem_nenhum_chunk_util_nao_trava(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -262,7 +264,7 @@ class TestStreamingToolCallsEUsage:
     E o caso `.done` sem nenhum delta anterior — ambos precisam reconstruir a
     tool call completa a partir dos ToolCallChunk acumulados."""
 
-    async def test_tool_call_fragmentada_em_varios_deltas_sai_completa(self):
+    async def test_tool_call_fragmentada_em_varios_deltas_sai_completa(self) -> None:
         body = (
             b'data: {"type":"response.output_item.added","item":'
             b'{"id":"item_1","type":"function_call","name":"file_read",'
@@ -295,7 +297,7 @@ class TestStreamingToolCallsEUsage:
         assert fragments == '{"path":"a.py"}'
         assert names == {"file_read"}
 
-    async def test_done_sem_delta_anterior_traz_json_completo(self):
+    async def test_done_sem_delta_anterior_traz_json_completo(self) -> None:
         """Edge case confirmado pela doc oficial: o servidor pode pular os
         deltas e mandar o JSON completo direto no `.done`."""
         body = (
@@ -321,7 +323,7 @@ class TestStreamingToolCallsEUsage:
         assert len(chunks) == 1
         assert chunks[0].tool_call_chunks[0].args_fragment == '{"a":1,"b":2}'
 
-    async def test_usage_do_response_completed_vira_usage_metadata(self):
+    async def test_usage_do_response_completed_vira_usage_metadata(self) -> None:
         body = (
             b'data: {"type":"response.output_text.delta","delta":"oi"}\n\n'
             b'data: {"type":"response.completed","response":'

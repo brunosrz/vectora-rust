@@ -38,6 +38,18 @@ class _FakeQueue:
         self.archived_reason = reason
         return 7
 
+    async def mark_retry(self, queue_id: str) -> None:
+        raise AssertionError("os cenários não repetem a tentativa")
+
+    async def mark_success(self, queue_id: str) -> None:
+        raise AssertionError("os cenários não concluem o item")
+
+    async def mark_failed(self, queue_id: str, reason: str, /) -> None:
+        raise AssertionError("os cenários não marcam falha")
+
+    async def mark_dlq(self, queue_id: str, reason: str, /) -> None:
+        raise AssertionError("os cenários não movem para a DLQ")
+
 
 def _record() -> EmbeddingQueueRecord:
     return EmbeddingQueueRecord(

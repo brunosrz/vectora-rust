@@ -56,7 +56,7 @@ def _fake_request() -> Request:
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_devolve_status_do_kanban(db):
+async def test_get_tasks_devolve_status_do_kanban(db) -> None:
     task = await bg.create_task(
         session_id="s1",
         user_id="u1",
@@ -79,7 +79,7 @@ async def test_get_tasks_devolve_status_do_kanban(db):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_devolve_priority_e_agent_profile_id(db):
+async def test_get_tasks_devolve_priority_e_agent_profile_id(db) -> None:
     """`TaskOut` expõe tenant (workspace_id), assignee (agent_profile_id) e
     priority — os três campos do card do Kanban."""
     await bg.create_task(
@@ -103,7 +103,7 @@ async def test_get_tasks_devolve_priority_e_agent_profile_id(db):
 
 
 @pytest.mark.asyncio
-async def test_post_task_aceita_priority_e_patch_atualiza(db):
+async def test_post_task_aceita_priority_e_patch_atualiza(db) -> None:
     criada = await bg_api.post_task(
         _fake_request(),
         "s1",
@@ -127,7 +127,7 @@ async def test_post_task_aceita_priority_e_patch_atualiza(db):
 
 
 @pytest.mark.asyncio
-async def test_unblock_endpoint_devolve_pra_ready_e_limpa_o_motivo(db):
+async def test_unblock_endpoint_devolve_pra_ready_e_limpa_o_motivo(db) -> None:
     task = await bg.create_task(
         session_id="s1",
         user_id="u1",
@@ -147,7 +147,7 @@ async def test_unblock_endpoint_devolve_pra_ready_e_limpa_o_motivo(db):
 
 
 @pytest.mark.asyncio
-async def test_unblock_endpoint_com_task_de_outra_session_e_404(db):
+async def test_unblock_endpoint_com_task_de_outra_session_e_404(db) -> None:
     """Erro/borda: o mesmo isolamento por `thread_id` que os outros
     endpoints já aplicam (`_require_task`) precisa valer aqui também."""
     task = await bg.create_task(
@@ -167,7 +167,7 @@ async def test_unblock_endpoint_com_task_de_outra_session_e_404(db):
 
 
 @pytest.mark.asyncio
-async def test_bulk_archive_processa_cada_item_isoladamente(db):
+async def test_bulk_archive_processa_cada_item_isoladamente(db) -> None:
     """Feliz: arquiva as 3 tasks selecionadas. Erro/borda: um dos ids não
     existe — as outras 2 completam mesmo assim e a resposta reporta o
     erro por-item, sem abortar o lote inteiro."""
@@ -203,7 +203,7 @@ async def test_bulk_archive_processa_cada_item_isoladamente(db):
 
 
 @pytest.mark.asyncio
-async def test_bulk_com_acao_desconhecida_e_recusado(db):
+async def test_bulk_com_acao_desconhecida_e_recusado(db) -> None:
     """Erro/borda: ação fora de `_BULK_ACTIONS` é rejeitada antes de tocar
     em qualquer task — não existe ação parcial pra um lote inválido."""
     task = await bg.create_task(
@@ -224,7 +224,7 @@ async def test_bulk_com_acao_desconhecida_e_recusado(db):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_devolve_dependencies_com_contador_nm(db):
+async def test_get_tasks_devolve_dependencies_com_contador_nm(db) -> None:
     """`TaskOut.dependencies` é a fonte real do contador N/M no card —
     antes o frontend declarava `blocked_by` mas nada preenchia."""
     pai_pronto = await bg.create_task(
@@ -268,7 +268,7 @@ async def test_get_tasks_devolve_dependencies_com_contador_nm(db):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_sem_dependencia_devolve_lista_vazia(db):
+async def test_get_tasks_sem_dependencia_devolve_lista_vazia(db) -> None:
     """Edge: task sem nenhum pai em `vectora_task_links` não quebra — lista
     vazia, não `None`/erro."""
     await bg.create_task(
@@ -287,7 +287,7 @@ async def test_get_tasks_sem_dependencia_devolve_lista_vazia(db):
 
 
 @pytest.mark.asyncio
-async def test_get_task_runs_filtra_por_task_nao_por_session(db):
+async def test_get_task_runs_filtra_por_task_nao_por_session(db) -> None:
     """`GET /tasks/{id}/runs` — fecha a lacuna registrada no plano: só
     existia `list_runs` por session, sem filtro por card específico."""
     task_a = await bg.create_task(
@@ -327,7 +327,7 @@ async def test_get_task_runs_filtra_por_task_nao_por_session(db):
 
 
 @pytest.mark.asyncio
-async def test_get_task_runs_task_de_outra_session_e_404(db):
+async def test_get_task_runs_task_de_outra_session_e_404(db) -> None:
     """Bad path: task existente mas de outra session não vaza run history —
     mesma checagem de `_require_task` já usada pelos demais endpoints."""
     task = await bg.create_task(
@@ -347,7 +347,7 @@ async def test_get_task_runs_task_de_outra_session_e_404(db):
 
 
 @pytest.mark.asyncio
-async def test_post_comment_aparece_na_listagem_e_corpo_vazio_e_400(db):
+async def test_post_comment_aparece_na_listagem_e_corpo_vazio_e_400(db) -> None:
     task = await bg.create_task(
         session_id="s1",
         user_id="u1",
@@ -377,7 +377,7 @@ async def test_post_comment_aparece_na_listagem_e_corpo_vazio_e_400(db):
 
 
 @pytest.mark.asyncio
-async def test_post_comment_task_inexistente_e_404_nao_500(db):
+async def test_post_comment_task_inexistente_e_404_nao_500(db) -> None:
     with pytest.raises(HTTPException) as exc_info:
         await bg_api.post_comment_endpoint(
             _fake_request(),
@@ -390,7 +390,7 @@ async def test_post_comment_task_inexistente_e_404_nao_500(db):
 
 
 @pytest.mark.asyncio
-async def test_get_comments_task_de_outra_session_e_404(db):
+async def test_get_comments_task_de_outra_session_e_404(db) -> None:
     task = await bg.create_task(
         session_id="s-outra",
         user_id="u1",
@@ -408,7 +408,7 @@ async def test_get_comments_task_de_outra_session_e_404(db):
 
 
 @pytest.mark.asyncio
-async def test_get_events_reflete_transicoes_reais_e_task_inexistente_e_404(db):
+async def test_get_events_reflete_transicoes_reais_e_task_inexistente_e_404(db) -> None:
     task = await bg.create_task(
         session_id="s1",
         user_id="u1",

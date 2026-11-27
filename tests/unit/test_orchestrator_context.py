@@ -15,7 +15,7 @@ def _ws(ws_id: str, name: str, cwd: str, *, git: bool = False) -> SimpleNamespac
     return SimpleNamespace(id=ws_id, name=name, cwd=cwd, is_git_repo=git)
 
 
-def test_overview_lists_workspaces_and_marks_active(monkeypatch):
+def test_overview_lists_workspaces_and_marks_active(monkeypatch) -> None:
     """Lista os workspaces e marca o ativo com ◀; flag git aparece."""
     from backend.workspace import workspace as ws_mod
 
@@ -46,7 +46,7 @@ def test_overview_lists_workspaces_and_marks_active(monkeypatch):
     assert "· git" not in line_b
 
 
-def test_overview_returns_none_when_empty(monkeypatch):
+def test_overview_returns_none_when_empty(monkeypatch) -> None:
     """Erro/borda: sem workspaces registrados → None (nada a injetar)."""
     from backend.workspace import workspace as ws_mod
 
@@ -54,7 +54,7 @@ def test_overview_returns_none_when_empty(monkeypatch):
     assert orchestrator._load_workspaces_overview() is None
 
 
-def test_overview_returns_none_on_registry_error(monkeypatch):
+def test_overview_returns_none_on_registry_error(monkeypatch) -> None:
     """Erro/borda: falha no registry degrada para None, nunca propaga."""
     from backend.workspace import workspace as ws_mod
 
@@ -65,7 +65,7 @@ def test_overview_returns_none_on_registry_error(monkeypatch):
     assert orchestrator._load_workspaces_overview(active_id="x") is None
 
 
-def test_overview_truncates_above_30(monkeypatch):
+def test_overview_truncates_above_30(monkeypatch) -> None:
     """Acima de 30 workspaces, trunca e aponta para workspace_list."""
     from backend.workspace import workspace as ws_mod
 

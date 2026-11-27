@@ -141,7 +141,7 @@ async def test_finalize_usa_o_backend_da_reserva_mesmo_com_configuracao_trocada(
         lambda reservation_id, state: local_finalize.append((reservation_id, state)),
     )
 
-    async def should_not_run(*_args):
+    async def should_not_run(*_args) -> None:
         pytest.fail("reserva SQLite roteada para Postgres")
 
     monkeypatch.setattr(quota, "_finalize_postgres", should_not_run)

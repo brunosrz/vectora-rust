@@ -104,7 +104,7 @@ async def db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _pro_tier_by_default(monkeypatch):
+def _pro_tier_by_default(monkeypatch) -> None:
     """Tarefas `webhook` exigem tier pro — este arquivo cobre o handler
     REST, não o gating em si (coberto em test_services_background.py)."""
     monkeypatch.setenv("VECTORA_LICENSE_BYPASS", "1")
@@ -177,7 +177,7 @@ async def native_session_store(tmp_path):
         await pool.close()
 
 
-async def test_post_task_with_uuid_user_does_not_crash(db):
+async def test_post_task_with_uuid_user_does_not_crash(db) -> None:
     out = await post_task(
         _req(),
         "thread-1",
@@ -215,7 +215,7 @@ async def test_post_task_with_uuid_user_does_not_crash(db):
     assert bad_cron.value.status_code == 400
 
 
-async def test_post_task_aceita_agent_profile_id_do_formulario_de_criacao(db):
+async def test_post_task_aceita_agent_profile_id_do_formulario_de_criacao(db) -> None:
     """``create_task`` (backend/scheduling/background_tasks.py) já suporta
     ``agent_profile_id`` — só o schema HTTP não expõe o campo, então o
     formulário de nova tarefa (campo "assignee") não tinha
@@ -248,7 +248,7 @@ async def test_post_task_aceita_agent_profile_id_do_formulario_de_criacao(db):
     assert sem_assignee.agent_profile_id is None
 
 
-async def test_patch_and_delete_enforce_session_scope(db):
+async def test_patch_and_delete_enforce_session_scope(db) -> None:
     out = await post_task(
         _req(),
         "thread-A",
@@ -548,7 +548,7 @@ async def test_post_task_cannot_recreate_tombstoned_session(
     assert await native_session_store.get_session(thread_id) is None
 
 
-async def test_patch_task_agent_profile_id_atribui_e_desatribui_via_http(db):
+async def test_patch_task_agent_profile_id_atribui_e_desatribui_via_http(db) -> None:
     """O drawer edita assignee depois da criação, campo
     novo em UpdateTaskRequest. Omitir o campo no PATCH não pode apagar um
     assignee já setado — só um PATCH que INCLUI o campo (mesmo como null)
@@ -580,7 +580,7 @@ async def test_patch_task_agent_profile_id_atribui_e_desatribui_via_http(db):
     assert desatribuida.agent_profile_id is None
 
 
-async def test_approve_review_endpoint_move_para_done(db):
+async def test_approve_review_endpoint_move_para_done(db) -> None:
     """Endpoint dedicado de aprovação, não a transição
     genérica de status (que recusa `review→done` de propósito)."""
     from backend.scheduling.kanban import set_status
@@ -611,7 +611,7 @@ async def test_approve_review_endpoint_move_para_done(db):
     assert wrong_session.value.status_code == 404
 
 
-async def test_links_endpoint_adiciona_e_remove_dependencia(db):
+async def test_links_endpoint_adiciona_e_remove_dependencia(db) -> None:
     """`add_dependency` só era chamada internamente
     pela tool `kanban_decompose` do agente, sem rota HTTP nenhuma."""
     pai = await post_task(
@@ -638,7 +638,7 @@ async def test_links_endpoint_adiciona_e_remove_dependencia(db):
     assert updated.dependencies == []
 
 
-async def test_links_endpoint_recusa_ciclo_com_409(db):
+async def test_links_endpoint_recusa_ciclo_com_409(db) -> None:
     """Erro/borda: fechar um ciclo pelo HTTP devolve 409 (conflito com o
     estado do grafo de dependências), não 500 nem um vínculo criado."""
     a = await post_task(
@@ -664,7 +664,7 @@ async def test_links_endpoint_recusa_ciclo_com_409(db):
     assert ciclo.value.status_code == 409
 
 
-async def test_links_endpoint_recusa_task_de_outra_session(db):
+async def test_links_endpoint_recusa_task_de_outra_session(db) -> None:
     """Erro/borda: linkar contra uma task de outra thread vazaria dado
     entre sessions — os dois lados do vínculo precisam pertencer à mesma."""
     out = await post_task(
@@ -689,7 +689,7 @@ async def test_links_endpoint_recusa_task_de_outra_session(db):
     assert wrong_session.value.status_code == 404
 
 
-async def test_task_out_expoe_progress_de_subtasks(db):
+async def test_task_out_expoe_progress_de_subtasks(db) -> None:
     """`TaskOut.progress` é `None` pra task folha e
     `{done, total}` real assim que ela ganha subtasks via links."""
     from backend.scheduling.kanban import set_status
@@ -723,7 +723,7 @@ async def test_task_out_expoe_progress_de_subtasks(db):
     assert tasks[sub.id].progress is None
 
 
-async def test_get_board_agrupa_por_coluna_na_ordem_canonica(db):
+async def test_get_board_agrupa_por_coluna_na_ordem_canonica(db) -> None:
     """Só existia `GET /tasks` (lista plana); agrupar
     por coluna e contar comentários/progress exigia N chamadas
     client-side. `GET /board` devolve tudo numa passada."""
@@ -756,7 +756,7 @@ async def test_get_board_agrupa_por_coluna_na_ordem_canonica(db):
     assert by_status["done"] == []
 
 
-async def test_get_board_expoe_tenants_e_assignees_distintos(db):
+async def test_get_board_expoe_tenants_e_assignees_distintos(db) -> None:
     """Erro/borda: tenants/assignees precisam ser distintos, não uma
     entrada por task — senão os dropdowns de filtro repetiriam o mesmo
     workspace/perfil uma vez por card."""
@@ -791,7 +791,7 @@ async def test_get_board_expoe_tenants_e_assignees_distintos(db):
     assert board.assignees == ["ap1", "ap2"]
 
 
-async def test_get_board_comment_count_e_progress_batelados_nao_por_card(db):
+async def test_get_board_comment_count_e_progress_batelados_nao_por_card(db) -> None:
     """Prova que os agregados vêm em lote — não é só sobre corretude do
     valor (já coberto em test_kanban_model.py), é sobre o board devolver
     o mesmo dado que `GET /tasks` devolveria um por um, só que agrupado."""
@@ -829,13 +829,13 @@ async def test_get_board_comment_count_e_progress_batelados_nao_por_card(db):
 
 async def test_manual_run_creates_run_and_registers_thread(
     db, monkeypatch, native_session_store
-):
+) -> None:
     _patch_native_engine(monkeypatch, session_store=native_session_store, texto="feito")
     await native_session_store.create_session("thread-run", user_id=_UUID)
 
     upserts: list[str] = []
 
-    async def _upsert(thread_id, title=None, workspace_id=None):
+    async def _upsert(thread_id, title=None, workspace_id=None) -> None:
         upserts.append(thread_id)
 
     monkeypatch.setattr("backend.api.handlers.threads._upsert_session", _upsert)
@@ -873,7 +873,7 @@ async def test_manual_run_creates_run_and_registers_thread(
 
 async def test_manual_run_com_subagent_type_roda_a_soul_ate_o_fim(
     db, monkeypatch, native_session_store
-):
+) -> None:
     """Gap real (revisão de 2026-08-30): nenhum teste de integração criava
     uma task com `trigger_config={"subagent_type": ...}` pelo endpoint REST
     de verdade (`post_task`) — só via `bg.create_task` direto em unit. Fecha
@@ -909,7 +909,7 @@ async def test_manual_run_com_subagent_type_roda_a_soul_ate_o_fim(
 
 async def test_resume_run_endpoint_cancel_and_approve(
     db, monkeypatch, native_session_store
-):
+) -> None:
     """POST /runs/{id}/resume: cancela sincronamente (decision='cancel') ou
     enfileira o resume (approve/reject) via BackgroundTasks — mesmo padrão do
     disparo manual. Erro/borda: run inexistente → 404; run que não está

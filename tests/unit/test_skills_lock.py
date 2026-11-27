@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from backend.vtypes.contracts import JsonObject
 from backend.workspace.skills_lock import (
     Version,
     read_lockfile,
@@ -18,7 +19,7 @@ def test_resolves_transitive_dependencies_deterministically(tmp_path) -> None:
     }
     assert resolve_dependencies(candidates) == ["base", "app"]
     lock = tmp_path / ".vectora" / "skills.lock.json"
-    entry: dict[str, object] = {
+    entry: JsonObject = {
         "version": "1.0.0",
         "source": "local",
         "revision": "r1",

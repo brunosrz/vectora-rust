@@ -119,4 +119,8 @@ def test_laya_normalizes_normalized_score_without_levels() -> None:
     normalized = LayaLocalAdapter._normalize_response(
         {"answers": {"score": {"score": 0.5}}}, request
     )
-    assert normalized["answers"]["score"]["score"] == 3.0
+    answers = normalized["answers"]
+    assert isinstance(answers, dict)
+    score = answers["score"]
+    assert isinstance(score, dict)
+    assert score["score"] == 3.0

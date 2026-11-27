@@ -8,7 +8,7 @@ from backend.services import mcp_policy
 
 def test_workspace_rule_overrides_instance_and_empty_blocks(
     monkeypatch, tmp_path: Path
-):
+) -> None:
     monkeypatch.setattr(mcp_policy, "_policy_file", lambda: tmp_path / "policy.json")
     mcp_policy._reset_for_tests()
 
@@ -21,7 +21,7 @@ def test_workspace_rule_overrides_instance_and_empty_blocks(
     assert mcp_policy.evaluate("github", "ws-1").allowed
 
 
-def test_policy_round_trips_version_and_rules(monkeypatch, tmp_path: Path):
+def test_policy_round_trips_version_and_rules(monkeypatch, tmp_path: Path) -> None:
     path = tmp_path / "policy.json"
     monkeypatch.setattr(mcp_policy, "_policy_file", lambda: path)
     mcp_policy._reset_for_tests()
@@ -34,7 +34,7 @@ def test_policy_round_trips_version_and_rules(monkeypatch, tmp_path: Path):
 
 def test_remote_snapshot_replaces_isolated_replica_before_cache_invalidation(
     monkeypatch, tmp_path: Path
-):
+) -> None:
     first_path = tmp_path / "first-policy.json"
     second_path = tmp_path / "second-policy.json"
     published: list[str] = []

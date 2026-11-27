@@ -25,6 +25,8 @@ from backend.tools.git import (
     _git_squash_impl,
     _run_pre_commit_hooks,
 )
+from backend.vtypes.contracts import JsonObject
+from tests.json_values import as_list, as_object
 
 
 def _commit_file(repo: git.Repo, path: Path, name: str, content: str) -> str:
@@ -49,7 +51,7 @@ def repo_with_history(tmp_path: Path) -> git.Repo:
 
 
 class TestCommitAmendBody:
-    def test_amend_substitui_o_ultimo_commit(self, repo_with_history, tmp_path):
+    def test_amend_substitui_o_ultimo_commit(self, repo_with_history, tmp_path) -> None:
         repo = repo_with_history
         original_hash = repo.head.commit.hexsha
         (tmp_path / "a.txt").write_text("a\nmais\n")
@@ -62,7 +64,7 @@ class TestCommitAmendBody:
         assert len(repo.heads.master.commit.parents) == 0  # ainda 1 commit só
         assert repo.head.commit.hexsha != original_hash
 
-    def test_amend_sem_commit_anterior_falha_com_mensagem_clara(self, tmp_path):
+    def test_amend_sem_commit_anterior_falha_com_mensagem_clara(self, tmp_path) -> None:
         repo = git.Repo.init(tmp_path)
         repo.config_writer().set_value("user", "name", "T").release()
         repo.config_writer().set_value("user", "email", "t@t.com").release()
@@ -70,9 +72,9 @@ class TestCommitAmendBody:
         result = _git_commit_impl(repo, message="x", amend=True)
 
         assert result["status"] == "error"
-        assert "anterior" in result["message"].lower()
+        assert "anterior" in str(result["message"]).lower()
 
-    def test_body_concatena_title_e_body(self, tmp_path):
+    def test_body_concatena_title_e_body(self, tmp_path) -> None:
         repo = git.Repo.init(tmp_path)
         repo.config_writer().set_value("user", "name", "T").release()
         repo.config_writer().set_value("user", "email", "t@t.com").release()
@@ -84,7 +86,7 @@ class TestCommitAmendBody:
         assert result["status"] == "ok"
         assert result["message"] == "feat: a\n\ndetalhes aqui"
 
-    def test_sem_body_continua_funcionando(self, tmp_path):
+    def test_sem_body_continua_funcionando(self, tmp_path) -> None:
         repo = git.Repo.init(tmp_path)
         repo.config_writer().set_value("user", "name", "T").release()
         repo.config_writer().set_value("user", "email", "t@t.com").release()
@@ -105,7 +107,7 @@ class TestCommitAmendBody:
 class TestSquash:
     def test_squasha_multiplos_commits_numa_mensagem_so(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         base = repo.head.commit.hexsha
         _commit_file(repo, tmp_path, "b.txt", "b\n")
@@ -120,7 +122,7 @@ class TestSquash:
 
     def test_base_ref_invalida_falha_sem_alterar_o_repo(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         head_before = repo.head.commit.hexsha
 
@@ -129,7 +131,7 @@ class TestSquash:
         assert result["status"] == "error"
         assert repo.head.commit.hexsha == head_before
 
-    def test_base_ref_igual_ao_head_nao_squasha_nada(self, repo_with_history):
+    def test_base_ref_igual_ao_head_nao_squasha_nada(self, repo_with_history) -> None:
         repo = repo_with_history
         head = repo.head.commit.hexsha
 
@@ -144,7 +146,7 @@ class TestSquash:
 
 
 class TestReorder:
-    def test_reordena_dois_commits_locais(self, repo_with_history, tmp_path):
+    def test_reordena_dois_commits_locais(self, repo_with_history, tmp_path) -> None:
         repo = repo_with_history
         sha_b = _commit_file(repo, tmp_path, "b.txt", "b\n")
         sha_c = _commit_file(repo, tmp_path, "c.txt", "c\n")
@@ -157,22 +159,24 @@ class TestReorder:
         assert messages[0] == "add b.txt"
         assert messages[1] == "add c.txt"
 
-    def test_lista_vazia_falha(self, repo_with_history):
+    def test_lista_vazia_falha(self, repo_with_history) -> None:
         result = _git_reorder_impl(repo_with_history, commits=[])
         assert result["status"] == "error"
 
-    def test_commit_raiz_sem_parent_falha_com_mensagem_clara(self, repo_with_history):
+    def test_commit_raiz_sem_parent_falha_com_mensagem_clara(
+        self, repo_with_history
+    ) -> None:
         repo = repo_with_history
         root_sha = repo.head.commit.hexsha
 
         result = _git_reorder_impl(repo, commits=[root_sha])
 
         assert result["status"] == "error"
-        assert "raiz" in result["message"].lower()
+        assert "raiz" in str(result["message"]).lower()
 
     def test_conflito_aborta_e_restaura_head_original(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         # dois commits que tocam a MESMA linha do mesmo arquivo → conflito
         # garantido ao reordenar (cherry-pick de b sobre c, fora de ordem).
@@ -198,7 +202,7 @@ class TestReorder:
 class TestCherryPick:
     def test_cherry_pick_aplica_commit_de_outra_branch(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         repo.git.checkout("-b", "feature")
         sha = _commit_file(repo, tmp_path, "feat.txt", "feat\n")
@@ -211,7 +215,7 @@ class TestCherryPick:
 
     def test_cherry_pick_ja_aplicado_e_idempotente_nao_duplica(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         repo.git.checkout("-b", "feature")
         sha = _commit_file(repo, tmp_path, "feat.txt", "feat\n")
@@ -224,7 +228,9 @@ class TestCherryPick:
         assert result["status"] == "error"
         assert len(list(repo.iter_commits())) == count_before
 
-    def test_no_commit_so_stageia_sem_criar_commit(self, repo_with_history, tmp_path):
+    def test_no_commit_so_stageia_sem_criar_commit(
+        self, repo_with_history, tmp_path
+    ) -> None:
         repo = repo_with_history
         repo.git.checkout("-b", "feature")
         sha = _commit_file(repo, tmp_path, "feat.txt", "feat\n")
@@ -244,11 +250,13 @@ class TestCherryPick:
 
 
 class TestFetchMergeRevertCompare:
-    def test_fetch_remote_inexistente_falha_com_mensagem_clara(self, repo_with_history):
+    def test_fetch_remote_inexistente_falha_com_mensagem_clara(
+        self, repo_with_history
+    ) -> None:
         result = _git_fetch_impl(repo_with_history, remote="origin")
         assert result["status"] == "error"
 
-    def test_merge_fast_forward(self, repo_with_history, tmp_path):
+    def test_merge_fast_forward(self, repo_with_history, tmp_path) -> None:
         repo = repo_with_history
         repo.git.checkout("-b", "feature")
         _commit_file(repo, tmp_path, "feat.txt", "feat\n")
@@ -261,7 +269,7 @@ class TestFetchMergeRevertCompare:
 
     def test_merge_com_conflito_devolve_arquivos_conflitantes(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         repo.git.checkout("-b", "feature")
         (tmp_path / "a.txt").write_text("versao-feature\n")
@@ -275,9 +283,9 @@ class TestFetchMergeRevertCompare:
         result = _git_merge_impl(repo, branch="feature")
 
         assert result["status"] == "conflict"
-        assert "a.txt" in result["conflicted_files"]
+        assert "a.txt" in as_list(result["conflicted_files"])
 
-    def test_revert_cria_commit_inverso(self, repo_with_history, tmp_path):
+    def test_revert_cria_commit_inverso(self, repo_with_history, tmp_path) -> None:
         repo = repo_with_history
         sha = _commit_file(repo, tmp_path, "b.txt", "b\n")
 
@@ -286,7 +294,7 @@ class TestFetchMergeRevertCompare:
         assert result["status"] == "ok"
         assert not (tmp_path / "b.txt").exists()
 
-    def test_revert_no_commit_so_stageia(self, repo_with_history, tmp_path):
+    def test_revert_no_commit_so_stageia(self, repo_with_history, tmp_path) -> None:
         repo = repo_with_history
         sha = _commit_file(repo, tmp_path, "b.txt", "b\n")
         count_before = len(list(repo.iter_commits()))
@@ -298,7 +306,7 @@ class TestFetchMergeRevertCompare:
 
     def test_compare_lista_arquivos_alterados_entre_dois_refs(
         self, repo_with_history, tmp_path
-    ):
+    ) -> None:
         repo = repo_with_history
         base = repo.head.commit.hexsha
         _commit_file(repo, tmp_path, "b.txt", "b\n")
@@ -307,16 +315,16 @@ class TestFetchMergeRevertCompare:
         result = _git_compare_impl(repo, base=base, head=head)
 
         assert result["status"] == "ok"
-        paths = {f["path"] for f in result["files"]}
+        paths = {as_object(f)["path"] for f in as_list(result["files"])}
         assert "b.txt" in paths
 
-    def test_compare_sem_diferenca_devolve_lista_vazia(self, repo_with_history):
+    def test_compare_sem_diferenca_devolve_lista_vazia(self, repo_with_history) -> None:
         head = repo_with_history.head.commit.hexsha
         result = _git_compare_impl(repo_with_history, base=head, head=head)
         assert result["status"] == "ok"
         assert result["files"] == []
 
-    def test_resolve_conflict_ours(self, repo_with_history, tmp_path):
+    def test_resolve_conflict_ours(self, repo_with_history, tmp_path) -> None:
         repo = repo_with_history
         repo.git.checkout("-b", "feature")
         (tmp_path / "a.txt").write_text("versao-feature\n")
@@ -334,7 +342,7 @@ class TestFetchMergeRevertCompare:
         assert result["status"] == "ok"
         assert (tmp_path / "a.txt").read_text() == "versao-master\n"
 
-    def test_resolve_conflict_strategy_invalida_falha(self, repo_with_history):
+    def test_resolve_conflict_strategy_invalida_falha(self, repo_with_history) -> None:
         result = _git_resolve_conflict_impl(
             repo_with_history, path="a.txt", strategy="invalida"
         )
@@ -347,14 +355,14 @@ class TestFetchMergeRevertCompare:
 
 
 class TestCheckoutCreate:
-    def test_create_true_cria_e_troca_para_branch_nova(self, repo_with_history):
+    def test_create_true_cria_e_troca_para_branch_nova(self, repo_with_history) -> None:
         result = _git_checkout_impl(repo_with_history, ref="nova-branch", create=True)
 
         assert result["status"] == "ok"
         assert result["branch"] == "nova-branch"
         assert repo_with_history.active_branch.name == "nova-branch"
 
-    def test_create_false_mantem_comportamento_atual(self, repo_with_history):
+    def test_create_false_mantem_comportamento_atual(self, repo_with_history) -> None:
         repo_with_history.create_head("existente")
         result = _git_checkout_impl(repo_with_history, ref="existente")
         assert result["status"] == "ok"
@@ -367,7 +375,7 @@ class TestCheckoutCreate:
 
 
 class TestCheckHooks:
-    def test_sem_hook_configurado_passa(self, repo_with_history):
+    def test_sem_hook_configurado_passa(self, repo_with_history) -> None:
         result = _run_pre_commit_hooks(repo_with_history)
         assert result["passed"] is True
 
@@ -396,7 +404,7 @@ async def test_agent_git_writes_use_repository_lock(
     running = 0
     maximum = 0
 
-    def write() -> dict[str, str]:
+    def write() -> JsonObject:
         nonlocal running, maximum
         running += 1
         maximum = max(maximum, running)

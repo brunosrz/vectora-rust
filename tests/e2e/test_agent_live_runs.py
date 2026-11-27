@@ -84,7 +84,7 @@ def _thread_id_of(events: list[dict[str, Any]]) -> str:
 
 
 @requires_google
-async def test_qa_simples_real(live_backend: str):
+async def test_qa_simples_real(live_backend: str) -> None:
     events = await _stream_chat(
         live_backend, content="Quanto é 15 + 27? Responda só com o número."
     )
@@ -95,7 +95,7 @@ async def test_qa_simples_real(live_backend: str):
     assert "42" in text
 
 
-async def test_qa_content_ausente_erro_422(live_backend: str):
+async def test_qa_content_ausente_erro_422(live_backend: str) -> None:
     # Par de erro/borda: payload sem `content` (campo obrigatório do
     # StreamChatRequest) — 422 do FastAPI, sem sequer chamar o LLM.
     async with httpx.AsyncClient(base_url=live_backend, timeout=30.0) as client:
@@ -113,7 +113,7 @@ async def test_qa_content_ausente_erro_422(live_backend: str):
 
 @requires_google
 @requires_tavily
-async def test_tool_call_busca_web_real(live_backend: str):
+async def test_tool_call_busca_web_real(live_backend: str) -> None:
     events = await _stream_chat(
         live_backend,
         content=(
@@ -138,7 +138,7 @@ async def test_tool_call_busca_web_real(live_backend: str):
 
 
 @requires_google
-async def test_leitura_escrita_arquivo_real(live_backend: str, tmp_path):
+async def test_leitura_escrita_arquivo_real(live_backend: str, tmp_path) -> None:
     workspace_dir = tmp_path / "agent-workspace"
     workspace_dir.mkdir()
 
@@ -186,7 +186,7 @@ async def test_leitura_escrita_arquivo_real(live_backend: str, tmp_path):
 
 
 @requires_google
-async def test_multiturno_com_contexto_real(live_backend: str):
+async def test_multiturno_com_contexto_real(live_backend: str) -> None:
     codeword = f"zorblatt-{uuid.uuid4().hex[:6]}"
     first = await _stream_chat(
         live_backend,
@@ -213,7 +213,9 @@ async def test_multiturno_com_contexto_real(live_backend: str):
 
 
 @requires_google
-async def test_erro_recuperavel_tool_args_invalidos_real(live_backend: str, tmp_path):
+async def test_erro_recuperavel_tool_args_invalidos_real(
+    live_backend: str, tmp_path
+) -> None:
     workspace_dir = tmp_path / "agent-workspace-erro"
     workspace_dir.mkdir()
 

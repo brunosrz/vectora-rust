@@ -22,7 +22,7 @@ from backend.api.schemas import (
 from backend.llm.transcription import TranscriptionError
 
 
-def test_transcreve_audio_com_sucesso():
+def test_transcreve_audio_com_sucesso() -> None:
     audio_b64 = base64.b64encode(b"fake-audio-bytes").decode()
     request = TranscribeAudioRequest(
         audio_base64=audio_b64, mime_type="audio/webm", filename="ditado.webm"
@@ -42,7 +42,7 @@ def test_transcreve_audio_com_sucesso():
     assert result.text == "olá, isso é um teste"
 
 
-def test_modo_local_nao_chama_provider_remoto():
+def test_modo_local_nao_chama_provider_remoto() -> None:
     audio_b64 = base64.b64encode(b"fake-audio-bytes").decode()
     request = TranscribeAudioRequest(
         audio_base64=audio_b64,
@@ -70,7 +70,9 @@ def test_modo_local_nao_chama_provider_remoto():
     remote.assert_not_called()
 
 
-def test_readiness_local_expoe_dependencia_e_cache_sem_tocar_modelo(monkeypatch):
+def test_readiness_local_expoe_dependencia_e_cache_sem_tocar_modelo(
+    monkeypatch,
+) -> None:
     readiness = {
         "mode": "local",
         "dependency_available": True,
@@ -88,7 +90,7 @@ def test_readiness_local_expoe_dependencia_e_cache_sem_tocar_modelo(monkeypatch)
     assert result == readiness
 
 
-def test_readiness_probe_usa_caminho_explicito(monkeypatch):
+def test_readiness_probe_usa_caminho_explicito(monkeypatch) -> None:
     readiness = {
         "mode": "local",
         "dependency_available": True,
@@ -115,7 +117,7 @@ async def _async_value(value):
 
 def test_local_transcription_readiness_distingue_runtime_de_modelo_cacheado(
     tmp_path, monkeypatch
-):
+) -> None:
     from backend.llm.transcription import local_transcription_readiness
     from backend.settings import settings
 
@@ -150,7 +152,7 @@ def test_local_transcription_readiness_distingue_runtime_de_modelo_cacheado(
 
 def test_local_transcription_probe_runs_cached_model_without_network(
     tmp_path, monkeypatch
-):
+) -> None:
     import sys
     import types
 
@@ -196,7 +198,7 @@ def test_local_transcription_probe_runs_cached_model_without_network(
 
 def test_local_transcription_probe_does_not_load_or_download_missing_model(
     tmp_path, monkeypatch
-):
+) -> None:
     from backend.llm.transcription import _probe_local_transcription_sync
     from backend.settings import settings
 
@@ -209,7 +211,7 @@ def test_local_transcription_probe_does_not_load_or_download_missing_model(
     assert _probe_local_transcription_sync() == "model_missing"
 
 
-def test_local_transcription_readiness_reports_probe_in_progress():
+def test_local_transcription_readiness_reports_probe_in_progress() -> None:
     from backend.llm.transcription import (
         _LOCAL_PROBE_LOCK,
         local_transcription_readiness,
@@ -227,7 +229,7 @@ def test_local_transcription_readiness_reports_probe_in_progress():
 
 def test_local_transcription_probe_reports_timeout_without_claiming_readiness(
     tmp_path, monkeypatch
-):
+) -> None:
     import threading
 
     from backend.llm.transcription import probe_local_transcription_readiness
@@ -264,7 +266,7 @@ def test_local_transcription_probe_reports_timeout_without_claiming_readiness(
 
 def test_local_transcription_readiness_fails_when_dependency_missing(
     tmp_path, monkeypatch
-):
+) -> None:
     from backend.llm.transcription import local_transcription_readiness
     from backend.settings import settings
 
@@ -282,7 +284,7 @@ def test_local_transcription_readiness_fails_when_dependency_missing(
 
 def test_probe_without_dependency_returns_diagnostic_without_loading_model(
     tmp_path, monkeypatch
-):
+) -> None:
     from backend.llm.transcription import probe_local_transcription_readiness
     from backend.settings import settings
 
@@ -298,7 +300,7 @@ def test_probe_without_dependency_returns_diagnostic_without_loading_model(
     assert result["diagnostic"] == "faster-whisper não está instalado"
 
 
-def test_audio_base64_invalido_retorna_422():
+def test_audio_base64_invalido_retorna_422() -> None:
     request = TranscribeAudioRequest(
         audio_base64="!!! não é base64 válido !!!",
         mime_type="audio/webm",
@@ -310,7 +312,7 @@ def test_audio_base64_invalido_retorna_422():
     assert exc.value.status_code == 422
 
 
-def test_audio_base64_acima_do_limite_e_recusado_antes_do_decode():
+def test_audio_base64_acima_do_limite_e_recusado_antes_do_decode() -> None:
     request = TranscribeAudioRequest(
         audio_base64="A" * (_max_base64_length(_ATTACHMENT_MAX_SIZE_AUDIO_BYTES) + 1),
         mime_type="audio/webm",
@@ -322,7 +324,7 @@ def test_audio_base64_acima_do_limite_e_recusado_antes_do_decode():
     assert exc.value.status_code == 413
 
 
-def test_falha_na_transcricao_retorna_502():
+def test_falha_na_transcricao_retorna_502() -> None:
     audio_b64 = base64.b64encode(b"fake-audio-bytes").decode()
     request = TranscribeAudioRequest(audio_base64=audio_b64, mime_type="audio/webm")
 

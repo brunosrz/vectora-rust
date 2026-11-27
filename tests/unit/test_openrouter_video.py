@@ -34,7 +34,7 @@ def _resposta_status(status: str, **extra) -> dict:
 
 class TestInicio:
     @pytest.mark.asyncio
-    async def test_202_devolve_id_e_polling_url(self):
+    async def test_202_devolve_id_e_polling_url(self) -> None:
         def handler(_req):
             return httpx.Response(
                 202,
@@ -54,7 +54,7 @@ class TestInicio:
         assert job.polling_url.endswith("/videos/vid-1")
 
     @pytest.mark.asyncio
-    async def test_resposta_sem_id_vira_erro_tipado(self):
+    async def test_resposta_sem_id_vira_erro_tipado(self) -> None:
         """Erro/borda: sem `id` não há como consultar o progresso — o job
         estaria perdido, rodando e cobrando sem ninguém buscar o resultado."""
 
@@ -65,7 +65,7 @@ class TestInicio:
             await start_video_generation(_client(handler), model="m", prompt="p")
 
     @pytest.mark.asyncio
-    async def test_callback_url_vai_no_payload_quando_informado(self):
+    async def test_callback_url_vai_no_payload_quando_informado(self) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -86,7 +86,7 @@ class TestInicio:
 
 class TestPolling:
     @pytest.mark.asyncio
-    async def test_pending_ate_completed_devolve_a_url_do_video(self):
+    async def test_pending_ate_completed_devolve_a_url_do_video(self) -> None:
         estados = iter(["pending", "in_progress", "in_progress"])
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -114,7 +114,7 @@ class TestPolling:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("estado", ["failed", "cancelled", "expired"])
-    async def test_estado_terminal_de_falha_vira_erro_tipado(self, estado):
+    async def test_estado_terminal_de_falha_vira_erro_tipado(self, estado) -> None:
         """Erro/borda: os três estados terminais que não são `completed`
         precisam sair do loop com erro, não continuar consultando."""
 
@@ -129,7 +129,7 @@ class TestPolling:
             )
 
     @pytest.mark.asyncio
-    async def test_polling_que_nunca_conclui_respeita_o_teto(self):
+    async def test_polling_que_nunca_conclui_respeita_o_teto(self) -> None:
         """Erro/borda crítico: mesma lição do incidente do NATS — loop sem
         teto gira para sempre quando o outro lado nunca conclui."""
         consultas = 0
@@ -153,7 +153,7 @@ class TestPolling:
         assert consultas > 0, "desistiu antes de consultar uma vez sequer"
 
     @pytest.mark.asyncio
-    async def test_status_desconhecido_nao_trava_nem_estoura(self):
+    async def test_status_desconhecido_nao_trava_nem_estoura(self) -> None:
         """Erro/borda: status fora do ciclo documentado (API evoluiu) segue
         sendo tratado como "ainda rodando" até o teto — nunca KeyError."""
 
@@ -172,7 +172,7 @@ class TestPolling:
             )
 
     @pytest.mark.asyncio
-    async def test_completed_sem_output_vira_erro(self):
+    async def test_completed_sem_output_vira_erro(self) -> None:
         """Erro/borda: concluir sem entregar o vídeo é falha, não sucesso."""
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -186,7 +186,7 @@ class TestPolling:
             )
 
     @pytest.mark.asyncio
-    async def test_completed_ja_na_primeira_consulta_nao_espera_a_toa(self):
+    async def test_completed_ja_na_primeira_consulta_nao_espera_a_toa(self) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
             if req.method == "POST":
                 return httpx.Response(202, json={"id": "vid-1", "status": "pending"})

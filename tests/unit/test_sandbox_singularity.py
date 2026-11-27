@@ -24,7 +24,7 @@ def _reset_binary_cache():
     singularity_mod._reset_binary_cache_for_tests()
 
 
-def test_build_command_uses_default_image_and_binds_workspace():
+def test_build_command_uses_default_image_and_binds_workspace() -> None:
     argv = build_singularity_command(
         SandboxPolicy(enabled=True), "/ws", ["ls"], binary="singularity"
     )
@@ -36,7 +36,7 @@ def test_build_command_uses_default_image_and_binds_workspace():
     assert argv[-2:] == ["docker://python:3.13-slim", "ls"]
 
 
-def test_build_command_uses_configured_image():
+def test_build_command_uses_configured_image() -> None:
     argv = build_singularity_command(
         SandboxPolicy(enabled=True, docker_image="docker://node:20-slim"),
         "/ws",
@@ -48,7 +48,7 @@ def test_build_command_uses_configured_image():
     assert "docker://node:20-slim" in argv
 
 
-def test_build_command_always_applies_hardening_flags():
+def test_build_command_always_applies_hardening_flags() -> None:
     argv = build_singularity_command(
         SandboxPolicy(enabled=True), "/ws", ["true"], binary="singularity"
     )
@@ -58,7 +58,7 @@ def test_build_command_always_applies_hardening_flags():
     assert "--writable-tmpfs" in argv
 
 
-def test_build_command_lockdown_adds_net_isolation():
+def test_build_command_lockdown_adds_net_isolation() -> None:
     argv = build_singularity_command(
         SandboxPolicy(enabled=True, lockdown=True),
         "/ws",
@@ -69,7 +69,7 @@ def test_build_command_lockdown_adds_net_isolation():
     assert "--net" in argv
 
 
-def test_build_command_lockdown_false_omits_net_flag():
+def test_build_command_lockdown_false_omits_net_flag() -> None:
     argv = build_singularity_command(
         SandboxPolicy(enabled=True, lockdown=False),
         "/ws",
@@ -81,13 +81,13 @@ def test_build_command_lockdown_false_omits_net_flag():
 
 
 class TestResolveBinary:
-    def test_prefers_singularity_over_apptainer(self, monkeypatch):
+    def test_prefers_singularity_over_apptainer(self, monkeypatch) -> None:
         monkeypatch.setattr(
             singularity_mod.shutil, "which", lambda name: f"/usr/bin/{name}"
         )
         assert _resolve_binary() == "singularity"
 
-    def test_falls_back_to_apptainer(self, monkeypatch):
+    def test_falls_back_to_apptainer(self, monkeypatch) -> None:
         monkeypatch.setattr(
             singularity_mod.shutil,
             "which",
@@ -95,11 +95,11 @@ class TestResolveBinary:
         )
         assert _resolve_binary() == "apptainer"
 
-    def test_none_when_neither_installed(self, monkeypatch):
+    def test_none_when_neither_installed(self, monkeypatch) -> None:
         monkeypatch.setattr(singularity_mod.shutil, "which", lambda _name: None)
         assert _resolve_binary() is None
 
-    def test_result_is_cached(self, monkeypatch):
+    def test_result_is_cached(self, monkeypatch) -> None:
         calls = []
 
         def _which(name: str) -> str | None:
@@ -114,7 +114,9 @@ class TestResolveBinary:
 
 
 @pytest.mark.asyncio
-async def test_neither_binary_installed_returns_clear_error(tmp_path, monkeypatch):
+async def test_neither_binary_installed_returns_clear_error(
+    tmp_path, monkeypatch
+) -> None:
     monkeypatch.setattr(singularity_mod.shutil, "which", lambda _name: None)
 
     result = await run_singularity_sandboxed(
@@ -128,7 +130,7 @@ async def test_neither_binary_installed_returns_clear_error(tmp_path, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_successful_run_returns_output(tmp_path, monkeypatch):
+async def test_successful_run_returns_output(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         singularity_mod.shutil,
         "which",
@@ -151,7 +153,9 @@ async def test_successful_run_returns_output(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch):
+async def test_timeout_kills_process_and_reports_timed_out(
+    tmp_path, monkeypatch
+) -> None:
     monkeypatch.setattr(
         singularity_mod.shutil,
         "which",
@@ -159,7 +163,7 @@ async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch
     )
     proc = MagicMock()
 
-    async def _hang(*_args, **_kwargs):
+    async def _hang(*_args, **_kwargs) -> None:
         import asyncio
 
         await asyncio.sleep(10)
@@ -184,7 +188,7 @@ async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch
 @pytest.mark.asyncio
 async def test_permission_denied_returns_clear_error_not_exception(
     tmp_path, monkeypatch
-):
+) -> None:
     monkeypatch.setattr(
         singularity_mod.shutil,
         "which",

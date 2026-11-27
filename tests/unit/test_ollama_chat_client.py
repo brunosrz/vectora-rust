@@ -20,6 +20,7 @@ from backend.llm.ollama.chat_client import (
 )
 from backend.llm.ollama.client import OllamaClient, OllamaResponseError
 from backend.tools.registry import ToolExtras, vtool
+from backend.vtypes.contracts import JsonValue
 from backend.vtypes.message import (
     ContentBlock,
     MessageRole,
@@ -50,7 +51,7 @@ def _resposta_ok(texto: str = "Olá", **extra) -> dict:
 class TestAgenerate:
     async def test_retries_transient_invalid_tool_json_with_deterministic_temperature(
         self,
-    ):
+    ) -> None:
         calls = 0
 
         def handler(req: httpx.Request):
@@ -94,7 +95,7 @@ class TestAgenerate:
         assert calls == 2
         assert resultado.tool_calls[0].name == "terminal"
 
-    def test_parseia_tool_call_textual_do_template_qwen(self):
+    def test_parseia_tool_call_textual_do_template_qwen(self) -> None:
         chamadas = _parse_textual_tool_calls(
             '{{"name": "terminal", "arguments": {"command": "echo ok"}}}'
         )
@@ -103,7 +104,7 @@ class TestAgenerate:
         assert chamadas[0].name == "terminal"
         assert chamadas[0].args == {"command": "echo ok"}
 
-    def test_parseia_variante_qwen_com_chaves_externas_extras(self):
+    def test_parseia_variante_qwen_com_chaves_externas_extras(self) -> None:
         chamadas = _parse_textual_tool_calls(
             '{{"name": "web_search", "arguments": {"query": "Vectora"}}}}'
         )
@@ -112,7 +113,7 @@ class TestAgenerate:
             ("web_search", {"query": "Vectora"})
         ]
 
-    def test_parseia_tool_call_xml_do_template_qwen(self):
+    def test_parseia_tool_call_xml_do_template_qwen(self) -> None:
         chamadas = _parse_textual_tool_calls(
             '<tool_call>\n{"name":"browser_read_dom","arguments":{}}\n</tool_call>'
         )
@@ -121,7 +122,7 @@ class TestAgenerate:
             ("browser_read_dom", {})
         ]
 
-    def test_catalogo_ollama_grande_e_compactado_preserva_fluxo_core(self):
+    def test_catalogo_ollama_grande_e_compactado_preserva_fluxo_core(self) -> None:
         from backend.nodes.tools import ALL_TOOL_SPECS
 
         selecionadas, compactado = _payload_tools(ALL_TOOL_SPECS)
@@ -132,7 +133,7 @@ class TestAgenerate:
         assert {"terminal", "web_search", "browser_navigate"} <= nomes
         assert "open_terminal" not in nomes
 
-    def test_catalogo_pequeno_nao_e_alterado(self):
+    def test_catalogo_pequeno_nao_e_alterado(self) -> None:
         from backend.nodes.tools import ALL_TOOL_SPECS
 
         selecionadas, compactado = _payload_tools(ALL_TOOL_SPECS[:1])
@@ -140,7 +141,7 @@ class TestAgenerate:
         assert compactado is False
         assert selecionadas == ALL_TOOL_SPECS[:1]
 
-    def test_pedido_que_nomeia_tool_reduz_para_schema_nomeado(self):
+    def test_pedido_que_nomeia_tool_reduz_para_schema_nomeado(self) -> None:
         from backend.nodes.tools import ALL_TOOL_SPECS
 
         selecionadas, compactado = _payload_tools(
@@ -151,7 +152,7 @@ class TestAgenerate:
         assert compactado is True
         assert [spec.name for spec in selecionadas] == ["browser_read_dom"]
 
-    async def test_prompt_simples_devolve_conteudo(self):
+    async def test_prompt_simples_devolve_conteudo(self) -> None:
         def handler(_req):
             return httpx.Response(200, json=_resposta_ok("Olá do Ollama"))
 
@@ -162,7 +163,7 @@ class TestAgenerate:
         assert resultado.text() == "Olá do Ollama"
         assert resultado.role == MessageRole.ASSISTANT
 
-    async def test_resposta_sem_message_vira_erro_tipado(self):
+    async def test_resposta_sem_message_vira_erro_tipado(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"model": "llama3", "done": True})
 
@@ -171,7 +172,7 @@ class TestAgenerate:
 
 
 class TestConversaoDeMensagens:
-    async def test_roles_traduzidos(self):
+    async def test_roles_traduzidos(self) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -194,7 +195,7 @@ class TestConversaoDeMensagens:
         roles = [m["role"] for m in capturado["messages"]]
         assert roles == ["system", "user", "assistant", "tool"]
 
-    async def test_imagem_vai_sem_prefixo_data_url(self):
+    async def test_imagem_vai_sem_prefixo_data_url(self) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -217,7 +218,7 @@ class TestConversaoDeMensagens:
         assert enviado["content"] == "olha essa imagem"
         assert enviado["images"] == ["abc123"]
 
-    async def test_assistant_com_tool_calls_vira_function_arguments(self):
+    async def test_assistant_com_tool_calls_vira_function_arguments(self) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -239,7 +240,7 @@ class TestConversaoDeMensagens:
             {"function": {"name": "somar", "arguments": {"a": 1}}}
         ]
 
-    async def test_mensagem_de_role_desconhecido_falha(self):
+    async def test_mensagem_de_role_desconhecido_falha(self) -> None:
         def handler(_req):
             return httpx.Response(200, json=_resposta_ok())
 
@@ -251,7 +252,9 @@ class TestConversaoDeMensagens:
 
 
 class TestToolCalling:
-    async def test_qwen_preserva_tools_apos_resultado_para_turnos_sequenciais(self):
+    async def test_qwen_preserva_tools_apos_resultado_para_turnos_sequenciais(
+        self,
+    ) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -287,7 +290,7 @@ class TestToolCalling:
         assert "tools" in capturado
         assert capturado["messages"][-1]["role"] == "tool"
 
-    def test_compactacao_preserva_instrucoes_do_workspace(self):
+    def test_compactacao_preserva_instrucoes_do_workspace(self) -> None:
         from backend.llm.ollama.chat_client import _compact_system_prompt
 
         compacted = _compact_system_prompt("REGRA_WORKSPACE_UNICA")
@@ -296,7 +299,7 @@ class TestToolCalling:
 
     @pytest.mark.parametrize("arguments", [[], 0, "not-json"])
     def test_argumentos_falsos_ou_json_invalido_viram_parse_error(
-        self, arguments: list[object] | int | str
+        self, arguments: list[JsonValue] | int | str
     ) -> None:
         calls = _parse_tool_calls(
             [{"function": {"name": "somar", "arguments": arguments}}]
@@ -306,7 +309,7 @@ class TestToolCalling:
         if isinstance(arguments, str):
             assert calls[0].args["_parse_error"] == arguments
 
-    async def test_tool_spec_vira_schema_no_payload(self):
+    async def test_tool_spec_vira_schema_no_payload(self) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -334,7 +337,7 @@ class TestToolCalling:
         assert capturado["options"]["temperature"] == 0.2
         assert capturado["options"]["num_predict"] == 256
 
-    async def test_tool_call_com_arguments_string_e_desserializada(self):
+    async def test_tool_call_com_arguments_string_e_desserializada(self) -> None:
         """Ollama antigo manda `arguments` como string JSON; o moderno já
         manda objeto — os dois precisam funcionar sem estourar."""
 
@@ -367,7 +370,7 @@ class TestToolCalling:
 
 
 class TestStreaming:
-    async def test_chunks_de_texto_saem_na_ordem(self):
+    async def test_chunks_de_texto_saem_na_ordem(self) -> None:
         corpo = (
             b'{"message":{"role":"assistant","content":"Oi"},"done":false}\n'
             b'{"message":{"role":"assistant","content":" mundo"},"done":false}\n'
@@ -390,7 +393,7 @@ class TestStreaming:
 
         assert texto == "Oi mundo"
 
-    async def test_thinking_nao_entra_no_delta_text(self):
+    async def test_thinking_nao_entra_no_delta_text(self) -> None:
         corpo = (
             b'{"message":{"role":"assistant","content":"","thinking":"pensando..."},'
             b'"done":false}\n'
@@ -414,7 +417,7 @@ class TestStreaming:
         assert texto == "resposta"
         assert raciocinio == "pensando..."
 
-    async def test_stream_sem_nenhum_chunk_util_nao_trava(self):
+    async def test_stream_sem_nenhum_chunk_util_nao_trava(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -432,7 +435,7 @@ class TestStreaming:
 
 
 class TestStreamingToolCallsEUsage:
-    async def test_tool_call_textual_no_content_vira_chunk_estruturado(self):
+    async def test_tool_call_textual_no_content_vira_chunk_estruturado(self) -> None:
         corpo = (
             json.dumps(
                 {
@@ -471,7 +474,7 @@ class TestStreamingToolCallsEUsage:
             ("terminal", {"command": "echo ok"})
         ]
 
-    async def test_tool_call_sai_completa_num_unico_chunk(self):
+    async def test_tool_call_sai_completa_num_unico_chunk(self) -> None:
         corpo = (
             b'{"message":{"role":"assistant","content":"","tool_calls":'
             b'[{"function":{"name":"file_read","arguments":{"path":"a.py"}}}]},'
@@ -497,7 +500,7 @@ class TestStreamingToolCallsEUsage:
         assert tool_chunks[0].name == "file_read"
         assert json.loads(tool_chunks[0].args_fragment) == {"path": "a.py"}
 
-    async def test_usage_so_emitido_no_evento_done(self):
+    async def test_usage_so_emitido_no_evento_done(self) -> None:
         corpo = (
             b'{"message":{"role":"assistant","content":"oi"},"done":false}\n'
             b'{"message":{"role":"assistant","content":""},"done":true,'

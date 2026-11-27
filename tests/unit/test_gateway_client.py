@@ -394,7 +394,7 @@ class _AsyncCtx:
     """Async context manager mínimo — envolve um valor síncrono, mesmo
     padrão de `aiohttp.ClientSession()`/`session.ws_connect()`."""
 
-    def __init__(self, value):
+    def __init__(self, value) -> None:
         self._value = value
 
     async def __aenter__(self):

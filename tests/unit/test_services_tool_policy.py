@@ -17,7 +17,7 @@ from backend.storage.sqlite.pool import AsyncConnectionPool
 
 
 @pytest.fixture(autouse=True)
-def iso_dir(tmp_path, monkeypatch):
+def iso_dir(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(tool_policy, "_policy_dir", lambda: tmp_path / "tools")
     monkeypatch.setattr(tool_policy, "_versions", {})
     monkeypatch.setattr(tool_policy, "_version_store", None)
@@ -37,35 +37,35 @@ async def version_store(tmp_path) -> AsyncIterator[SessionStore]:
         await pool.close()
 
 
-async def test_allow_all_by_default():
+async def test_allow_all_by_default() -> None:
     assert tool_policy.is_allowed("u1", "terminal") is True
     assert tool_policy.get_disabled("u1") == []
 
 
-async def test_disable_tool():
+async def test_disable_tool() -> None:
     await tool_policy.set_disabled("u1", ["terminal"])
     assert tool_policy.is_allowed("u1", "terminal") is False
     assert tool_policy.is_allowed("u1", "file_read") is True
 
 
-async def test_get_disabled_returns_list():
+async def test_get_disabled_returns_list() -> None:
     await tool_policy.set_disabled("u1", ["terminal", "file_write"])
     assert set(tool_policy.get_disabled("u1")) == {"terminal", "file_write"}
 
 
-async def test_reenable_by_setting_empty():
+async def test_reenable_by_setting_empty() -> None:
     await tool_policy.set_disabled("u1", ["terminal"])
     await tool_policy.set_disabled("u1", [])
     assert tool_policy.is_allowed("u1", "terminal") is True
 
 
-async def test_users_isolated():
+async def test_users_isolated() -> None:
     await tool_policy.set_disabled("a", ["terminal"])
     assert tool_policy.is_allowed("a", "terminal") is False
     assert tool_policy.is_allowed("b", "terminal") is True
 
 
-async def test_persists_across_reads():
+async def test_persists_across_reads() -> None:
     await tool_policy.set_disabled("u1", ["grep"])
     # Releitura vai ao disco
     assert tool_policy.get_disabled("u1") == ["grep"]
@@ -76,25 +76,25 @@ async def test_persists_across_reads():
 # ---------------------------------------------------------------------------
 
 
-async def test_global_disable_blocks_any_user():
+async def test_global_disable_blocks_any_user() -> None:
     await tool_policy.set_disabled(tool_policy.GLOBAL_SCOPE, ["terminal"])
     assert tool_policy.is_allowed("u1", "terminal") is False
     assert tool_policy.is_allowed("u2", "terminal") is False
     assert tool_policy.is_allowed("local", "terminal") is False
 
 
-async def test_global_disable_does_not_block_other_tools():
+async def test_global_disable_does_not_block_other_tools() -> None:
     await tool_policy.set_disabled(tool_policy.GLOBAL_SCOPE, ["terminal"])
     assert tool_policy.is_allowed("u1", "file_read") is True
 
 
-async def test_global_reenable_by_setting_empty():
+async def test_global_reenable_by_setting_empty() -> None:
     await tool_policy.set_disabled(tool_policy.GLOBAL_SCOPE, ["terminal"])
     await tool_policy.set_disabled(tool_policy.GLOBAL_SCOPE, [])
     assert tool_policy.is_allowed("u1", "terminal") is True
 
 
-async def test_effective_disabled_unions_global_and_user():
+async def test_effective_disabled_unions_global_and_user() -> None:
     await tool_policy.set_disabled(tool_policy.GLOBAL_SCOPE, ["terminal"])
     await tool_policy.set_disabled("u1", ["grep"])
     assert tool_policy.effective_disabled("u1") == {"terminal", "grep"}
@@ -102,12 +102,12 @@ async def test_effective_disabled_unions_global_and_user():
     assert tool_policy.effective_disabled("u2") == {"terminal"}
 
 
-async def test_effective_disabled_without_user_id_is_global_only():
+async def test_effective_disabled_without_user_id_is_global_only() -> None:
     await tool_policy.set_disabled(tool_policy.GLOBAL_SCOPE, ["terminal"])
     assert tool_policy.effective_disabled(None) == {"terminal"}
 
 
-async def test_effective_disabled_empty_by_default():
+async def test_effective_disabled_empty_by_default() -> None:
     assert tool_policy.effective_disabled("u1") == set()
     assert tool_policy.effective_disabled(None) == set()
 
@@ -184,12 +184,12 @@ def roles(monkeypatch):
     return table
 
 
-async def test_sem_restricao_todos_os_roles_usam(roles):
+async def test_sem_restricao_todos_os_roles_usam(roles) -> None:
     roles["m"] = "member"
     assert tool_policy.is_allowed("m", "terminal") is True
 
 
-async def test_tool_liberada_so_para_member_bloqueia_viewer(roles):
+async def test_tool_liberada_so_para_member_bloqueia_viewer(roles) -> None:
     roles.update({"m": "member", "v": "viewer"})
     await tool_policy.set_role_access({"terminal": ["member"]})
 
@@ -199,7 +199,7 @@ async def test_tool_liberada_so_para_member_bloqueia_viewer(roles):
     assert "terminal" not in tool_policy.effective_disabled("m")
 
 
-async def test_admin_e_root_sempre_tem_acesso(roles):
+async def test_admin_e_root_sempre_tem_acesso(roles) -> None:
     roles.update({"a": "admin", "r": "root"})
     await tool_policy.set_role_access({"terminal": []})
 
@@ -207,14 +207,14 @@ async def test_admin_e_root_sempre_tem_acesso(roles):
     assert tool_policy.is_allowed("r", "terminal") is True
 
 
-async def test_role_desconhecido_nao_usa_tool_restrita(roles):
+async def test_role_desconhecido_nao_usa_tool_restrita(roles) -> None:
     await tool_policy.set_role_access({"terminal": ["member"]})
 
     assert tool_policy.is_allowed("fantasma", "terminal") is False
     assert tool_policy.is_allowed("fantasma", "file_read") is True
 
 
-async def test_liberar_todos_os_roles_remove_a_restricao(roles):
+async def test_liberar_todos_os_roles_remove_a_restricao(roles) -> None:
     roles["v"] = "viewer"
     await tool_policy.set_role_access({"terminal": ["member"]})
     await tool_policy.set_role_access({"terminal": ["member", "viewer"]})
@@ -225,7 +225,7 @@ async def test_liberar_todos_os_roles_remove_a_restricao(roles):
 
 async def test_usuario_pode_remover_o_proprio_acesso_mas_nao_recuperar_o_bloqueado(
     roles,
-):
+) -> None:
     roles["m"] = "member"
     await tool_policy.set_role_access({"terminal": []})
     await tool_policy.set_disabled("m", ["file_read"])
@@ -238,14 +238,14 @@ async def test_usuario_pode_remover_o_proprio_acesso_mas_nao_recuperar_o_bloquea
     assert tool_policy.is_allowed("m", "file_read") is False
 
 
-async def test_sessao_local_sem_login_vale_como_root():
+async def test_sessao_local_sem_login_vale_como_root() -> None:
     assert tool_policy.user_role(None) == "root"
     assert tool_policy.user_role("local") == "root"
     await tool_policy.set_role_access({"terminal": []})
     assert tool_policy.is_allowed("local", "terminal") is True
 
 
-async def test_alteracao_de_role_sobe_a_versao_global():
+async def test_alteracao_de_role_sobe_a_versao_global() -> None:
     before = tool_policy.policy_version(tool_policy.GLOBAL_SCOPE)
     await tool_policy.set_role_access({"terminal": ["member"]})
     assert tool_policy.policy_version(tool_policy.GLOBAL_SCOPE) == before + 1

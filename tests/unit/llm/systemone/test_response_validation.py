@@ -18,6 +18,7 @@ from backend.llm.systemone.types import (
     SystemOneResponse,
     parse_systemone_response,
 )
+from backend.vtypes.contracts import JsonValue
 
 
 @pytest.mark.parametrize(
@@ -81,17 +82,18 @@ def test_choice_distribution_matches_request(distribution: dict[str, float]) -> 
             "q": ChoiceQuestion(options=["a", "b"]),
         },
     )
+    envelope: JsonValue = {
+        "answers": {
+            "q": {
+                "type": "choice",
+                "selection": "a",
+                "distribution": {**distribution},
+            }
+        }
+    }
     with pytest.raises(SystemOneValidationError):
         parse_systemone_response(
-            {
-                "answers": {
-                    "q": {
-                        "type": "choice",
-                        "selection": "a",
-                        "distribution": distribution,
-                    }
-                }
-            },
+            envelope,
             request,
             provider="test",
             latency_ms=1,
@@ -144,7 +146,7 @@ def test_empty_answers_require_hitl() -> None:
         {"answers": {"q": {"type": "score", "score": 0.5}}, "usage": []},
     ],
 )
-def test_invalid_envelopes_are_safe(payload: object) -> None:
+def test_invalid_envelopes_are_safe(payload: JsonValue) -> None:
     """Invalid envelopes and usage never escape as untyped exceptions."""
     request = SystemOneRequest(
         model="test",

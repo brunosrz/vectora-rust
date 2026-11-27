@@ -21,7 +21,7 @@ from backend.services.subprocess_sidecar_utils import (
 )
 
 
-def test_sidecar_process_options_isolates_windows_console_group(monkeypatch):
+def test_sidecar_process_options_isolates_windows_console_group(monkeypatch) -> None:
     monkeypatch.setattr(
         "backend.services.subprocess_sidecar_utils.sys.platform", "win32"
     )
@@ -32,7 +32,7 @@ def test_sidecar_process_options_isolates_windows_console_group(monkeypatch):
     assert "start_new_session" not in options
 
 
-def test_sidecar_process_options_isolates_a_posix_process_group(monkeypatch):
+def test_sidecar_process_options_isolates_a_posix_process_group(monkeypatch) -> None:
     monkeypatch.setattr(
         "backend.services.subprocess_sidecar_utils.sys.platform", "linux"
     )
@@ -42,20 +42,20 @@ def test_sidecar_process_options_isolates_a_posix_process_group(monkeypatch):
 
 class TestLazyLock:
     @pytest.mark.asyncio
-    async def test_get_cria_o_lock_sob_demanda_e_reusa(self):
+    async def test_get_cria_o_lock_sob_demanda_e_reusa(self) -> None:
         lazy = LazyLock()
         lock1 = lazy.get()
         lock2 = lazy.get()
         assert lock1 is lock2
 
-    def test_reset_solta_a_referencia(self):
+    def test_reset_solta_a_referencia(self) -> None:
         lazy = LazyLock()
         original = lazy.get()
         lazy.reset()
         assert lazy.get() is not original
 
     @pytest.mark.asyncio
-    async def test_get_funciona_como_lock_de_verdade(self):
+    async def test_get_funciona_como_lock_de_verdade(self) -> None:
         lazy = LazyLock()
         async with lazy.get():
             assert lazy.get().locked() is True
@@ -104,7 +104,7 @@ class TestTerminateGracefully:
         killer.kill.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_termina_gracioso_dentro_do_timeout(self):
+    async def test_termina_gracioso_dentro_do_timeout(self) -> None:
         proc = MagicMock()
         proc.pid = 123
         proc.terminate = MagicMock()
@@ -126,7 +126,7 @@ class TestTerminateGracefully:
         proc.kill.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_timeout_chama_kill(self):
+    async def test_timeout_chama_kill(self) -> None:
         # Erro/borda: processo não morre a tempo do shutdown gracioso —
         # kill() é chamado, sem propagar TimeoutError.
         proc = MagicMock()
@@ -153,7 +153,7 @@ class TestTerminateGracefully:
         proc.kill.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_excecao_inesperada_e_logada_nao_propagada(self):
+    async def test_excecao_inesperada_e_logada_nao_propagada(self) -> None:
         proc = MagicMock()
         proc.pid = 123
         proc.terminate = MagicMock(side_effect=RuntimeError("boom"))
@@ -173,7 +173,9 @@ class TestTerminateGracefully:
         logger.warning.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_process_lookup_error_e_tratado_como_esperado_nao_warning(self):
+    async def test_process_lookup_error_e_tratado_como_esperado_nao_warning(
+        self,
+    ) -> None:
         # Regressão: processo que já saiu sozinho antes do terminate() (comum
         # sob CancelledError encadeado do shutdown do lifespan) não deve virar
         # warning com traceback completo — é caso esperado, idempotente.
@@ -197,7 +199,7 @@ class TestTerminateGracefully:
         logger.warning.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_posix_shutdown_encerra_grupo_de_processos_do_sidecar(self):
+    async def test_posix_shutdown_encerra_grupo_de_processos_do_sidecar(self) -> None:
         proc = MagicMock()
         proc.pid = 43210
         proc.wait = AsyncMock(return_value=None)
@@ -223,7 +225,7 @@ class TestTerminateGracefully:
         proc.wait.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_posix_shutdown_forca_grupo_que_nao_encerra(self):
+    async def test_posix_shutdown_forca_grupo_que_nao_encerra(self) -> None:
         proc = MagicMock()
         proc.pid = 43210
         proc.wait = AsyncMock(return_value=None)

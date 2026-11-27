@@ -40,7 +40,7 @@ def _voyage_client(handler) -> VoyageClient:
 
 class TestCohereEmbeddings:
     @pytest.mark.asyncio
-    async def test_devolve_um_vetor_por_documento_na_ordem(self):
+    async def test_devolve_um_vetor_por_documento_na_ordem(self) -> None:
         captured: dict = {}
 
         def handler(req):
@@ -59,7 +59,7 @@ class TestCohereEmbeddings:
         assert b'"input_type":"search_document"' in captured["body"]
 
     @pytest.mark.asyncio
-    async def test_query_usa_input_type_search_query(self):
+    async def test_query_usa_input_type_search_query(self) -> None:
         captured: dict = {}
 
         def handler(req):
@@ -75,7 +75,7 @@ class TestCohereEmbeddings:
         assert b'"input_type":"search_query"' in captured["body"]
 
     @pytest.mark.asyncio
-    async def test_batch_maior_que_96_pagina_em_multiplas_chamadas(self):
+    async def test_batch_maior_que_96_pagina_em_multiplas_chamadas(self) -> None:
         chamadas: list[int] = []
 
         def handler(req):
@@ -96,7 +96,7 @@ class TestCohereEmbeddings:
         assert chamadas == [96, 54]
 
     @pytest.mark.asyncio
-    async def test_401_vira_excecao_tipada_distinta_de_429(self):
+    async def test_401_vira_excecao_tipada_distinta_de_429(self) -> None:
         def handler_401(_req):
             return httpx.Response(401, json={"message": "invalid api token"})
 
@@ -116,7 +116,7 @@ class TestCohereEmbeddings:
             await emb2.aembed_query("x")
 
     @pytest.mark.asyncio
-    async def test_embeddings_ausente_levanta_erro_tipado_nao_lista_vazia(self):
+    async def test_embeddings_ausente_levanta_erro_tipado_nao_lista_vazia(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"embeddings": {}})
 
@@ -129,7 +129,7 @@ class TestCohereEmbeddings:
 
 class TestVoyageEmbeddings:
     @pytest.mark.asyncio
-    async def test_devolve_um_vetor_por_documento_na_ordem(self):
+    async def test_devolve_um_vetor_por_documento_na_ordem(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -147,7 +147,7 @@ class TestVoyageEmbeddings:
         assert vetores == [[0.1, 0.2], [0.3, 0.4]]
 
     @pytest.mark.asyncio
-    async def test_resposta_fora_de_ordem_e_reordenada_pelo_index(self):
+    async def test_resposta_fora_de_ordem_e_reordenada_pelo_index(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -165,7 +165,7 @@ class TestVoyageEmbeddings:
         assert vetores == [[0.1, 0.2], [0.3, 0.4]]
 
     @pytest.mark.asyncio
-    async def test_401_vira_excecao_tipada_distinta_de_429(self):
+    async def test_401_vira_excecao_tipada_distinta_de_429(self) -> None:
         def handler_401(_req):
             return httpx.Response(401, json={"detail": "invalid key"})
 
@@ -185,7 +185,7 @@ class TestVoyageEmbeddings:
             await emb2.aembed_query("x")
 
     @pytest.mark.asyncio
-    async def test_data_vazio_levanta_erro_tipado_nao_lista_vazia(self):
+    async def test_data_vazio_levanta_erro_tipado_nao_lista_vazia(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"data": []})
 
@@ -194,7 +194,7 @@ class TestVoyageEmbeddings:
             await emb.aembed_documents(["a"])
 
     @pytest.mark.asyncio
-    async def test_indice_faltando_levanta_erro_tipado(self):
+    async def test_indice_faltando_levanta_erro_tipado(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200, json={"data": [{"index": 0, "embedding": [0.1]}]}

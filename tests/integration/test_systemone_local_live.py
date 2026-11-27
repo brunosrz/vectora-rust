@@ -320,7 +320,7 @@ async def test_laya_returns_all_typed_decision_kinds() -> None:
 @pytest.mark.parametrize("scenario", ["read", "destructive"])
 async def test_selected_decision_adapter_live_contract(
     provider, scenario, monkeypatch, record_testsuite_property
-):
+) -> None:
     """Exercise the selected adapter; local chat is not evidence for a cloud adapter."""
     import time
 

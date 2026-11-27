@@ -16,7 +16,7 @@ from backend.sandbox.policy import SandboxPolicy
 @pytest.mark.asyncio
 async def test_missing_bwrap_binary_returns_clear_error_not_exception(
     tmp_path, monkeypatch
-):
+) -> None:
     async def _raise_not_found(*_args, **_kwargs):
         raise FileNotFoundError("bwrap")
 
@@ -33,10 +33,12 @@ async def test_missing_bwrap_binary_returns_clear_error_not_exception(
 
 
 @pytest.mark.asyncio
-async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch):
+async def test_timeout_kills_process_and_reports_timed_out(
+    tmp_path, monkeypatch
+) -> None:
     proc = MagicMock()
 
-    async def _hang(*_args, **_kwargs):
+    async def _hang(*_args, **_kwargs) -> None:
         import asyncio
 
         await asyncio.sleep(10)
@@ -60,7 +62,7 @@ async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch
 @pytest.mark.asyncio
 async def test_successful_run_returns_stdout_stderr_and_exit_code(
     tmp_path, monkeypatch
-):
+) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"ok\n", b""))
     proc.returncode = 0
@@ -78,7 +80,7 @@ async def test_successful_run_returns_stdout_stderr_and_exit_code(
 
 
 @pytest.mark.asyncio
-async def test_nonzero_exit_code_is_propagated(tmp_path, monkeypatch):
+async def test_nonzero_exit_code_is_propagated(tmp_path, monkeypatch) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"", b"comando falhou\n"))
     proc.returncode = 2
@@ -95,7 +97,7 @@ async def test_nonzero_exit_code_is_propagated(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_none_returncode_defaults_to_zero(tmp_path, monkeypatch):
+async def test_none_returncode_defaults_to_zero(tmp_path, monkeypatch) -> None:
     # Borda: processo terminado sem returncode setado (não deveria em teoria
     # acontecer após communicate(), mas o código defende com `or 0`).
     proc = MagicMock()
@@ -113,7 +115,9 @@ async def test_none_returncode_defaults_to_zero(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_invalid_utf8_output_is_replaced_not_raised(tmp_path, monkeypatch):
+async def test_invalid_utf8_output_is_replaced_not_raised(
+    tmp_path, monkeypatch
+) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"\xff\xfe invalid", b""))
     proc.returncode = 0
@@ -132,7 +136,7 @@ async def test_invalid_utf8_output_is_replaced_not_raised(tmp_path, monkeypatch)
 @pytest.mark.asyncio
 async def test_permission_denied_returns_clear_error_not_exception(
     tmp_path, monkeypatch
-):
+) -> None:
     # Erro/borda: bwrap presente mas sem permissão de execução —
     # PermissionError não é FileNotFoundError, precisa degradar igual.
     async def _raise_permission_denied(*_args, **_kwargs):
@@ -152,7 +156,9 @@ async def test_permission_denied_returns_clear_error_not_exception(
 
 
 @pytest.mark.asyncio
-async def test_process_dies_mid_execution_returns_its_exit_code(tmp_path, monkeypatch):
+async def test_process_dies_mid_execution_returns_its_exit_code(
+    tmp_path, monkeypatch
+) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"parcial\n", b"killed\n"))
     proc.returncode = -9
@@ -169,10 +175,12 @@ async def test_process_dies_mid_execution_returns_its_exit_code(tmp_path, monkey
 
 
 @pytest.mark.asyncio
-async def test_zero_timeout_still_returns_timed_out_result(tmp_path, monkeypatch):
+async def test_zero_timeout_still_returns_timed_out_result(
+    tmp_path, monkeypatch
+) -> None:
     proc = MagicMock()
 
-    async def _hang(*_args, **_kwargs):
+    async def _hang(*_args, **_kwargs) -> None:
         import asyncio
 
         await asyncio.sleep(10)
@@ -195,7 +203,7 @@ async def test_zero_timeout_still_returns_timed_out_result(tmp_path, monkeypatch
 @pytest.mark.asyncio
 async def test_comando_bem_sucedido_devolve_stdout_e_exit_code_zero(
     tmp_path, monkeypatch
-):
+) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"ola mundo\n", b""))
     proc.returncode = 0
@@ -215,7 +223,7 @@ async def test_comando_bem_sucedido_devolve_stdout_e_exit_code_zero(
 @pytest.mark.asyncio
 async def test_returncode_none_apos_communicate_vira_exit_code_zero(
     tmp_path, monkeypatch
-):
+) -> None:
     # Borda: proc.returncode pode ficar None mesmo depois de communicate()
     # completar em alguns cenários de mock — `or 0` cobre isso, confirmar.
     proc = MagicMock()
@@ -235,7 +243,7 @@ async def test_returncode_none_apos_communicate_vira_exit_code_zero(
 @pytest.mark.asyncio
 async def test_comando_com_codigo_de_saida_diferente_de_zero_e_preservado(
     tmp_path, monkeypatch
-):
+) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"", b"permission denied\n"))
     proc.returncode = 13
@@ -252,7 +260,9 @@ async def test_comando_com_codigo_de_saida_diferente_de_zero_e_preservado(
 
 
 @pytest.mark.asyncio
-async def test_stdout_com_bytes_invalidos_utf8_nao_quebra_decode(tmp_path, monkeypatch):
+async def test_stdout_com_bytes_invalidos_utf8_nao_quebra_decode(
+    tmp_path, monkeypatch
+) -> None:
     # Erro/borda: saída binária corrompida (ex. comando que imprime bytes
     # crus) não pode levantar UnicodeDecodeError — errors="replace" cobre.
     proc = MagicMock()
@@ -271,7 +281,9 @@ async def test_stdout_com_bytes_invalidos_utf8_nao_quebra_decode(tmp_path, monke
 
 
 @pytest.mark.asyncio
-async def test_comando_vazio_ainda_monta_argv_e_chama_subprocess(tmp_path, monkeypatch):
+async def test_comando_vazio_ainda_monta_argv_e_chama_subprocess(
+    tmp_path, monkeypatch
+) -> None:
     proc = MagicMock()
     proc.communicate = AsyncMock(return_value=(b"", b""))
     proc.returncode = 0
@@ -289,13 +301,13 @@ async def test_comando_vazio_ainda_monta_argv_e_chama_subprocess(tmp_path, monke
 @pytest.mark.asyncio
 async def test_wait_apos_kill_tambem_falha_nao_propaga_excecao_adicional(
     tmp_path, monkeypatch
-):
+) -> None:
     # Erro/borda: se proc.wait() após kill() também levantar, o comportamento
     # de timeout ainda deve ser reportado de forma controlada — aqui
     # garantimos que wait() é aguardado (não apenas kill "fire and forget").
     proc = MagicMock()
 
-    async def _hang(*_args, **_kwargs):
+    async def _hang(*_args, **_kwargs) -> None:
         await asyncio.sleep(10)
 
     proc.communicate = _hang
@@ -317,7 +329,7 @@ async def test_wait_apos_kill_tambem_falha_nao_propaga_excecao_adicional(
 @pytest.mark.asyncio
 async def test_duas_execucoes_concorrentes_nao_compartilham_estado(
     tmp_path, monkeypatch
-):
+) -> None:
     # Concorrência: duas chamadas simultâneas com procs distintos não podem
     # vazar resultado de uma pra outra.
     proc_a = MagicMock()
@@ -354,7 +366,7 @@ class _FakeSeccompFilter:
     sem depender de libseccomp instalada (indisponível neste ambiente de
     dev Windows e no CI)."""
 
-    def __init__(self, defaction):
+    def __init__(self, defaction) -> None:
         self.defaction = defaction
         self.rules: list[tuple[object, str]] = []
 
@@ -363,7 +375,7 @@ class _FakeSeccompFilter:
             raise OSError(f"syscall {name!r} desconhecida nesta arch")
         self.rules.append((action, name))
 
-    def export_bpf(self, fileobj):
+    def export_bpf(self, fileobj) -> None:
         fileobj.write(b"BPF-PROGRAM")
 
 
@@ -386,7 +398,7 @@ def _install_fake_seccomp_module(monkeypatch) -> list[_FakeSeccompFilter]:
     return created
 
 
-def test_seccomp_ausente_degrada_para_none_sem_lancar(monkeypatch):
+def test_seccomp_ausente_degrada_para_none_sem_lancar(monkeypatch) -> None:
     import sys
 
     monkeypatch.setitem(sys.modules, "pyseccomp", None)
@@ -397,7 +409,7 @@ def test_seccomp_ausente_degrada_para_none_sem_lancar(monkeypatch):
     assert result is None
 
 
-def test_seccomp_real_compila_um_programa_bpf_com_as_regras_condicionais():
+def test_seccomp_real_compila_um_programa_bpf_com_as_regras_condicionais() -> None:
     """Com o libseccomp de verdade: o export precisa de um arquivo de verdade
     (um `BytesIO` não tem descritor) e o filtro inclui `ioctl` e `clone`."""
     pytest.importorskip("pyseccomp")
@@ -410,7 +422,7 @@ def test_seccomp_real_compila_um_programa_bpf_com_as_regras_condicionais():
     assert len(result) > 8 * len(DENIED_SYSCALLS)
 
 
-def test_seccomp_presente_nega_todas_as_denied_syscalls(monkeypatch):
+def test_seccomp_presente_nega_todas_as_denied_syscalls(monkeypatch) -> None:
     created = _install_fake_seccomp_module(monkeypatch)
 
     result = sandbox_linux.build_seccomp_filter()
@@ -422,7 +434,7 @@ def test_seccomp_presente_nega_todas_as_denied_syscalls(monkeypatch):
     assert denied_names == set(DENIED_SYSCALLS)
 
 
-def test_seccomp_syscall_desconhecida_na_arch_nao_e_fatal(monkeypatch):
+def test_seccomp_syscall_desconhecida_na_arch_nao_e_fatal(monkeypatch) -> None:
     import sys
     import types
 

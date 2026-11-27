@@ -19,7 +19,7 @@ from backend.vtypes.skill import Skill
 
 
 @pytest.mark.asyncio
-async def test_learn_from_session_missing_thread_id_returns_error():
+async def test_learn_from_session_missing_thread_id_returns_error() -> None:
     result = json.loads(await learn_from_session(ctx=ToolContext()))
 
     assert result["status"] == "error"
@@ -27,7 +27,7 @@ async def test_learn_from_session_missing_thread_id_returns_error():
 
 
 @pytest.mark.asyncio
-async def test_learn_from_session_returns_deduped_proposal(monkeypatch):
+async def test_learn_from_session_returns_deduped_proposal(monkeypatch) -> None:
     from backend.services import agent_factory
 
     monkeypatch.setattr(
@@ -79,7 +79,7 @@ async def test_learn_from_session_returns_deduped_proposal(monkeypatch):
 @pytest.mark.asyncio
 async def test_learn_from_session_no_signal_returns_empty_lists_not_error(
     monkeypatch,
-):
+) -> None:
     from backend.services import agent_factory
 
     monkeypatch.setattr(
@@ -99,7 +99,9 @@ async def test_learn_from_session_no_signal_returns_empty_lists_not_error(
 
 
 @pytest.mark.asyncio
-async def test_install_learned_skill_calls_workspace_skills(monkeypatch, tmp_path):
+async def test_install_learned_skill_calls_workspace_skills(
+    monkeypatch, tmp_path
+) -> None:
     from backend.workspace import skills as skills_module
 
     monkeypatch.setattr(
@@ -125,7 +127,7 @@ async def test_install_learned_skill_calls_workspace_skills(monkeypatch, tmp_pat
 @pytest.mark.asyncio
 async def test_install_learned_skill_duplicate_returns_error_not_exception(
     monkeypatch, tmp_path
-):
+) -> None:
     from backend.workspace import skills as skills_module
 
     monkeypatch.setattr(
@@ -152,7 +154,7 @@ async def test_install_learned_skill_duplicate_returns_error_not_exception(
 @pytest.mark.asyncio
 async def test_install_learned_skill_mirrors_artifact_and_resolves_pending(
     monkeypatch, tmp_path
-):
+) -> None:
     """Instalar uma skill aprovada espelha um artifact na aba Plan e limpa
     a proposta pendente do gatilho automático."""
     from backend.workspace import skills as skills_module
@@ -205,7 +207,7 @@ async def test_install_learned_skill_mirrors_artifact_and_resolves_pending(
 
 
 @pytest.mark.asyncio
-async def test_save_learned_fact_persists_via_save_memory(monkeypatch):
+async def test_save_learned_fact_persists_via_save_memory(monkeypatch) -> None:
     save_memory_calls: list[dict] = []
 
     async def _fake_save_memory(**kwargs: object) -> str:
@@ -240,7 +242,9 @@ async def test_save_learned_fact_persists_via_save_memory(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_save_learned_fact_error_returns_status_error_not_raised(monkeypatch):
+async def test_save_learned_fact_error_returns_status_error_not_raised(
+    monkeypatch,
+) -> None:
     async def _boom_save_memory(**kwargs: object) -> str:
         raise RuntimeError("store indisponível")
 
@@ -263,7 +267,7 @@ async def test_save_learned_fact_error_returns_status_error_not_raised(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_apply_memory_consolidation_writes_section(monkeypatch, tmp_path):
+async def test_apply_memory_consolidation_writes_section(monkeypatch, tmp_path) -> None:
     from backend.scheduling import memory_consolidation
 
     monkeypatch.setattr(memory_consolidation, "memory_dir", lambda: tmp_path)
@@ -293,7 +297,7 @@ async def test_apply_memory_consolidation_writes_section(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_apply_memory_consolidation_invalid_category_returns_error_not_raised(
     monkeypatch, tmp_path
-):
+) -> None:
     from backend.scheduling import memory_consolidation
 
     monkeypatch.setattr(memory_consolidation, "memory_dir", lambda: tmp_path)
@@ -314,7 +318,7 @@ async def test_apply_memory_consolidation_invalid_category_returns_error_not_rai
 @pytest.mark.asyncio
 async def test_apply_memory_consolidation_unchanged_content_returns_unchanged(
     monkeypatch, tmp_path
-):
+) -> None:
     from backend.scheduling import memory_consolidation
 
     (tmp_path / "gotchas.md").write_text("JWT expira rápido.", encoding="utf-8")

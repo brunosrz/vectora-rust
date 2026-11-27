@@ -25,6 +25,7 @@ from backend.services.agent_factory import NativeAgent
 from backend.storage.sqlite.pool import AsyncConnectionPool
 from backend.tools.context import ToolContext
 from backend.tools.registry import ToolRegistry
+from backend.vtypes.contracts import JsonObject
 from backend.vtypes.message import ToolCallChunk, VMessageChunk
 
 _SCHEMA = (
@@ -63,7 +64,7 @@ async def db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _pro_tier_by_default(monkeypatch):
+def _pro_tier_by_default(monkeypatch) -> None:
     """Mantém um tier previsível nos testes do ciclo de vida das tarefas."""
     monkeypatch.setenv("VECTORA_LICENSE_BYPASS", "1")
 
@@ -216,7 +217,7 @@ def _patch_native_engine(
 # ---------------------------------------------------------------------------
 
 
-async def test_create_task_persists_then_validation_rejects_bad_input(db):
+async def test_create_task_persists_then_validation_rejects_bad_input(db) -> None:
     task = await bg.create_task(
         session_id="sess-1",
         user_id="uuid-aaa",
@@ -268,7 +269,7 @@ async def test_create_task_persists_then_validation_rejects_bad_input(db):
         )
 
 
-async def test_create_task_priority_default_e_persistida(db):
+async def test_create_task_priority_default_e_persistida(db) -> None:
     """Prioridade é sinal visual do card do Kanban, propagada de ponta a
     ponta (default 'normal' se omitida)."""
     default_task = await bg.create_task(
@@ -308,7 +309,7 @@ async def test_create_task_priority_default_e_persistida(db):
         )
 
 
-async def test_update_task_priority(db):
+async def test_update_task_priority(db) -> None:
     task = await bg.create_task(
         session_id="s",
         user_id="u",
@@ -328,7 +329,7 @@ async def test_update_task_priority(db):
         await bg.update_task(task.id, priority="nao-existe")
 
 
-async def test_update_task_agent_profile_id_e_atribuivel_e_desatribuivel(db):
+async def test_update_task_agent_profile_id_e_atribuivel_e_desatribuivel(db) -> None:
     """O drawer precisa trocar o assignee depois da
     criação, não só no formulário de nova tarefa. `None` explícito
     precisa funcionar (desatribuir), então `update_task` distingue "campo
@@ -356,7 +357,7 @@ async def test_update_task_agent_profile_id_e_atribuivel_e_desatribuivel(db):
     assert desatribuida.agent_profile_id is None
 
 
-async def test_update_and_delete_roundtrip(db):
+async def test_update_and_delete_roundtrip(db) -> None:
     task = await bg.create_task(
         session_id="s",
         user_id="u",
@@ -384,7 +385,9 @@ async def test_update_and_delete_roundtrip(db):
 
 
 class TestWebhookTask:
-    async def test_free_tier_cria_webhook_local(self, db, monkeypatch, tmp_path):
+    async def test_free_tier_cria_webhook_local(
+        self, db, monkeypatch, tmp_path
+    ) -> None:
         monkeypatch.delenv("VECTORA_LICENSE_BYPASS", raising=False)
         from backend.services import license as lic
 
@@ -400,7 +403,7 @@ class TestWebhookTask:
         )
         assert task.trigger_type == "webhook"
 
-    async def test_outros_triggers_nao_exigem_pro(self, db, monkeypatch):
+    async def test_outros_triggers_nao_exigem_pro(self, db, monkeypatch) -> None:
         """manual/interval/once/subagent seguem livres — só webhook é pago."""
         monkeypatch.delenv("VECTORA_LICENSE_BYPASS", raising=False)
         task = await bg.create_task(
@@ -421,7 +424,7 @@ class TestWebhookTask:
 
 async def test_quota_por_workspace_bloqueia_apos_o_limite_mas_nao_bloqueia_manual(
     db, monkeypatch
-):
+) -> None:
     monkeypatch.setattr(bg, "MAX_SCHEDULED_TASKS_PER_WORKSPACE", 2)
 
     await bg.create_task(
@@ -488,7 +491,7 @@ async def test_quota_por_workspace_bloqueia_apos_o_limite_mas_nao_bloqueia_manua
 # ---------------------------------------------------------------------------
 
 
-def test_next_run_usa_timezone_do_usuario_nao_utc(monkeypatch):
+def test_next_run_usa_timezone_do_usuario_nao_utc(monkeypatch) -> None:
     """Cron é interpretado no fuso do usuário: "todo dia às 9h" pra alguém em
     GMT-3 dispara às 12h UTC, não às 9h UTC (que seria 6h da manhã pra ele)."""
     from datetime import datetime
@@ -519,7 +522,7 @@ def test_next_run_usa_timezone_do_usuario_nao_utc(monkeypatch):
     assert fallback is not None
 
 
-def test_next_run_sem_timezone_configurado_usa_local_do_so(monkeypatch):
+def test_next_run_sem_timezone_configurado_usa_local_do_so(monkeypatch) -> None:
     class _NoTz:
         user_timezone = ""
 
@@ -536,7 +539,7 @@ def test_next_run_sem_timezone_configurado_usa_local_do_so(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_is_stale_so_marca_atraso_alem_da_janela_de_tolerancia():
+def test_is_stale_so_marca_atraso_alem_da_janela_de_tolerancia() -> None:
     from datetime import UTC, datetime, timedelta
 
     now = datetime(2026, 7, 30, 12, 0, tzinfo=UTC)
@@ -555,12 +558,14 @@ def test_is_stale_so_marca_atraso_alem_da_janela_de_tolerancia():
     assert bg._is_stale("não é timestamp", now) is False
 
 
-async def test_tick_pula_interval_atrasada_mas_executa_once_atrasada(db, monkeypatch):
+async def test_tick_pula_interval_atrasada_mas_executa_once_atrasada(
+    db, monkeypatch
+) -> None:
     from datetime import UTC, datetime, timedelta
 
     executed: list[str] = []
 
-    async def _fake_run_task(task, trigger, payload=None):
+    async def _fake_run_task(task, trigger, payload=None) -> None:
         executed.append(task.id)
 
     monkeypatch.setattr(bg, "run_task", _fake_run_task)
@@ -608,7 +613,7 @@ async def test_tick_pula_interval_atrasada_mas_executa_once_atrasada(db, monkeyp
 
 async def test_run_task_invokes_agent_registers_session_and_records_run(
     db, native_session_store, monkeypatch
-):
+) -> None:
     client = _ScriptedChatClient([[_texto_chunk("Tudo certo hoje.")]])
     _patch_native_engine(
         monkeypatch, session_store=native_session_store, chat_client=client
@@ -616,7 +621,7 @@ async def test_run_task_invokes_agent_registers_session_and_records_run(
 
     upserts: list[dict[str, Any]] = []
 
-    async def _fake_upsert(thread_id, title=None, workspace_id=None):
+    async def _fake_upsert(thread_id, title=None, workspace_id=None) -> None:
         upserts.append(
             {"thread_id": thread_id, "title": title, "workspace_id": workspace_id}
         )
@@ -659,7 +664,7 @@ async def test_run_task_invokes_agent_registers_session_and_records_run(
 
 async def test_run_task_watchdog_cancela_ao_final_sem_deixar_task_pendente(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """O watchdog de heartbeat roda no `finally` de
     `run_task`, cobrindo todo caminho de saída (aqui, sucesso). Sem o
     cancelamento, uma task asyncio ficaria viva pra sempre depois de cada
@@ -691,7 +696,7 @@ async def test_run_task_watchdog_cancela_ao_final_sem_deixar_task_pendente(
 
 async def test_run_task_heartbeat_e_chamado_periodicamente_durante_execucao_longa(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Reproduz o bug real: sem o watchdog, uma run que passa do TTL do
     claim (900s) enquanto ainda genuinamente executando seria devolvida
     pra `ready` por `release_stale_claims()` no tick seguinte do
@@ -756,7 +761,7 @@ async def test_run_task_heartbeat_e_chamado_periodicamente_durante_execucao_long
 
 async def test_run_task_com_requires_review_termina_em_review_nao_done(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """`trigger_config.requires_review` desvia o fim de
     uma run bem-sucedida pra `review` em vez de `done` direto."""
     client = _ScriptedChatClient([[_texto_chunk("Pronto pra revisão.")]])
@@ -784,7 +789,7 @@ async def test_run_task_com_requires_review_termina_em_review_nao_done(
 
 async def test_run_task_sem_requires_review_termina_em_done_como_antes(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda: sem o campo (ou `False`), o comportamento pré-existente
     não muda — `done` direto, mesma regressão que quebraria qualquer task
     manual/webhook/once já em produção."""
@@ -812,7 +817,7 @@ async def test_run_task_sem_requires_review_termina_em_done_como_antes(
 
 async def test_run_task_subagent_type_usa_soul_tool_registry_com_o_usuario_da_task(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Regressão do gap real (WS8): a execução de uma task com
     `trigger_config={"subagent_type": ...}` (agendada por
     `schedule_subagent_task`) precisa filtrar as tools da SOUL pelo
@@ -863,12 +868,12 @@ async def test_run_task_subagent_type_usa_soul_tool_registry_com_o_usuario_da_ta
     runs = await bg.list_runs("sess-sub")
     erro = next(r for r in runs if r["task_id"] == task_invalido.id)
     assert erro["status"] == "error"
-    assert "subagent_type inválido" in erro["summary"]
+    assert "subagent_type inválido" in str(erro["summary"])
 
 
 async def test_run_task_isola_worktree_so_quando_a_soul_precisa_e_ha_workspace(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Gap real (revisão de 2026-08-30): nenhum teste exercitava o branch
     `soul.needs_worktree_isolation` (background_tasks.py:933) — a task de
     uma SOUL que edita filesystem/git (ex. `coder`, `needs_worktree_isolation
@@ -921,7 +926,7 @@ async def test_run_task_isola_worktree_so_quando_a_soul_precisa_e_ha_workspace(
 
 async def test_run_task_error_path_records_error_and_skips_session(
     db, native_session_store, monkeypatch
-):
+) -> None:
     client = _ScriptedChatClient(exc=RuntimeError("LLM caiu"))
     _patch_native_engine(
         monkeypatch, session_store=native_session_store, chat_client=client
@@ -929,7 +934,7 @@ async def test_run_task_error_path_records_error_and_skips_session(
 
     called: list[Any] = []
 
-    async def _fake_upsert(*a, **k):
+    async def _fake_upsert(*a, **k) -> None:
         called.append((a, k))
 
     monkeypatch.setattr("backend.api.handlers.threads._upsert_session", _fake_upsert)
@@ -950,7 +955,7 @@ async def test_run_task_error_path_records_error_and_skips_session(
     assert called == []  # não registra thread visível se o agente falhou
     runs = await bg.list_runs("sess-err")
     assert runs[0]["status"] == "error"
-    assert "LLM caiu" in runs[0]["summary"]
+    assert "LLM caiu" in str(runs[0]["summary"])
 
 
 # ---------------------------------------------------------------------------
@@ -960,7 +965,7 @@ async def test_run_task_error_path_records_error_and_skips_session(
 
 async def test_run_task_incrementa_message_count_da_thread(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """A run bem-sucedida chama _increment_message_count(run_thread_id) — é o
     que faz ListThreads (filtra message_count>0) mostrá-la na sidebar.
 
@@ -976,10 +981,10 @@ async def test_run_task_incrementa_message_count_da_thread(
     upserts: list[str] = []
     increments: list[str] = []
 
-    async def _fake_upsert(thread_id, title=None, workspace_id=None, mode=None):
+    async def _fake_upsert(thread_id, title=None, workspace_id=None, mode=None) -> None:
         upserts.append(thread_id)
 
-    async def _fake_increment(thread_id):
+    async def _fake_increment(thread_id) -> None:
         increments.append(thread_id)
 
     monkeypatch.setattr("backend.api.handlers.threads._upsert_session", _fake_upsert)
@@ -1034,7 +1039,7 @@ async def test_run_task_incrementa_message_count_da_thread(
 
 async def test_run_task_reporta_conclusao_na_sessao_mae(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Ao concluir, a run posta uma mensagem ASSISTANT no histórico da sessão
     que criou a task (task.session_id) via SessionStore.append_message — o
     orquestrador principal fica sabendo que a tarefa terminou."""
@@ -1073,7 +1078,7 @@ async def test_run_task_reporta_conclusao_na_sessao_mae(
 
 async def test_report_to_parent_session_pula_sem_sessao_mae(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda: sem session_id (ou session_id == run_thread_id) não reporta
     — não há sessão-mãe distinta pra notificar."""
     _patch_native_engine(monkeypatch, session_store=native_session_store)
@@ -1102,7 +1107,9 @@ async def test_report_to_parent_session_pula_sem_sessao_mae(
     assert await native_session_store.get_history("bg-1") == []
 
 
-async def test_report_to_parent_session_tolera_falha_do_session_store(db, monkeypatch):
+async def test_report_to_parent_session_tolera_falha_do_session_store(
+    db, monkeypatch
+) -> None:
     """Erro/borda: SessionStore falhando (ex.: banco corrompido) não deve
     propagar — report_to_parent_session é best-effort e devolve False."""
 
@@ -1131,7 +1138,7 @@ async def test_report_to_parent_session_tolera_falha_do_session_store(db, monkey
 
 async def test_run_task_interrupt_marks_awaiting_and_resume_completes(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Uma run que pausa em HITL fica 'awaiting_approval' (não 'done') e o
     resume_background_run a retoma até concluir."""
     from backend.tools.context import ToolContext
@@ -1189,8 +1196,8 @@ async def test_run_task_interrupt_marks_awaiting_and_resume_completes(
     assert len(runs) == 1
     assert runs[0]["status"] == "awaiting_approval"
     assert runs[0]["finished_at"] is None  # não terminou — aguarda aprovação
-    assert "escrever_arquivo_bg" in runs[0]["summary"]
-    run_id = runs[0]["id"]
+    assert "escrever_arquivo_bg" in str(runs[0]["summary"])
+    run_id = str(runs[0]["id"])
 
     # Resume aprovando → conclui.
     status = await bg.resume_background_run(run_id, "approve")
@@ -1361,7 +1368,7 @@ async def test_run_completion_rolls_back_when_claim_is_lost(db: str) -> None:
 
 async def test_resume_background_run_rejects_unknown_or_finished_run(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda: resume de run inexistente ou já concluída devolve None sem
     tocar no motor nativo."""
     _patch_native_engine(
@@ -1391,7 +1398,7 @@ async def test_resume_background_run_rejects_unknown_or_finished_run(
     await bg.run_task(task, "manual")  # conclui 'done' (sem interrupt)
     done_run = (await bg.list_runs("sess-fin"))[0]
     assert done_run["status"] == "done"
-    assert await bg.resume_background_run(done_run["id"], "approve") is None
+    assert await bg.resume_background_run(str(done_run["id"]), "approve") is None
 
 
 async def _run_task_ate_pausar(
@@ -1457,7 +1464,7 @@ async def _run_task_ate_pausar(
     # `list_runs_for_task` (não `list_runs(session_id)`) — vários testes
     # reusam o mesmo `session_id` pra runs de tasks diferentes; filtrar por
     # task_id evita pegar a run errada quando duas pausam na mesma sessão.
-    run_id = (await bg.list_runs_for_task(task.id))[0]["id"]
+    run_id = str((await bg.list_runs_for_task(task.id))[0]["id"])
     return task, run_id
 
 
@@ -1563,7 +1570,7 @@ async def test_resume_claim_cancellation_restores_awaiting_state(
 
 async def test_resume_background_run_reject_and_edit_decisions(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """decision='reject' não executa a tool (fica registrado como rejeição);
     decision='edit:<json>' executa com os args editados — ambos concluem."""
     _CHAMADAS_ANOTAR.clear()
@@ -1616,7 +1623,7 @@ async def test_resume_background_run_reject_and_edit_decisions(
 
 async def test_resume_background_run_invalid_decision_marks_error(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda: decision desconhecida levanta ValueError, capturado pelo
     except geral — a run vira 'error' (não fica presa em awaiting_approval) e
     o resume devolve None."""
@@ -1635,7 +1642,7 @@ async def test_resume_background_run_invalid_decision_marks_error(
     run = await bg._get_run(run_id)
     assert run is not None
     assert run["status"] == "error"
-    assert "decision inválida" in run["summary"]
+    assert "decision inválida" in str(run["summary"])
 
     from backend.scheduling import kanban
 
@@ -1646,7 +1653,7 @@ async def test_resume_background_run_invalid_decision_marks_error(
 
 async def test_resume_background_run_repauses_same_turn(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Se o resume dispara OUTRA ação destrutiva no mesmo turno, a run continua
     'awaiting_approval' (não vira 'done') — retomável de novo."""
     _CHAMADAS_ANOTAR.clear()
@@ -1685,12 +1692,12 @@ async def test_resume_background_run_repauses_same_turn(
     run = await bg._get_run(run_id)
     assert run is not None
     assert run["status"] == "awaiting_approval"
-    assert "anotar_bg_repause" in run["summary"]
+    assert "anotar_bg_repause" in str(run["summary"])
 
 
 async def test_resume_background_run_run_conversation_exception_marks_error(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda: exceção durante o `run_conversation` pós-resume marca a
     run como 'error' (não fica presa em awaiting_approval) e devolve None."""
     _CHAMADAS_ANOTAR.clear()
@@ -1717,12 +1724,12 @@ async def test_resume_background_run_run_conversation_exception_marks_error(
     run = await bg._get_run(run_id)
     assert run is not None
     assert run["status"] == "error"
-    assert "modelo indisponível" in run["summary"]
+    assert "modelo indisponível" in str(run["summary"])
 
 
 async def test_resume_background_run_reporta_conclusao_na_sessao_mae(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """report_to_parent_session também é chamado a partir do resume (não só de
     run_task) — a sessão-mãe recebe o aviso de conclusão pós-aprovação."""
     _CHAMADAS_ANOTAR.clear()
@@ -1751,7 +1758,7 @@ async def test_resume_background_run_reporta_conclusao_na_sessao_mae(
     assert "ação concluída" in historico_mae[0].text()
 
 
-async def test_describe_pending_approval_sem_pendencia_e_com_pendencia():
+async def test_describe_pending_approval_sem_pendencia_e_com_pendencia() -> None:
     """Erro/borda: sem pendência (`None`) cai no fallback genérico; com
     pendência, a descrição carrega o nome da tool sinalizada."""
     assert bg._describe_pending_approval(None) == "Aguardando aprovação."
@@ -1771,7 +1778,7 @@ async def test_describe_pending_approval_sem_pendencia_e_com_pendencia():
 # ---------------------------------------------------------------------------
 
 
-async def test_orchestrator_tools_list_status_result(db, monkeypatch):
+async def test_orchestrator_tools_list_status_result(db, monkeypatch) -> None:
     """list_background_tasks/get_task_status/get_task_result devolvem o estado
     das tasks e runs da sessão — o orquestrador principal fica sabendo o que
     está rodando/terminou. Erro/borda: task/run inexistente devolve erro
@@ -1822,7 +1829,9 @@ async def test_orchestrator_tools_list_status_result(db, monkeypatch):
     assert bad_result["status"] == "error"
 
 
-async def test_list_background_tasks_sem_session_id_e_task_sem_run(db, monkeypatch):
+async def test_list_background_tasks_sem_session_id_e_task_sem_run(
+    db, monkeypatch
+) -> None:
     """Erro/borda: contexto sem thread_id → erro tipado (sem exceção). Task que
     nunca rodou aparece com last_run=None (não quebra o dict de latest_by_task)."""
     import json as _json
@@ -1894,7 +1903,7 @@ async def test_cancel_running_run_loses_to_resume_reservation(db: str) -> None:
     assert estado["claim_lock"] == run_id
 
 
-async def test_cancel_and_approve_task_action(db, monkeypatch):
+async def test_cancel_and_approve_task_action(db, monkeypatch) -> None:
     """A ação de cancelamento bloqueia o card e encerra a run pendente."""
     import json as _json
 
@@ -1933,7 +1942,7 @@ async def test_cancel_and_approve_task_action(db, monkeypatch):
     assert estado["claim_lock"] is None
 
 
-async def test_cancel_and_approve_task_action_is_idempotent(db):
+async def test_cancel_and_approve_task_action_is_idempotent(db) -> None:
     """Cancelamento repetido retorna None e erro tipado pela ferramenta."""
     import json as _json
 
@@ -2004,7 +2013,7 @@ async def test_cancel_expired_claim_blocks_task_before_stale_cleanup(
 
 async def test_approve_task_action_approve_reject_edit(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """approve_task_action delega approve/reject/edit para resume_background_run
     (só 'cancel' tinha cobertura via tool até aqui)."""
     import json as _json
@@ -2083,11 +2092,11 @@ async def test_approve_task_action_approve_reject_edit(
 # ---------------------------------------------------------------------------
 
 
-async def test_scheduler_runs_due_and_skips_disabled(db, monkeypatch):
+async def test_scheduler_runs_due_and_skips_disabled(db, monkeypatch) -> None:
     fired: list[str] = []
     from backend.scheduling import kanban
 
-    async def _fake_run(task, trigger_source, payload=None):
+    async def _fake_run(task, trigger_source, payload=None) -> str:
         fired.append(task.id)
         run_id = f"run-{task.id}"
         assert await kanban.claim_task(task.id, run_id)
@@ -2135,13 +2144,13 @@ async def test_scheduler_runs_due_and_skips_disabled(db, monkeypatch):
     assert rescheduled.next_run_at != vencido
 
 
-async def test_scheduler_keeps_running_when_dag_recovery_fails(db, monkeypatch):
+async def test_scheduler_keeps_running_when_dag_recovery_fails(db, monkeypatch) -> None:
     fired: list[str] = []
 
     async def _fail_recovery():
         raise RuntimeError("dag database temporarily unavailable")
 
-    async def _fake_run(task, trigger_source, payload=None):
+    async def _fake_run(task, trigger_source, payload=None) -> str:
         fired.append(task.id)
         return "background-run"
 
@@ -2170,10 +2179,10 @@ async def test_scheduler_keeps_running_when_dag_recovery_fails(db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_dispatch_webhook_matches_provider_and_event(db, monkeypatch):
+async def test_dispatch_webhook_matches_provider_and_event(db, monkeypatch) -> None:
     fired: list[tuple[str, str]] = []
 
-    async def _fake_run(task, trigger_source, payload=None):
+    async def _fake_run(task, trigger_source, payload=None) -> str:
         fired.append((task.id, trigger_source))
         return "bg-x"
 
@@ -2207,7 +2216,7 @@ async def test_dispatch_webhook_matches_provider_and_event(db, monkeypatch):
 
 
 async def _make_issue_sync_anchor(**overrides: Any) -> Any:
-    cfg = {"provider": "github", "events": ["issues"]}
+    cfg: JsonObject = {"provider": "github", "events": ["issues"]}
     cfg.update(overrides.pop("trigger_config", {}))
     return await bg.create_task(
         session_id=overrides.pop("session_id", "s-issues"),
@@ -2221,7 +2230,7 @@ async def _make_issue_sync_anchor(**overrides: Any) -> Any:
     )
 
 
-async def test_issue_opened_creates_kanban_card_without_llm(db):
+async def test_issue_opened_creates_kanban_card_without_llm(db) -> None:
     await _make_issue_sync_anchor()
 
     card = await bg.sync_github_issue_to_kanban(
@@ -2258,7 +2267,7 @@ async def test_issue_opened_creates_kanban_card_without_llm(db):
     )
 
 
-async def test_issue_opened_reentrega_atualiza_em_vez_de_duplicar(db):
+async def test_issue_opened_reentrega_atualiza_em_vez_de_duplicar(db) -> None:
     """Reentrega do mesmo webhook (mesmo issue_number/repo) não duplica o card."""
     await _make_issue_sync_anchor()
 
@@ -2285,7 +2294,7 @@ async def test_issue_opened_reentrega_atualiza_em_vez_de_duplicar(db):
     assert await bg.sync_github_issue_to_kanban("opened", "acme/repo", {}) is None
 
 
-async def test_issue_closed_moves_card_to_done_without_llm(db, monkeypatch):
+async def test_issue_closed_moves_card_to_done_without_llm(db, monkeypatch) -> None:
     calls: list[Any] = []
     monkeypatch.setattr(
         agent_factory, "get_native_agent", lambda *a, **k: calls.append((a, k))
@@ -2313,7 +2322,7 @@ async def test_issue_closed_moves_card_to_done_without_llm(db, monkeypatch):
     assert sem_card is None
 
 
-async def test_issue_reopened_moves_card_back_to_ready(db):
+async def test_issue_reopened_moves_card_back_to_ready(db) -> None:
     await _make_issue_sync_anchor()
     card = await bg.sync_github_issue_to_kanban(
         "opened", "acme/repo", {"number": 11, "title": "Reabrir"}
@@ -2337,7 +2346,9 @@ async def test_issue_reopened_moves_card_back_to_ready(db):
     assert ignorado is None
 
 
-async def test_issue_edited_updates_title_and_instruction_without_status_change(db):
+async def test_issue_edited_updates_title_and_instruction_without_status_change(
+    db,
+) -> None:
     await _make_issue_sync_anchor()
     card = await bg.sync_github_issue_to_kanban(
         "opened", "acme/repo", {"number": 21, "title": "Antigo", "body": "antigo"}
@@ -2377,7 +2388,7 @@ async def _make_observability_sync_anchor(**overrides: Any) -> Any:
     )
 
 
-async def test_alerta_critico_cria_card_em_triage_sem_llm(db, monkeypatch):
+async def test_alerta_critico_cria_card_em_triage_sem_llm(db, monkeypatch) -> None:
     calls: list[Any] = []
     monkeypatch.setattr(
         agent_factory, "get_native_agent", lambda *a, **k: calls.append((a, k))
@@ -2421,7 +2432,7 @@ async def test_alerta_critico_cria_card_em_triage_sem_llm(db, monkeypatch):
     )
 
 
-async def test_alerta_baixo_cria_card_em_todo(db):
+async def test_alerta_baixo_cria_card_em_todo(db) -> None:
     await _make_observability_sync_anchor()
 
     card = await bg.sync_observability_alert_to_kanban(
@@ -2432,7 +2443,7 @@ async def test_alerta_baixo_cria_card_em_todo(db):
     assert card.status == "todo"
 
 
-async def test_reentrega_do_mesmo_external_id_atualiza_em_vez_de_duplicar(db):
+async def test_reentrega_do_mesmo_external_id_atualiza_em_vez_de_duplicar(db) -> None:
     """Mesmo contrato de idempotência do sync de GitHub Issues: reentrega
     do mesmo `external_id` atualiza o card existente, nunca duplica."""
     await _make_observability_sync_anchor()
@@ -2477,7 +2488,7 @@ async def test_reentrega_do_mesmo_external_id_atualiza_em_vez_de_duplicar(db):
 # ---------------------------------------------------------------------------
 
 
-async def test_record_subagent_delegation_creates_anchor_and_run(db):
+async def test_record_subagent_delegation_creates_anchor_and_run(db) -> None:
     await bg.record_subagent_delegation(
         session_id="s1",
         user_id="u1",
@@ -2503,7 +2514,7 @@ async def test_record_subagent_delegation_creates_anchor_and_run(db):
     assert runs[0]["summary"] == "Arquivo criado."
 
 
-async def test_record_subagent_delegation_reuses_anchor_across_calls(db):
+async def test_record_subagent_delegation_reuses_anchor_across_calls(db) -> None:
     """Segunda delegação do mesmo subagente na mesma thread não duplica a âncora."""
     await bg.record_subagent_delegation(
         session_id="s1",
@@ -2530,7 +2541,7 @@ async def test_record_subagent_delegation_reuses_anchor_across_calls(db):
     assert {r["status"] for r in runs} == {"done", "error"}
 
 
-async def test_record_subagent_delegation_tolerates_db_failure(db, monkeypatch):
+async def test_record_subagent_delegation_tolerates_db_failure(db, monkeypatch) -> None:
     """Erro/borda: falha ao persistir nunca deve propagar (best-effort)."""
 
     async def _boom() -> None:
@@ -2554,7 +2565,7 @@ async def test_record_subagent_delegation_tolerates_db_failure(db, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_create_task_status_inicial_e_ready_nao_todo(db):
+async def test_create_task_status_inicial_e_ready_nao_todo(db) -> None:
     """Task recorrente (`next_run_at` futuro definido) nasce com status
     "scheduled", que `claim_task` também aceita — nunca com o DEFAULT
     "todo" do schema, que deixaria o board sempre vazio."""
@@ -2576,7 +2587,7 @@ async def test_create_task_status_inicial_e_ready_nao_todo(db):
     assert persistida.status == "scheduled"
 
 
-async def test_create_task_manual_sem_next_run_nasce_ready(db):
+async def test_create_task_manual_sem_next_run_nasce_ready(db) -> None:
     """Task manual (sem `next_run_at`) já é acionável agora — nasce
     "ready", não "scheduled" (reservado pra quando há data futura)."""
     task = await bg.create_task(
@@ -2593,7 +2604,7 @@ async def test_create_task_manual_sem_next_run_nasce_ready(db):
 
 async def test_run_task_recorrente_volta_pra_ready_ao_concluir(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Tarefa recorrente nunca termina — `done` seria um estado terminal
     errado pra algo que roda de novo amanhã."""
     from backend.scheduling import kanban
@@ -2628,7 +2639,7 @@ async def test_run_task_recorrente_volta_pra_ready_ao_concluir(
 
 async def test_run_task_unica_vira_done_ao_concluir(
     db, native_session_store, monkeypatch
-):
+) -> None:
     from backend.scheduling import kanban
 
     _patch_native_engine(
@@ -2660,7 +2671,7 @@ async def test_run_task_unica_vira_done_ao_concluir(
 
 async def test_run_task_erro_vira_blocked_transient_em_vez_de_travar_em_running(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda: uma run que lança marca o card como `blocked` (motivo
     `transient`, com a mensagem do erro) em vez de deixá-lo preso em
     `running` para sempre."""
@@ -2687,12 +2698,12 @@ async def test_run_task_erro_vira_blocked_transient_em_vez_de_travar_em_running(
     estado = await kanban.get_task_status(task.id)
     assert estado["status"] == "blocked"
     assert estado["block_kind"] == "transient"
-    assert "LLM caiu" in (estado["block_reason"] or "")
+    assert "LLM caiu" in str(estado["block_reason"] or "")
 
 
 async def test_run_task_nao_duplica_quando_claim_ja_foi_tomado(
     db, native_session_store, monkeypatch
-):
+) -> None:
     """Erro/borda de corrida: duas chamadas de `run_task` pra mesma task
     (tick do scheduler + disparo manual quase simultâneo) — a segunda não
     cria uma 2ª run."""
@@ -2729,7 +2740,7 @@ async def test_run_task_nao_duplica_quando_claim_ja_foi_tomado(
     assert runs == []
 
 
-async def test_update_task_toggle_sincroniza_status(db):
+async def test_update_task_toggle_sincroniza_status(db) -> None:
     from backend.scheduling import kanban
 
     task = await bg.create_task(
@@ -2750,7 +2761,7 @@ async def test_update_task_toggle_sincroniza_status(db):
     assert (await kanban.get_task_status(task.id))["status"] == "ready"
 
 
-async def test_update_task_nao_reabilita_por_cima_de_bloqueio_ativo(db):
+async def test_update_task_nao_reabilita_por_cima_de_bloqueio_ativo(db) -> None:
     """Erro/borda: reabilitar uma tarefa bloqueada (ex.: budget estourado)
     não pode fingir que o bloqueio não existe mais."""
     from backend.scheduling import kanban
@@ -2779,7 +2790,7 @@ class TestRunTaskComPerfilDeAgente:
 
     async def test_model_override_do_perfil_e_passado_ao_chat_client(
         self, db, native_session_store, monkeypatch
-    ):
+    ) -> None:
         import aiosqlite
 
         from backend.services import agent_profiles
@@ -2829,7 +2840,7 @@ class TestRunTaskComPerfilDeAgente:
 
     async def test_task_sem_perfil_nao_muda_comportamento(
         self, db, native_session_store, monkeypatch
-    ):
+    ) -> None:
         """Task sem agent_profile_id nunca chama get_profile nem altera o
         model passado."""
         factory = _patch_native_engine(
@@ -2859,7 +2870,7 @@ class TestRunTaskComPerfilDeAgente:
 
     async def test_perfil_apagado_degrada_para_comportamento_padrao(
         self, db, native_session_store, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: agent_profile_id aponta pra um perfil que não existe
         mais (apagado) — a run continua normalmente, sem instrução/modelo
         extra, em vez de falhar."""

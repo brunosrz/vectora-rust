@@ -48,14 +48,16 @@ SEM_SERVICES = "Services desabilitado nesta execução"
         ("POST", "/gateway/revoke", None),
     ],
 )
-def test_rota_do_services_responde_503_sem_tocar_a_rede(client, method, path, body):
+def test_rota_do_services_responde_503_sem_tocar_a_rede(
+    client, method, path, body
+) -> None:
     resposta = client.request(method, path, json=body)
 
     assert resposta.status_code == 503, resposta.text
     assert SEM_SERVICES in resposta.json()["detail"]
 
 
-def test_status_do_gateway_diz_que_esta_desligado_pela_opcao(client):
+def test_status_do_gateway_diz_que_esta_desligado_pela_opcao(client) -> None:
     resposta = client.get("/gateway/status")
 
     assert resposta.status_code == 200
@@ -66,14 +68,14 @@ def test_status_do_gateway_diz_que_esta_desligado_pela_opcao(client):
     }
 
 
-def test_status_da_licenca_informa_que_o_services_esta_desligado(client):
+def test_status_da_licenca_informa_que_o_services_esta_desligado(client) -> None:
     resposta = client.get("/license/status")
 
     assert resposta.status_code == 200
     assert resposta.json()["services_enabled"] is False
 
 
-def test_validar_a_licenca_usa_so_o_cache_local_sem_rede(client, monkeypatch):
+def test_validar_a_licenca_usa_so_o_cache_local_sem_rede(client, monkeypatch) -> None:
     monkeypatch.setenv("VECTORA_TOKEN", "um-token-configurado")
 
     resposta = client.post("/license/validate")
@@ -83,7 +85,7 @@ def test_validar_a_licenca_usa_so_o_cache_local_sem_rede(client, monkeypatch):
     assert resposta.json()["valid"] in {True, False}
 
 
-def test_login_social_nao_consulta_o_broker_do_services(client, monkeypatch):
+def test_login_social_nao_consulta_o_broker_do_services(client, monkeypatch) -> None:
     from backend.api.handlers import oauth
 
     consultas: list[str] = []
@@ -102,7 +104,7 @@ def test_login_social_nao_consulta_o_broker_do_services(client, monkeypatch):
     assert resposta.status_code in {302, 307, 503}
 
 
-def test_com_services_ligado_o_status_informa_true(monkeypatch, tmp_path):
+def test_com_services_ligado_o_status_informa_true(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("VECTORA_NO_SERVICES", raising=False)
     monkeypatch.setenv("VECTORA_AUTH_REQUIRED", "false")
     monkeypatch.setenv("VECTORA_HOME", str(tmp_path))

@@ -26,7 +26,7 @@ def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
 
-    def fake_user(request):
+    def fake_user(request) -> None:
         from types import SimpleNamespace
 
         request.state.user = SimpleNamespace(id="user-123")

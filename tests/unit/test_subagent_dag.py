@@ -325,7 +325,7 @@ async def test_subagent_liveness_marks_child_cancelled(
     """Watchdog cancela a conversa e persiste o estado observável."""
     started = asyncio.Event()
 
-    async def stalled(*_args, **_kwargs):
+    async def stalled(*_args, **_kwargs) -> None:
         started.set()
         await asyncio.Future()
 
@@ -374,7 +374,7 @@ async def test_subagent_hard_interrupt_marks_child_cancelled(
     """Interrupção autorizada cancela a task e persiste cancelled."""
     started = asyncio.Event()
 
-    async def stalled(*_args, **_kwargs):
+    async def stalled(*_args, **_kwargs) -> None:
         started.set()
         await asyncio.Future()
 

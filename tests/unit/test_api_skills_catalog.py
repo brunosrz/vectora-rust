@@ -90,7 +90,7 @@ async def test_get_skills_catalog_skips_entries_without_usable_source(
 
 
 @pytest.mark.asyncio
-async def test_get_skills_catalog_empty_is_not_error(monkeypatch):
+async def test_get_skills_catalog_empty_is_not_error(monkeypatch) -> None:
     monkeypatch.setattr(
         skills_handler.registry_client, "fetch_catalog", AsyncMock(return_value=[])
     )
@@ -178,7 +178,7 @@ class TestSkillsCatalogQueryFilters:
     ]
 
     @pytest.mark.asyncio
-    async def test_q_filtra_por_nome_ou_descricao(self, monkeypatch):
+    async def test_q_filtra_por_nome_ou_descricao(self, monkeypatch) -> None:
         monkeypatch.setattr(
             skills_handler.registry_client,
             "fetch_catalog",
@@ -191,7 +191,7 @@ class TestSkillsCatalogQueryFilters:
         assert result.total == 1
 
     @pytest.mark.asyncio
-    async def test_category_filtra_exato(self, monkeypatch):
+    async def test_category_filtra_exato(self, monkeypatch) -> None:
         monkeypatch.setattr(
             skills_handler.registry_client,
             "fetch_catalog",
@@ -203,7 +203,7 @@ class TestSkillsCatalogQueryFilters:
         assert [entry.id for entry in result.entries] == ["s2"]
 
     @pytest.mark.asyncio
-    async def test_tags_filtra_por_membro_da_lista(self, monkeypatch):
+    async def test_tags_filtra_por_membro_da_lista(self, monkeypatch) -> None:
         monkeypatch.setattr(
             skills_handler.registry_client,
             "fetch_catalog",
@@ -215,7 +215,7 @@ class TestSkillsCatalogQueryFilters:
         assert [entry.id for entry in result.entries] == ["s1"]
 
     @pytest.mark.asyncio
-    async def test_sem_match_devolve_lista_vazia_nao_erro(self, monkeypatch):
+    async def test_sem_match_devolve_lista_vazia_nao_erro(self, monkeypatch) -> None:
         monkeypatch.setattr(
             skills_handler.registry_client,
             "fetch_catalog",

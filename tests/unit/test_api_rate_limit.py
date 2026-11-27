@@ -34,19 +34,19 @@ class TestGetClientIp:
         req.client.host = client_host
         return req
 
-    def test_returns_forwarded_for_when_present(self):
+    def test_returns_forwarded_for_when_present(self) -> None:
         from backend.api.middleware.rate_limit import _get_client_ip
 
         req = self._make_request(headers={"X-Forwarded-For": "10.0.0.1, 192.168.0.1"})
         assert _get_client_ip(req) == "10.0.0.1"
 
-    def test_returns_client_host_when_no_forwarded(self):
+    def test_returns_client_host_when_no_forwarded(self) -> None:
         from backend.api.middleware.rate_limit import _get_client_ip
 
         req = self._make_request(headers={}, client_host="192.168.1.5")
         assert _get_client_ip(req) == "192.168.1.5"
 
-    def test_returns_unknown_when_no_client(self):
+    def test_returns_unknown_when_no_client(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.middleware.rate_limit import _get_client_ip
@@ -63,7 +63,7 @@ class TestGetClientIp:
 
 
 class TestAttachLimiter:
-    def test_attach_does_not_raise(self):
+    def test_attach_does_not_raise(self) -> None:
         from fastapi import FastAPI
 
         from backend.api.middleware.rate_limit import attach_limiter
@@ -71,7 +71,7 @@ class TestAttachLimiter:
         app = FastAPI()
         attach_limiter(app)  # Não deve levantar exceção
 
-    def test_limiter_attached_to_app_state(self):
+    def test_limiter_attached_to_app_state(self) -> None:
         from fastapi import FastAPI
 
         from backend.api.middleware.rate_limit import attach_limiter
@@ -89,7 +89,7 @@ class TestAttachLimiter:
 
 
 class TestGetLimiter:
-    def test_returns_none_when_no_limiter(self):
+    def test_returns_none_when_no_limiter(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.middleware.rate_limit import get_limiter
@@ -99,7 +99,7 @@ class TestGetLimiter:
         result = get_limiter(req)
         assert result is None
 
-    def test_returns_limiter_when_present(self):
+    def test_returns_limiter_when_present(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.middleware.rate_limit import get_limiter

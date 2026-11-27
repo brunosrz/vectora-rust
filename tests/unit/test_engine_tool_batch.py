@@ -143,7 +143,7 @@ class TestDespachoParaleloSequencial:
 
     async def test_unavailable_shared_policy_prevents_tool_effect(
         self, ctx, monkeypatch
-    ):
+    ) -> None:
         from backend.rbac import tool_policy
 
         store = SimpleNamespace(
@@ -1051,7 +1051,7 @@ class TestDespachoParaleloSequencial:
 
         assert [r.text() for r in resultados] == ["lido", "escrito"]
 
-    async def test_tool_inexistente_no_registry_vira_erro_tipado(self, ctx):
+    async def test_tool_inexistente_no_registry_vira_erro_tipado(self, ctx) -> None:
         """Verifica o comportamento de tool inexistente no registry vira erro tipado."""
         calls = [ToolCall(id="c1", name="nao-existe", args={})]
         resultados = await execute_tool_batch(
@@ -1062,7 +1062,7 @@ class TestDespachoParaleloSequencial:
         assert resultados[0].is_error is True
         assert "não encontrada" in resultados[0].text()
 
-    async def test_falha_localizada_de_tool_mcp_vira_erro_tipado(self, ctx):
+    async def test_falha_localizada_de_tool_mcp_vira_erro_tipado(self, ctx) -> None:
         """Mensagens MCP em português devem persistir como erro."""
 
         @vtool(extras=ToolExtras(destructive=False))
@@ -1084,7 +1084,7 @@ class TestDespachoParaleloSequencial:
 
 
 class TestTurnBudget:
-    async def test_chamada_alem_do_teto_vira_erro_sem_executar(self, ctx):
+    async def test_chamada_alem_do_teto_vira_erro_sem_executar(self, ctx) -> None:
         """Verifica o comportamento de chamada alem do teto vira erro sem executar."""
         executada = False
 
@@ -1117,7 +1117,7 @@ class TestRedacaoDeSegredosPosExecucao:
     lido por `file_read`) — sem um estágio de pós-processamento, esse
     conteúdo ia direto pro histórico persistido e pro LLM."""
 
-    def test_redact_secrets_mascara_padroes_conhecidos(self):
+    def test_redact_secrets_mascara_padroes_conhecidos(self) -> None:
         """Verifica o comportamento de redact secrets mascara padroes conhecidos."""
         texto = (
             "export OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwx\n"
@@ -1134,7 +1134,7 @@ class TestRedacaoDeSegredosPosExecucao:
         assert resultado.count("[REDACTED]") == 3
         assert "texto normal sem segredo nenhum" in resultado
 
-    def test_redact_secrets_texto_sem_segredo_fica_intacto(self):
+    def test_redact_secrets_texto_sem_segredo_fica_intacto(self) -> None:
         """Erro/borda: texto sem nenhum padrão de segredo não é alterado
         (a expressão regular não pode ser gulosa a ponto de mascarar
         conteúdo normal)."""
@@ -1144,7 +1144,7 @@ class TestRedacaoDeSegredosPosExecucao:
 
     async def test_segredo_vazado_por_tool_e_redigido_antes_de_virar_mensagem(
         self, ctx
-    ):
+    ) -> None:
         """Fim a fim: uma tool que "vaza" uma chave na saída (ex.:
         `terminal` ecoando uma env var) tem o resultado redigido pelo
         pipeline real (`execute_tool_batch` → `_apply_post_execute`), não
@@ -1164,7 +1164,7 @@ class TestRedacaoDeSegredosPosExecucao:
         assert "sk-abcdefghijklmnopqrstuvwx" not in resultados[0].text()
         assert "[REDACTED]" in resultados[0].text()
 
-    async def test_validacao_de_policy_nao_bloqueia_o_event_loop(self, ctx):
+    async def test_validacao_de_policy_nao_bloqueia_o_event_loop(self, ctx) -> None:
         """Uma validação lenta (DNS síncrono) roda fora do loop: outras tarefas
         continuam avançando, e a negação ainda impede a tool de executar."""
         import time
@@ -1218,7 +1218,9 @@ class TestRedacaoDeSegredosPosExecucao:
         assert "policy_denied" in denied[0].text()
         assert ran == ["executou"]
 
-    async def test_propagates_immutable_policy_snapshot_to_tool_context(self, ctx):
+    async def test_propagates_immutable_policy_snapshot_to_tool_context(
+        self, ctx
+    ) -> None:
         """A tool recebe o snapshot do run, sem recompilar settings mutáveis."""
         seen: list[object] = []
 
@@ -1258,7 +1260,9 @@ def test_envelopes_git_sem_sucesso_contam_como_erro(status: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_policy_is_rechecked_after_last_pre_execute_hook(ctx, monkeypatch):
+async def test_policy_is_rechecked_after_last_pre_execute_hook(
+    ctx, monkeypatch
+) -> None:
     from backend.engine import tool_batch
     from backend.services.policy_compiler import compile_policy_snapshot
 
@@ -1308,7 +1312,7 @@ async def test_policy_is_rechecked_after_last_pre_execute_hook(ctx, monkeypatch)
         {"decision": "allow", "reason": "invalid", "risk_score": -1},
     ],
 )
-async def test_invalid_decision_contract_blocks_handler(ctx, record):
+async def test_invalid_decision_contract_blocks_handler(ctx, record) -> None:
     from backend.engine.hitl import _risk_assessment_key
 
     ctx._extra["systemone_decisions"] = {_risk_assessment_key("probe", {}): record}

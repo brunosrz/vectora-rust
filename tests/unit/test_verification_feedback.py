@@ -35,7 +35,9 @@ async def session_store(tmp_path):
         await pool.close()
 
 
-async def _save_run(store: SessionStore, run_id: str, status: str, feedback: str):
+async def _save_run(
+    store: SessionStore, run_id: str, status: str, feedback: str
+) -> None:
     await store.upsert_agent_run(
         AgentRun(
             run_id=run_id,
@@ -63,7 +65,9 @@ def test_evidence_entry_carries_a_capped_failure_feedback() -> None:
 
     entry = result.to_evidence_entry()
 
-    assert len(entry["failure_feedback"]) == FEEDBACK_MAX_CHARS
+    feedback = entry["failure_feedback"]
+    assert isinstance(feedback, str)
+    assert len(feedback) == FEEDBACK_MAX_CHARS
 
 
 async def test_failed_previous_run_produces_a_note(session_store) -> None:
