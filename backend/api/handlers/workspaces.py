@@ -694,52 +694,87 @@ async def _resolve_and_authorize_dir(
     """
     from fastapi import HTTPException
 
-    base = Path(path).expanduser() if path else Path.home()
-    try:
-        base = base.resolve()
-    except OSError as exc:
-        if strict:
-            raise HTTPException(
-                status_code=404,
-                detail="Diretório pai não encontrado.",
-            ) from exc
-        base = Path.home()
+    home = str(Path.home())
+    requested = os.path.expanduser(path) if path else home  # noqa: PTH111
+    while True:
+        try:
+            fullpath = os.path.normcase(os.path.realpath(requested))
+        except OSError as exc:
+            if strict:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Diretório pai não encontrado.",
+                ) from exc
+            fullpath = os.path.normcase(home)
 
-    if not base.exists() or not base.is_dir():
+        # A raiz precisa vir de uma origem confiável, nunca do caminho pedido.
+        # Em Windows, limita a navegação privilegiada a uma unidade montada;
+        # nos demais sistemas, a raiz do filesystem é fixa.
+        safe_root_id: str | None = None
+        root_text = str(Path(os.sep).resolve())
+        if privileged and os.name == "nt":
+            requested_anchor = os.path.normcase(Path(fullpath).anchor)
+            root_text = next(
+                (
+                    entry.path
+                    for entry in _list_drives()
+                    if entry.kind == "drive"
+                    and os.path.normcase(entry.path) == requested_anchor
+                ),
+                "",
+            )
+            if not root_text:
+                raise HTTPException(
+                    status_code=403,
+                    detail="A unidade solicitada não está montada.",
+                )
+        elif not privileged:
+            containing = await asyncio.to_thread(registry.is_under_safe_root, fullpath)
+            if containing is None:
+                if path:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Caminho fora das pastas seguras configuradas.",
+                    )
+                containing = await asyncio.to_thread(
+                    registry.closest_safe_root_for, home
+                )
+                if containing is None:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Nenhuma pasta segura configurada. "
+                        "Peça ao admin para adicionar uma.",
+                    )
+                fullpath = os.path.normcase(os.path.realpath(containing.path))
+            safe_root_id = containing.id
+            root_text = containing.path
+
+        # Confirma o confinamento antes de qualquer acesso ao caminho pedido.
+        root_path = os.path.normcase(os.path.realpath(root_text))
+        root_prefix = f"{root_path.rstrip(os.sep)}{os.sep}"
+        if fullpath != root_path and not fullpath.startswith(root_prefix):
+            raise HTTPException(
+                status_code=403,
+                detail="Caminho fora das pastas seguras configuradas.",
+            )
+
+        # Confirma que o caminho canônico pertence à raiz confiável selecionada.
+        if os.path.isdir(fullpath):  # noqa: PTH112
+            # ``normcase`` só serve à comparação; ``realpath`` devolve a
+            # grafia real do disco no Windows.
+            return Path(os.path.realpath(fullpath)), safe_root_id
         if strict:
             raise HTTPException(status_code=404, detail="Diretório pai não encontrado.")
-        base = Path.home()
-
-    safe_root_id: str | None = None
-    if not privileged:
-        containing = await asyncio.to_thread(registry.is_under_safe_root, str(base))
-        if containing is None:
-            if path:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Caminho fora das pastas seguras configuradas.",
-                )
-            fallback = await asyncio.to_thread(
-                registry.closest_safe_root_for, str(Path.home())
-            )
-            if fallback is None:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Nenhuma pasta segura configurada. "
-                    "Peça ao admin para adicionar uma.",
-                )
-            base = Path(fallback.path)
-            safe_root_id = fallback.id
-        else:
-            safe_root_id = containing.id
-
-    return base, safe_root_id
+        if requested == home:
+            return Path(fullpath), safe_root_id
+        requested = home
 
 
 @router.get("/BrowseDir", response_model=BrowseResponse)
 async def browse_dir(
     request: Request,
     path: Annotated[str, Query()] = "",
+    include_files: Annotated[bool, Query()] = False,
 ) -> BrowseResponse:
     """Lista subdiretórios de um caminho, respeitando safe-roots.
 
@@ -787,9 +822,9 @@ async def browse_dir(
                 is_dir = item.is_dir()
             except OSError:
                 continue
-            if not is_dir:
+            if not is_dir and not include_files:
                 continue
-            entries.append(DirEntry(name=item.name, path=str(item), is_dir=True))
+            entries.append(DirEntry(name=item.name, path=str(item), is_dir=is_dir))
     except PermissionError:
         pass
 
@@ -1201,12 +1236,86 @@ async def list_workspaces_rest(request: Request) -> ListWorkspacesResponse:
 async def browse_view(
     request: Request,
     path: Annotated[str, Query()] = "",
+    include_files: Annotated[bool, Query()] = False,
 ) -> BrowseResponse:
     """Atalho REST-friendly para ``BrowseDir`` — consumido pelo trust
     dialog. Mantemos o handler Connect-style para clients que falam o
     naming antigo e este alias serve a SPA do chat sem cruzar
     namespaces."""
-    return await browse_dir(request=request, path=path)
+    return await browse_dir(request=request, path=path, include_files=include_files)
+
+
+@view_router.get("/browse/file")
+async def browse_file(request: Request, path: Annotated[str, Query()]) -> Response:
+    """Return a file selected through the Vectora file manager.
+
+    File access follows the same safe-root policy as directory browsing. The
+    endpoint deliberately caps reads because its response is consumed by the
+    renderer for chat attachments and SSH key import.
+    """
+    from fastapi import HTTPException
+
+    from backend.rbac.safe_roots import (
+        SafeRootPersistenceError,
+        get_safe_root_registry,
+    )
+
+    # Autorize o diretório antes de montar o caminho final. O nome é reduzido
+    # ao basename para impedir que segmentos fornecidos pelo cliente escapem
+    # do diretório autorizado; a resolução abaixo ainda bloqueia symlinks.
+    requested_path = PurePath(path)
+    filename = requested_path.name
+    if not filename or filename in {".", ".."}:
+        raise HTTPException(status_code=400, detail="O caminho do arquivo é inválido.")
+    requested_parent = str(requested_path.parent)
+    try:
+        parent, _ = await _resolve_and_authorize_dir(
+            requested_parent,
+            _is_privileged(request),
+            get_safe_root_registry(),
+            strict=True,
+        )
+    except SafeRootPersistenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        parent_path = os.path.realpath(parent)
+        candidate_path = Path(parent_path) / filename
+        resolved_path = os.path.realpath(candidate_path)
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
+    safe_prefix = (
+        parent_path if parent_path.endswith(os.sep) else f"{parent_path}{os.sep}"
+    )
+    if not resolved_path.startswith(safe_prefix):
+        raise HTTPException(status_code=403, detail="Arquivo fora das pastas seguras.")
+    file_path = Path(resolved_path)
+    if not file_path.is_file():
+        raise HTTPException(status_code=400, detail="O caminho não é um arquivo.")
+
+    max_bytes = 50 * 1024 * 1024
+    try:
+        size = file_path.stat().st_size
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.") from exc
+    if size > max_bytes:
+        raise HTTPException(
+            status_code=413, detail="O arquivo excede o limite de 50 MiB."
+        )
+    try:
+        content = await asyncio.to_thread(file_path.read_bytes)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=403, detail="Não foi possível ler o arquivo."
+        ) from exc
+    import mimetypes
+
+    return Response(
+        content=content,
+        media_type=mimetypes.guess_type(file_path.name)[0]
+        or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{file_path.name}"'},
+    )
 
 
 @view_router.post("/browse/mkdir", response_model=BrowseResponse)

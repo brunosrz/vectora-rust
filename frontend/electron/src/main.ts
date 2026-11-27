@@ -1532,45 +1532,36 @@ function registerIpc(): void {
   ipcMain.handle("vectora:open-external", (_event, url: string) =>
     shell.openExternal(url),
   );
-  // Seletor nativo de pasta (Pastas Seguras). Devolve `null` no cancelamento —
-  // o renderer distingue "cancelou" de "escolheu" pra não limpar o campo.
-  ipcMain.handle("vectora:pick-directory", async () => {
-    const opts: Electron.OpenDialogOptions = {
-      properties: ["openDirectory", "createDirectory"],
-    };
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, opts)
-      : await dialog.showOpenDialog(opts);
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
-  });
-  ipcMain.handle("vectora:backup-pick-and-inspect", async () => {
-    // Starting a new selection invalidates any previously inspected archive,
-    // including when the native dialog is cancelled.
-    selectedBackupPath = null;
-    const opts: Electron.OpenDialogOptions = {
-      properties: ["openFile"],
-      filters: [{ name: "Backup Vectora", extensions: ["zip", "gz"] }],
-    };
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, opts)
-      : await dialog.showOpenDialog(opts);
-    if (result.canceled || result.filePaths.length === 0) return null;
-    const archivePath = result.filePaths[0];
-    try {
-      const preview = await postBackendJson(
-        backendTransport(),
-        "/storage/backup/inspect",
-        { archive_path: archivePath },
-        { "x-vectora-desktop-bridge": desktopBridgeToken },
-      );
-      if (!preview) return null;
-      selectedBackupPath = archivePath;
-      return preview;
-    } finally {
-      if (!selectedBackupPath) selectedBackupPath = null;
-    }
-  });
+  ipcMain.handle(
+    "vectora:backup-inspect",
+    async (_event, selectedPath: string) => {
+      selectedBackupPath = null;
+      if (typeof selectedPath !== "string" || !path.isAbsolute(selectedPath)) {
+        throw new Error("O caminho do backup selecionado é inválido.");
+      }
+      const archivePath = path.resolve(selectedPath);
+      const extension = path.extname(archivePath).toLowerCase();
+      if (extension !== ".zip" && extension !== ".gz") {
+        throw new Error("Selecione um backup ZIP ou GZIP do Vectora.");
+      }
+      const stats = await fs.promises.stat(archivePath);
+      if (!stats.isFile())
+        throw new Error("O caminho selecionado não é um arquivo.");
+      try {
+        const preview = await postBackendJson(
+          backendTransport(),
+          "/storage/backup/inspect",
+          { archive_path: archivePath },
+          { "x-vectora-desktop-bridge": desktopBridgeToken },
+        );
+        if (!preview) return null;
+        selectedBackupPath = archivePath;
+        return preview;
+      } finally {
+        if (!selectedBackupPath) selectedBackupPath = null;
+      }
+    },
+  );
   ipcMain.handle(
     "vectora:backup-restore",
     async (_event, categories: string[]) => {

@@ -21,7 +21,7 @@
  *   nos mesmos passos de continuação antes do reload final.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Loader2,
@@ -42,6 +42,7 @@ import {
   useServicesDisabled,
 } from "@/components/layout/services-off-notice";
 import { mDyn } from "@/lib/i18n-dyn";
+import { FileManagerDialog } from "@/components/files/file-manager-dialog";
 import { signalVpsGatePassed } from "@/lib/stores/onboarding-signal";
 import { useOnboardingDraftStore } from "@/lib/stores/onboarding-draft-store";
 import {
@@ -153,6 +154,8 @@ export function PreAuthWizard({
   const [validating, setValidating] = useState(false);
   const servicesOff = useServicesDisabled();
   const [settingUpLocal, setSettingUpLocal] = useState(false);
+  const [backupPickerOpen, setBackupPickerOpen] = useState(false);
+  const backupPathSelectedRef = useRef(false);
   const [backupPreview, setBackupPreview] = useState<BackupPreview | null>(
     null,
   );
@@ -249,7 +252,21 @@ export function PreAuthWizard({
         return;
       }
       setSettingUpLocal(false);
-      const preview = await window.vectora?.backupPickAndInspect?.();
+      if (window.vectora?.backupInspect) setBackupPickerOpen(true);
+      else {
+        setStep("continuation");
+        setContinuationIndex(0);
+      }
+    } catch {
+      setNameError(m.onboarding_pre_setup_error());
+      setSettingUpLocal(false);
+    }
+  }
+
+  async function handleBackupSelected(archivePath: string): Promise<void> {
+    backupPathSelectedRef.current = true;
+    try {
+      const preview = await window.vectora?.backupInspect?.(archivePath);
       if (preview?.compatible && preview.storage_mode === "lite") {
         setBackupPreview(preview);
         setBackupSelection(Object.keys(preview.categories));
@@ -259,8 +276,19 @@ export function PreAuthWizard({
         setContinuationIndex(0);
       }
     } catch {
-      setNameError(m.onboarding_pre_setup_error());
-      setSettingUpLocal(false);
+      setBackupError(true);
+      setStep("continuation");
+      setContinuationIndex(0);
+    } finally {
+      backupPathSelectedRef.current = false;
+    }
+  }
+
+  function handleBackupPickerOpenChange(open: boolean): void {
+    setBackupPickerOpen(open);
+    if (!open && !backupPathSelectedRef.current) {
+      setStep("continuation");
+      setContinuationIndex(0);
     }
   }
 
@@ -807,6 +835,13 @@ export function PreAuthWizard({
           </div>
         )}
       </div>
+      <FileManagerDialog
+        open={backupPickerOpen}
+        onOpenChange={handleBackupPickerOpenChange}
+        selection="file"
+        acceptExtensions={["zip", "gz"]}
+        onSelect={(archivePath) => void handleBackupSelected(archivePath)}
+      />
     </div>
   );
 }

@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { m } from "@/lib/paraglide/messages";
+import { FileManagerDialog } from "@/components/files/file-manager-dialog";
 import {
   SettingsStatus,
   settingsItemClass,
@@ -874,8 +875,7 @@ interface SafeRootRow {
 
 export function SafeRootsPanel() {
   const [roots, setRoots] = useState<SafeRootRow[]>([]);
-  // Só existe no desktop — no web a bridge inteira é undefined.
-  const pickDirectory = window.vectora?.pickDirectory;
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState("");
@@ -990,12 +990,7 @@ export function SafeRootsPanel() {
     }
   };
 
-  const handleBrowse = async () => {
-    if (!pickDirectory) return;
-    const picked = await pickDirectory();
-    // `null` é cancelamento: preservar o que já estava digitado.
-    if (picked) setNewPath(picked);
-  };
+  const handleBrowse = () => setFolderPickerOpen(true);
 
   return (
     <div className="space-y-4">
@@ -1017,21 +1012,17 @@ export function SafeRootsPanel() {
               autoComplete="off"
               className="font-mono text-xs"
             />
-            {/* Só no desktop: no modo web não há bridge, e o campo de texto
-             * continua sendo o único caminho. */}
-            {pickDirectory && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                aria-label={m.admin_saferoots_browse()}
-                title={m.admin_saferoots_browse()}
-                onClick={handleBrowse}
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-              </Button>
-            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              aria-label={m.admin_saferoots_browse()}
+              title={m.admin_saferoots_browse()}
+              onClick={handleBrowse}
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+            </Button>
           </div>
           <Input
             value={newLabel}
@@ -1159,6 +1150,12 @@ export function SafeRootsPanel() {
         variant="destructive"
         onConfirm={handleRemoveConfirmed}
         onCancel={() => setRemoveConfirmId(null)}
+      />
+      <FileManagerDialog
+        open={folderPickerOpen}
+        onOpenChange={setFolderPickerOpen}
+        selection="folder"
+        onSelect={setNewPath}
       />
     </div>
   );

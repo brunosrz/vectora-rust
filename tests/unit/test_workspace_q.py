@@ -259,6 +259,9 @@ class TestWorkspaceHandlers:
     @pytest.mark.asyncio
     async def test_browse_lists_subdirs(self, tmp_path):
         from types import SimpleNamespace
+        from typing import cast
+
+        from fastapi import Request
 
         from backend.api.handlers.workspaces import browse_dir
 
@@ -275,6 +278,142 @@ class TestWorkspaceHandlers:
         assert "beta" in names
         # Arquivos não entram — só diretórios
         assert "file.txt" not in names
+
+        file_result = await browse_dir(
+            cast("Request", fake_request), path=str(tmp_path), include_files=True
+        )
+        assert "file.txt" in {entry.name for entry in file_result.entries}
+
+    @pytest.mark.asyncio
+    async def test_browse_file_returns_selected_file(self, tmp_path):
+        from types import SimpleNamespace
+        from typing import cast
+
+        from fastapi import Request
+
+        from backend.api.handlers.workspaces import browse_file
+
+        selected = tmp_path / "note.txt"
+        selected.write_text("Vectora file manager", encoding="utf-8")
+        fake_request = SimpleNamespace(state=SimpleNamespace(user=None))
+        response = await browse_file(cast("Request", fake_request), path=str(selected))
+        assert response.body == b"Vectora file manager"
+        assert response.media_type == "text/plain"
+
+    @pytest.mark.asyncio
+    async def test_browse_file_rejects_directories(self, tmp_path):
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers.workspaces import browse_file
+
+        fake_request = SimpleNamespace(state=SimpleNamespace(user=None))
+        with pytest.raises(HTTPException) as error:
+            await browse_file(fake_request, path=str(tmp_path))  # ty: ignore[invalid-argument-type]
+        assert error.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_browse_file_rejects_symlink_outside_selected_directory(
+        self, tmp_path
+    ):
+        from types import SimpleNamespace
+        from typing import cast
+
+        from fastapi import HTTPException, Request
+
+        from backend.api.handlers.workspaces import browse_file
+
+        selected_dir = tmp_path / "selected"
+        selected_dir.mkdir()
+        private_file = tmp_path / "private.txt"
+        private_file.write_text("outside", encoding="utf-8")
+        selected_link = selected_dir / "linked.txt"
+        selected_link.symlink_to(private_file)
+        fake_request = SimpleNamespace(state=SimpleNamespace(user=None))
+
+        with pytest.raises(HTTPException) as error:
+            await browse_file(cast("Request", fake_request), path=str(selected_link))
+        assert error.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_browse_file_enforces_safe_roots(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers.workspaces import browse_file
+
+        selected = tmp_path / "private.pem"
+        selected.write_text("private", encoding="utf-8")
+
+        class Registry:
+            def is_under_safe_root(self, _path):
+                return None
+
+        monkeypatch.setattr("backend.rbac.safe_roots.get_safe_root_registry", Registry)
+        fake_request = SimpleNamespace(
+            state=SimpleNamespace(user=SimpleNamespace(id="member", role="member"))
+        )
+        with pytest.raises(HTTPException) as error:
+            await browse_file(fake_request, path=str(selected))  # ty: ignore[invalid-argument-type]
+        assert error.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_resolve_dir_rejects_paths_outside_safe_roots_before_isdir(
+        self, monkeypatch, tmp_path
+    ):
+        from typing import cast
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers.workspaces import _resolve_and_authorize_dir
+        from backend.rbac.safe_roots import SafeRootRegistry
+
+        class Registry:
+            def is_under_safe_root(self, _path):
+                return None
+
+        filesystem_probes = []
+
+        def unexpected_isdir(path):
+            filesystem_probes.append(path)
+            raise AssertionError("caminho não autorizado não deve ser consultado")
+
+        monkeypatch.setattr(
+            "backend.api.handlers.workspaces.os.path.isdir", unexpected_isdir
+        )
+
+        with pytest.raises(HTTPException) as error:
+            await _resolve_and_authorize_dir(
+                str(tmp_path / "missing"),
+                False,
+                cast("SafeRootRegistry", Registry()),
+                strict=True,
+            )
+        assert error.value.status_code == 403
+        assert filesystem_probes == []
+
+    @pytest.mark.asyncio
+    async def test_resolve_dir_allows_member_inside_safe_root(self, tmp_path):
+        from typing import cast
+
+        from backend.api.handlers.workspaces import _resolve_and_authorize_dir
+        from backend.rbac.safe_roots import SafeRootRegistry
+
+        class Registry:
+            def is_under_safe_root(self, _path):
+                return SimpleNamespace(id="safe-root", path=str(tmp_path))
+
+        result, root_id = await _resolve_and_authorize_dir(
+            str(tmp_path),
+            False,
+            cast("SafeRootRegistry", Registry()),
+            strict=True,
+        )
+
+        assert result == tmp_path.resolve()
+        assert root_id == "safe-root"
 
     @pytest.mark.asyncio
     async def test_mkdir_creates_subdir_then_relists(self, tmp_path):

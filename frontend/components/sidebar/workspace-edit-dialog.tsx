@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, FolderOpen, Plus, Star, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { FileManagerDialog } from "@/components/files/file-manager-dialog";
 import {
   Dialog,
   DialogContent,
@@ -186,17 +187,17 @@ export function WorkspaceEditDialog({
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const canPickDirectory =
-    typeof window !== "undefined" && Boolean(window.vectora?.pickDirectory);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [folderPickerTarget, setFolderPickerTarget] = useState<
+    "primary" | "source"
+  >("primary");
 
-  async function chooseFolder() {
-    const selected = await window.vectora?.pickDirectory?.();
-    if (selected) setPath(selected);
-  }
-
-  async function addSourceFolder() {
-    const selected = await window.vectora?.pickDirectory?.();
-    if (!selected) return;
+  function selectFolder(selected: string) {
+    if (folderPickerTarget === "primary") {
+      setPath(selected);
+      setSourceRoots((roots) => roots.filter((root) => root !== selected));
+      return;
+    }
     setSourceRoots((roots) =>
       roots.includes(selected) || selected === path
         ? roots
@@ -253,17 +254,18 @@ export function WorkspaceEditDialog({
         <section className="grid gap-2 text-sm">
           <div className="flex items-center justify-between gap-2">
             <span>{m.workspace_edit_source_folders()}</span>
-            {canPickDirectory && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void addSourceFolder()}
-              >
-                <Plus className="mr-1 size-3.5" />
-                {m.workspace_edit_add_folder()}
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setFolderPickerTarget("source");
+                setFolderPickerOpen(true);
+              }}
+            >
+              <Plus className="mr-1 size-3.5" />
+              {m.workspace_edit_add_folder()}
+            </Button>
           </div>
           {sourceRoots.length === 0 ? (
             <p className="text-xs text-muted-foreground">
@@ -362,17 +364,18 @@ export function WorkspaceEditDialog({
               value={path}
               onChange={(event) => setPath(event.target.value)}
             />
-            {canPickDirectory && (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => void chooseFolder()}
-                aria-label={m.workspace_edit_choose_folder()}
-              >
-                <FolderOpen className="size-4" />
-              </Button>
-            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => {
+                setFolderPickerTarget("primary");
+                setFolderPickerOpen(true);
+              }}
+              aria-label={m.workspace_edit_choose_folder()}
+            >
+              <FolderOpen className="size-4" />
+            </Button>
           </span>
         </label>
         {workspace?.transport === "local" && (
@@ -406,6 +409,13 @@ export function WorkspaceEditDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <FileManagerDialog
+        open={folderPickerOpen}
+        onOpenChange={setFolderPickerOpen}
+        selection="folder"
+        initialPath={folderPickerTarget === "primary" ? path : undefined}
+        onSelect={selectFolder}
+      />
     </Dialog>
   );
 }

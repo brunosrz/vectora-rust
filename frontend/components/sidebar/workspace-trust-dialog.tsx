@@ -14,14 +14,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronLeft,
   Cloud,
   CornerDownLeft,
   Database,
-  Folder,
   FolderPlus,
   GitBranch,
-  HardDrive,
   Loader2,
   Monitor,
   RefreshCw,
@@ -48,11 +45,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  DRIVES_PSEUDO_PATH,
   useWorkspacesStore,
   type BrowseResult,
   type CodespaceSummary,
 } from "@/lib/stores/workspaces-store";
+import {
+  FileManagerBrowser,
+  FileManagerDialog,
+  readManagedFile,
+} from "@/components/files/file-manager-dialog";
 import { useNetworkStatus } from "@/lib/hooks/use-network-status";
 import { useIngestPreview } from "@/lib/hooks/use-ingest-preview";
 import { useRagJobsStore } from "@/lib/stores/rag-jobs-store";
@@ -138,6 +139,7 @@ export function WorkspaceTrustDialog({
   const [sshPath, setSshPath] = useState("");
   const [sshKeys, setSshKeys] = useState<string[]>([]);
   const [sshKeyId, setSshKeyId] = useState<string>("");
+  const [sshKeyPickerOpen, setSshKeyPickerOpen] = useState(false);
   const [sshTesting, setSshTesting] = useState(false);
   const [sshTestResult, setSshTestResult] = useState<{
     ok: boolean;
@@ -776,65 +778,12 @@ export function WorkspaceTrustDialog({
                     h-40, que antes forçava scroll pra alcançar o botão
                     "Indexar esta pasta" logo abaixo, mesmo com poucas
                     entradas na listagem. */}
-                <ScrollArea className="h-40 rounded-md border border-border">
-                  <div className="p-1">
-                    {listing?.parent && (
-                      <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent text-left transition-colors"
-                        onClick={() => load(listing.parent!)}
-                        disabled={loading}
-                      >
-                        <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground" />
-                        {m.workspace_browse_up()}
-                      </button>
-                    )}
-
-                    {/* Atalho explícito para a tela de discos, oculto quando já
-                    está nela. Útil quando o usuário pulou direto para uma
-                    pasta via texto e quer ver outras unidades. */}
-                    {listing && !listing.at_drives_root && (
-                      <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent text-left transition-colors text-muted-foreground"
-                        onClick={() => load(DRIVES_PSEUDO_PATH)}
-                        disabled={loading}
-                      >
-                        <HardDrive className="w-4 h-4 shrink-0" />
-                        {m.workspace_browse_drives()}
-                      </button>
-                    )}
-
-                    {listing && listing.entries.length === 0 && (
-                      <p className="px-3 py-4 text-sm text-muted-foreground text-center">
-                        {m.workspace_browse_empty()}
-                      </p>
-                    )}
-
-                    {listing?.entries.map((entry) => {
-                      const isDrive = entry.kind === "drive";
-                      const Icon = isDrive ? HardDrive : Folder;
-                      return (
-                        <button
-                          key={entry.path}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-accent text-left transition-colors"
-                          onClick={() => load(entry.path)}
-                          disabled={loading}
-                        >
-                          <Icon
-                            className={`w-4 h-4 shrink-0 ${isDrive ? "text-sky-500" : "text-muted-foreground"}`}
-                          />
-                          <span className="truncate font-medium">
-                            {entry.name}
-                          </span>
-                          {entry.label && (
-                            <span className="truncate text-xs text-muted-foreground">
-                              {entry.label}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
+                <FileManagerBrowser
+                  listing={listing}
+                  loading={loading}
+                  onNavigate={(path) => void load(path)}
+                  className="h-40 border-border"
+                />
 
                 {mode === "trust" && (
                   <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer select-none">
@@ -907,17 +856,16 @@ export function WorkspaceTrustDialog({
                         ))}
                       </SelectContent>
                     </Select>
-                    <label className="inline-flex items-center gap-1 px-2 h-8 rounded-md border border-border/60 text-xs cursor-pointer hover:bg-muted/50">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2"
+                      aria-label={m.workspace_ssh_key_choose_file()}
+                      onClick={() => setSshKeyPickerOpen(true)}
+                    >
                       <Upload className="w-3.5 h-3.5" />
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void handleUploadKey(f);
-                        }}
-                      />
-                    </label>
+                    </Button>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1034,6 +982,18 @@ export function WorkspaceTrustDialog({
           </>
         )}
       </ResizableDialogContent>
+      <FileManagerDialog
+        open={sshKeyPickerOpen}
+        onOpenChange={setSshKeyPickerOpen}
+        selection="file"
+        onSelect={(path) => {
+          void readManagedFile(path)
+            .then(handleUploadKey)
+            .catch((cause: unknown) =>
+              setError(cause instanceof Error ? cause.message : String(cause)),
+            );
+        }}
+      />
     </Dialog>
   );
 }

@@ -24,6 +24,10 @@ import { useFileUpload, useVoiceInput } from "@/lib/hooks/files";
 import { MessageList } from "./message-list";
 import { EmptyStateHeader } from "./features/empty-state-header";
 import { ChatInput } from "./chat-input";
+import {
+  FileManagerDialog,
+  readManagedFile,
+} from "@/components/files/file-manager-dialog";
 import type { AgentConfig } from "@/components/layout/agent-settings";
 import {
   generateTitle,
@@ -340,6 +344,7 @@ export function ChatInterface({
     setInput,
   } = useChatState(threadId);
   const [inputError, setInputError] = useState<string | null>(null);
+  const [filePickerOpen, setFilePickerOpen] = useState(false);
   const [structuredPaste, setStructuredPaste] = useState<{
     content: string;
     extension: string;
@@ -389,7 +394,6 @@ export function ChatInterface({
     attachedFiles,
     uploadError,
     isDragging,
-    handleFileSelect,
     handlePaste,
     handleDrop,
     handleDragOver,
@@ -533,9 +537,6 @@ export function ChatInterface({
 
   // Create a ref to control stream interruption
   const shouldInterruptRef = useRef(false);
-
-  // File input ref for triggering file selection
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Textarea ref for auto-focus
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1643,9 +1644,7 @@ export function ChatInterface({
   const handleFileButtonClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    setFilePickerOpen(true);
   }, []);
 
   const handleCaptureScreenshot = useCallback(async () => {
@@ -1777,8 +1776,6 @@ export function ChatInterface({
               ? handleCaptureScreenshot
               : undefined
           }
-          fileInputRef={fileInputRef}
-          onFileSelect={handleFileSelect}
           textareaRef={textareaRef}
           isVoiceListening={isVoiceListening}
           isVoiceSupported={isVoiceSupported}
@@ -1817,6 +1814,20 @@ export function ChatInterface({
           }}
         />
       </main>
+      <FileManagerDialog
+        open={filePickerOpen}
+        onOpenChange={setFilePickerOpen}
+        selection="file"
+        onSelect={(path) => {
+          void readManagedFile(path)
+            .then((file) => processFiles([file]))
+            .catch((error: unknown) => {
+              setUploadError(
+                error instanceof Error ? error.message : String(error),
+              );
+            });
+        }}
+      />
     </>
   );
 }

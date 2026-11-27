@@ -53,9 +53,23 @@ function mockAdminFetch(): void {
               vectora_token_masked: "",
               vectora_token_configured: false,
             }
-          : url.includes("/admin/traces")
-            ? { traces: [] }
-            : {};
+          : url.startsWith("/workspaces/browse")
+            ? {
+                path: url.includes("projetos")
+                  ? "/home/teste/projetos"
+                  : "/home/teste",
+                parent: url.includes("projetos") ? "/home/teste" : "/home",
+                entries: [
+                  {
+                    name: "projetos",
+                    path: "/home/teste/projetos",
+                    is_dir: true,
+                  },
+                ],
+              }
+            : url.includes("/admin/traces")
+              ? { traces: [] }
+              : {};
       return new Response(JSON.stringify(body), { status: 200 });
     }),
   );
@@ -102,11 +116,8 @@ describe("SystemPanel — Configuração", () => {
   });
 });
 
-describe("SafeRootsPanel — seletor nativo de pasta", () => {
-  it("com bridge do desktop: o botão aparece e a pasta escolhida preenche o campo", async () => {
-    const pickDirectory = vi.fn(async () => "/home/teste/projetos");
-    vi.stubGlobal("vectora", { pickDirectory });
-
+describe("SafeRootsPanel — gerenciador Vectora de pastas", () => {
+  it("abre o gerenciador e preenche o caminho escolhido", async () => {
     renderSafeRoots();
     await act(async () => {});
 
@@ -115,7 +126,13 @@ describe("SafeRootsPanel — seletor nativo de pasta", () => {
       fireEvent.click(browse);
     });
 
-    expect(pickDirectory).toHaveBeenCalled();
+    fireEvent.click(await screen.findByText("projetos"));
+    await waitFor(() =>
+      expect(screen.getByLabelText(/pasta atual/i)).toHaveValue(
+        "/home/teste/projetos",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /selecionar pasta/i }));
     const pathInput = screen.getByPlaceholderText(
       /caminho|path|ruta/i,
     ) as HTMLInputElement;
@@ -123,11 +140,6 @@ describe("SafeRootsPanel — seletor nativo de pasta", () => {
   });
 
   it("cancelar o diálogo preserva o que já estava digitado", async () => {
-    // Erro/borda: `null` é cancelamento. Tratar como valor escolhido
-    // apagaria um caminho que o usuário já tinha digitado à mão.
-    const pickDirectory = vi.fn(async () => null);
-    vi.stubGlobal("vectora", { pickDirectory });
-
     renderSafeRoots();
     await act(async () => {});
 
@@ -140,18 +152,19 @@ describe("SafeRootsPanel — seletor nativo de pasta", () => {
       fireEvent.click(screen.getByRole("button", { name: /escolher pasta/i }));
     });
 
+    fireEvent.click(await screen.findByRole("button", { name: /cancelar/i }));
     expect(input.value).toBe("/tmp/mantido");
   });
 
-  it("sem bridge (modo web) o botão não renderiza", async () => {
+  it("sem bridge (modo web) mantém o seletor de pasta disponível", async () => {
     vi.stubGlobal("vectora", undefined);
 
     renderSafeRoots();
     await act(async () => {});
 
     expect(
-      screen.queryByRole("button", { name: /escolher pasta/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /escolher pasta/i }),
+    ).toBeVisible();
   });
 
   it("mostra falha ao restaurar e não recarrega a lista quando a API responde erro", async () => {

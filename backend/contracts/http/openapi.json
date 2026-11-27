@@ -28898,6 +28898,16 @@
               "title": "Path",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_files",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Files",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -29576,6 +29586,16 @@
               "title": "Path",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_files",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Files",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -29601,6 +29621,47 @@
           }
         },
         "summary": "Browse View",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
+    "/workspaces/browse/file": {
+      "get": {
+        "description": "Return a file selected through the Vectora file manager.\n\nFile access follows the same safe-root policy as directory browsing. The\nendpoint deliberately caps reads because its response is consumed by the\nrenderer for chat attachments and SSH key import.",
+        "operationId": "browse_file_workspaces_browse_file_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Browse File",
         "tags": [
           "workspaces-view"
         ]
