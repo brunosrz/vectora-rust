@@ -1731,6 +1731,7 @@
   "stack_unknown_3": "Write tests for the most critical functions",
   "terminal_close": "Close terminal",
   "terminal_conn_error": "connection error",
+  "terminal_connecting": "Connecting to terminal...",
   "terminal_ended": "ended",
   "terminal_new": "New terminal",
   "terminal_no_sandbox_warning": "Shell without sandbox: has the same power as a local terminal in the trusted folder.",

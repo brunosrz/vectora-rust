@@ -187,11 +187,31 @@ async function renderView(props?: Partial<Parameters<typeof XtermView>[0]>) {
 
 describe("XtermView", () => {
   it("monta o Terminal e conecta ao WebSocket com terminal_id/thread_id/workspace_id/token na URL", async () => {
-    const { ws } = await renderView();
+    const { ws, getByRole } = await renderView();
+    expect(getByRole("status")).toHaveTextContent("terminal_connecting");
     expect(ws.url).toContain("terminal_id=term-1");
     expect(ws.url).toContain("thread_id=thread-1");
     expect(ws.url).toContain("workspace_id=ws-1");
     expect(ws.url).toContain("token=tok123");
+  });
+
+  it("remove o estado de conexão quando o backend confirma o terminal", async () => {
+    const { ws, queryByRole } = await renderView();
+    await act(async () => {
+      ws.message(JSON.stringify({ type: "connected", terminal_id: "term-1" }));
+    });
+    expect(queryByRole("status")).not.toBeInTheDocument();
+    expect(queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("mostra fora do xterm o motivo retornado quando o backend rejeita a abertura", async () => {
+    const { ws, getByRole } = await renderView();
+    await act(async () => {
+      ws.message(
+        JSON.stringify({ type: "error", message: "bwrap não está disponível" }),
+      );
+    });
+    expect(getByRole("alert")).toHaveTextContent("bwrap não está disponível");
   });
 
   it("ao abrir a conexão (onopen) envia resize com cols/rows do terminal", async () => {
