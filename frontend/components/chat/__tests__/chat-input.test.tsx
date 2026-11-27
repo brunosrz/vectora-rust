@@ -128,6 +128,30 @@ describe("ChatInput", () => {
     expect(sendButton()).not.toBeDisabled();
   });
 
+  it("habilita o enviar quando há anexo mesmo sem texto", () => {
+    const onSend = vi.fn();
+    render(
+      <ChatInput
+        {...baseProps({
+          attachedFiles: [
+            {
+              id: "image-1",
+              base64: "aW1hZ2U=",
+              url: "blob:image-1",
+              mimeType: "image/png",
+              name: "image.png",
+              size: 5,
+            },
+          ],
+          onSend,
+        })}
+      />,
+    );
+    expect(sendButton()).not.toBeDisabled();
+    fireEvent.click(sendButton());
+    expect(onSend).toHaveBeenCalledOnce();
+  });
+
   it("clicar em enviar chama onSend", () => {
     const onSend = vi.fn();
     render(<ChatInput {...baseProps({ input: "oi", onSend })} />);
