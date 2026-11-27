@@ -28,7 +28,7 @@ interface SidebarProps {
   currentThreadId: string;
   onSelectThread: (threadId: string) => void;
   onDeleteThread: (threadId: string) => void;
-  onNewChat?: () => void;
+  onNewChat?: (workspaceId?: string) => void;
   isLoading?: boolean;
   /** true quando a sessão atual é nova/vazia — destaca "Nova sessão". */
   isNewSession?: boolean;
@@ -274,6 +274,9 @@ export const Sidebar = memo(function Sidebar({
                 onRenameThread={handleRenameThread}
                 onTogglePinThread={handleTogglePin}
                 onToggleWorkspace={toggleWorkspaceGroup}
+                onNewWorkspaceSession={(workspaceId) =>
+                  onNewChat?.(workspaceId)
+                }
                 onRefresh={onRefreshThreads}
                 paging={paging}
               />

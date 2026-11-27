@@ -598,6 +598,12 @@ def _cfg(thread_id: str) -> dict:
 
 
 class TestCreateArtifact:
+    @pytest.fixture(autouse=True)
+    def _isolate_artifact_home(self, tmp_path, monkeypatch):
+        from backend.settings import settings
+
+        monkeypatch.setattr(settings, "vectora_home", tmp_path / ".vectora")
+
     async def test_creates_file_and_returns_json(self, tmp_path, monkeypatch):
         """Verifica o comportamento de creates file and returns json."""
         from backend.tools.fs import create_artifact

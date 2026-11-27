@@ -41,6 +41,7 @@ from backend.services.security import (
     resolve_within_workspace,
 )
 from backend.services.terminal_stream import emit_terminal_line
+from backend.settings import settings
 from backend.tools.context import ToolContext
 from backend.tools.registry import ToolExtras, vtool
 from backend.vtypes.documents import VALID_ARTIFACT_TYPES, ArtifactIntegrity
@@ -1519,7 +1520,7 @@ def _mirror_artifact_to_workspace(
     """Espelha a versão atual do artifact dentro do workspace ativo
     (``<workspace_root>/.vectora/{type}s/{slug}.md``) — sempre a última
     versão, sem histórico (o histórico imutável vive só em
-    ``~/.vectora/artifacts/``). Só espelha quando a sessão tem um
+    ``settings.vectora_home/artifacts/``). Só espelha quando a sessão tem um
     ``workspace_id`` explícito no ctx — sem isso, não força a criação de
     um workspace default só pra gravar o espelho. Best-effort: falha aqui
     nunca derruba a criação do artifact.
@@ -1539,7 +1540,7 @@ def _create_artifact_sync(
     ctx: ToolContext, artifact_type: str, slug: str, session_id: str, content: str
 ) -> tuple[Path, dict[str, object]]:
     """Executa a operação  create artifact sync."""
-    artifact_dir = Path.home() / ".vectora" / "artifacts" / session_id
+    artifact_dir = settings.vectora_home / "artifacts" / session_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
     path = _rotate_artifact_history(artifact_dir, slug, content)
     _write_artifact_type_sidecar(artifact_dir, slug, artifact_type)
@@ -1559,7 +1560,8 @@ def _create_artifact_sync(
 async def create_artifact(
     artifact_type: str, title: str, content: str, ctx: ToolContext
 ) -> str:
-    """Cria e persiste um artifact estruturado em ~/.vectora/artifacts/{session_id}/{slug}.md.
+    """Cria e persiste um artifact estruturado em
+    ``settings.vectora_home/artifacts/{session_id}/{slug}.md``.
 
     Use esta tool quando o usuário pedir um documento que deve ser salvo permanentemente:
     plano de implementação, especificação técnica, lista de tarefas, visão geral de

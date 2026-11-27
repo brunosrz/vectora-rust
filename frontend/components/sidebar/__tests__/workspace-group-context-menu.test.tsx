@@ -18,6 +18,7 @@ vi.mock("@/lib/paraglide/messages", () => ({
     sidebar_workspace_thread_count: ({ n }: { n: number }) => `${n} sessões`,
     sidebar_ctx_edit_workspace: () => "Editar workspace",
     workspace_edit_title: () => "Editar projeto",
+    sidebar_workspace_new_session: () => "Nova sessão neste workspace",
   },
 }));
 
@@ -63,6 +64,7 @@ function renderWorkspace(transport: WorkspaceInfo["transport"] = "local") {
       onDelete={noop}
       onRename={noop}
       onTogglePin={noop}
+      onNewSession={noop}
     />,
   );
 }
@@ -101,5 +103,30 @@ describe("WorkspaceGroup context menu", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(screen.queryByRole("menuitem")).toBeNull();
+  });
+
+  it("inicia uma sessão vinculada ao workspace pelo botão de adicionar", () => {
+    const onNewSession = vi.fn();
+    render(
+      <WorkspaceGroup
+        workspace={workspace}
+        threads={[]}
+        isSearching={false}
+        isCollapsed={false}
+        currentThreadId=""
+        onToggle={noop}
+        onSelect={noop}
+        onDelete={noop}
+        onRename={noop}
+        onTogglePin={noop}
+        onNewSession={onNewSession}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Nova sessão neste workspace: Vectora",
+      }),
+    );
+    expect(onNewSession).toHaveBeenCalledWith("workspace-1");
   });
 });

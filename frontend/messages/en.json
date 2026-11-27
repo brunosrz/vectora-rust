@@ -1688,6 +1688,7 @@
   "sidebar_untitled_chat": "Untitled chat",
   "sidebar_workspace_collapse": "Collapse folder",
   "sidebar_workspace_expand": "Expand folder",
+  "sidebar_workspace_new_session": "New session in this workspace",
   "sidebar_workspace_thread_count": "{n} sessions",
   "skills_confirm_remove": "Remove this skill?",
   "skills_empty": "No skills installed.",

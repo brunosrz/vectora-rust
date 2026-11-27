@@ -291,13 +291,14 @@ describe("XtermView", () => {
     expect(term.written.join("")).toContain("terminal_conn_error");
   });
 
-  it("fechamento inesperado do socket (onclose) propaga onClosed quando o componente ainda está montado", async () => {
+  it("mantém a aba e mostra erro quando o socket fecha sem evento de terminal encerrado", async () => {
     const onClosed = vi.fn();
-    const { ws } = await renderView({ onClosed });
+    const { ws, term } = await renderView({ onClosed });
     await act(async () => {
       ws.close();
     });
-    expect(onClosed).toHaveBeenCalledTimes(1);
+    expect(onClosed).not.toHaveBeenCalled();
+    expect(term.written.join("")).toContain("terminal_conn_error");
   });
 
   it("desmontar o componente fecha o WebSocket, desconecta observers e não chama onClosed pela desmontagem", async () => {

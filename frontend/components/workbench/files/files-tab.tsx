@@ -543,7 +543,7 @@ export function FilesTab({ threadId, onAddToContext }: FilesTabProps) {
   const loadingFile = showViewer && openContent === undefined;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       {/* Toolbar VS Code-like */}
       <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border/60">
         <span className="text-[10px] font-medium text-muted-foreground truncate flex-1 select-none">
@@ -721,7 +721,7 @@ export function FilesTab({ threadId, onAddToContext }: FilesTabProps) {
 
       {/* Árvore (topo) + viewer (base) num split vertical arrastável */}
       <VerticalSplit
-        className="flex-1"
+        className="h-full flex-1 min-h-0"
         showBottom={showViewer}
         bottomSize={viewerHeight}
         onResize={setViewerHeight}

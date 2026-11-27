@@ -20,6 +20,7 @@ import { disposeBrowserThread } from "@/lib/browser-session-store";
 import { useToastStore } from "@/lib/stores/toast-store";
 import { m } from "@/lib/paraglide/messages";
 import { useIsNarrowViewport } from "@/lib/hooks/use-media-query";
+import { signalWorkspaceChoiceForNewSession } from "@/lib/stores/new-session-signal";
 
 /** Largura da sidebar na tela inicial — mais larga que o normal para dar destaque. */
 const HOME_SIDEBAR_WIDTH = 280;
@@ -81,7 +82,8 @@ function HomeScreen() {
     });
   };
 
-  const handleNewChat = () => {
+  const handleNewChat = (workspaceId?: string) => {
+    if (workspaceId) signalWorkspaceChoiceForNewSession(workspaceId);
     go(() => {
       void navigate({ to: "/session/$threadId", params: { threadId: "new" } });
     });
@@ -140,9 +142,9 @@ function HomeScreen() {
                 handleSelectThread(id);
               }}
               onDeleteThread={handleDeleteThread}
-              onNewChat={() => {
+              onNewChat={(workspaceId) => {
                 setIsMobileSidebarOpen(false);
-                handleNewChat();
+                handleNewChat(workspaceId);
               }}
               isLoading={isLoading}
               isNewSession={false}

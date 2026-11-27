@@ -1425,7 +1425,7 @@
   },
   {
     "category": "artifacts",
-    "description": "Cria e persiste um artifact estruturado em ~/.vectora/artifacts/{session_id}/{slug}.md.",
+    "description": "Cria e persiste um artifact estruturado em",
     "destructive": false,
     "name": "create_artifact",
     "render_hint": "artifact",

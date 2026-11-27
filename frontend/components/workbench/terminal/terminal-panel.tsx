@@ -499,7 +499,7 @@ export function TerminalPanel({ threadId }: TerminalPanelProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-sidebar">
+    <div className="h-full min-h-0 flex flex-col bg-sidebar">
       {/* Tabs + ações */}
       <div className="flex items-center gap-1 bg-sidebar border-b border-border/60 px-2 py-1 overflow-x-auto">
         {terminals.map((term) => (
@@ -569,7 +569,7 @@ export function TerminalPanel({ threadId }: TerminalPanelProps) {
       )}
 
       {/* Body — só renderiza o terminal ativo (poupa CPU; estado fica no PTY) */}
-      <div className="flex-1 relative">
+      <div className="flex-1 min-h-0 relative">
         {terminals.map((term) => (
           <div
             key={term.id}

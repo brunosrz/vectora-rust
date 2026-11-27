@@ -180,10 +180,12 @@ export function XtermView({
       });
 
       ws.addEventListener("close", () => {
-        // Desmontagem (troca de aba) não encerra o terminal: o PTY sobrevive no
-        // backend e reconecta com o mesmo terminal_id. Só propaga o fechamento
-        // quando o socket cai durante uso real.
-        if (!cancelled) onClosedRef.current?.();
+        // Só o evento explícito `closed` do backend remove a aba. Um close do
+        // WebSocket também ocorre em falha de autenticação/inicialização; nesse
+        // caso, manter a aba expõe a mensagem de erro e permite reconectar.
+        if (!cancelled) {
+          term.write(`\r\n\x1b[31m[${m.terminal_conn_error()}]\x1b[0m\r\n`);
+        }
       });
 
       // stdin do user → WS

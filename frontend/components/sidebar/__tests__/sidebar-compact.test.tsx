@@ -186,6 +186,7 @@ describe("WorkspaceGroup — layout compacto", () => {
         onDelete={noop}
         onRename={noop}
         onTogglePin={noop}
+        onNewSession={noop}
       />,
     );
     const row = container.querySelector("div.mb-1")!;
@@ -210,6 +211,7 @@ describe("WorkspaceGroup — layout compacto", () => {
         onDelete={noop}
         onRename={noop}
         onTogglePin={noop}
+        onNewSession={noop}
       />,
     );
     const list = container.querySelector("[class*='space-y']")!;
@@ -231,6 +233,7 @@ describe("WorkspaceGroup — layout compacto", () => {
         onDelete={noop}
         onRename={noop}
         onTogglePin={noop}
+        onNewSession={noop}
       />,
     );
     expect(screen.queryByText("Conversa t1")).toBeNull();
@@ -250,6 +253,7 @@ describe("WorkspaceGroup — layout compacto", () => {
         onDelete={noop}
         onRename={noop}
         onTogglePin={noop}
+        onNewSession={noop}
       />,
     );
     expect(screen.getByText("Conversa t2")).toBeInTheDocument();

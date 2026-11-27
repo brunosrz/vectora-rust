@@ -54,6 +54,7 @@ function renderList(
       onRenameThread={vi.fn()}
       onTogglePinThread={vi.fn()}
       onToggleWorkspace={vi.fn()}
+      onNewWorkspaceSession={vi.fn()}
       onRefresh={onRefresh}
       paging={paging}
     />,
