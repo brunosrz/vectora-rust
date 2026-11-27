@@ -40,6 +40,7 @@ export interface WorkspaceInfo {
   id: string;
   name: string;
   cwd: string;
+  source_roots?: string[];
   /** true quando o usuário confiou na pasta — libera write/terminal/git */
   trusted: boolean;
   /** true se o cwd contém um repositório git */
@@ -157,6 +158,7 @@ interface WorkspacesState {
     id: string,
     name: string,
     path: string,
+    sourceRoots: string[],
   ) => Promise<ActionResult<WorkspaceInfo>>;
   trust: (id: string) => Promise<ActionResult<WorkspaceInfo>>;
   gitInit: (id: string) => Promise<ActionResult<WorkspaceInfo>>;
@@ -464,12 +466,12 @@ export const useWorkspacesStore = create<WorkspacesState>()(
         }
       },
 
-      updateProject: async (id, name, path) => {
+      updateProject: async (id, name, path, sourceRoots) => {
         try {
           const res = await fetch(`/workspaces/${encodeURIComponent(id)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, path }),
+            body: JSON.stringify({ name, path, source_roots: sourceRoots }),
           });
           if (!res.ok) throw new Error(await readErrorMessage(res));
           const payload = await res.json();

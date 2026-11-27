@@ -176,6 +176,40 @@ class TestWorkspaceTree:
         assert exc_info.value.status_code == 410
         assert "Edite o projeto" in exc_info.value.detail
 
+    @pytest.mark.asyncio
+    async def test_lists_and_opens_associated_source_roots(self, tmp_path, monkeypatch):
+        from backend.api.handlers.workspaces import workspace_tree
+        from backend.workspace import workspace as ws_mod
+
+        primary = tmp_path / "primary"
+        secondary = tmp_path / "shared"
+        primary.mkdir()
+        secondary.mkdir()
+        (secondary / "shared.txt").write_text("ok", encoding="utf-8")
+        ws = Workspace(
+            id="multi-root",
+            name="projeto",
+            cwd=str(primary),
+            source_roots=[str(secondary)],
+            created_at="2024-01-01T00:00:00+00:00",
+            trusted=True,
+        )
+        monkeypatch.setattr(
+            ws_mod.workspace_registry,
+            "get",
+            lambda wid: ws if wid == "multi-root" else None,
+        )
+
+        root_listing = await workspace_tree(workspace_id="multi-root", path="")
+        root_entry = next(
+            entry for entry in root_listing.entries if entry.name.startswith("shared (")
+        )
+        secondary_listing = await workspace_tree(
+            workspace_id="multi-root", path=root_entry.path
+        )
+
+        assert [entry.name for entry in secondary_listing.entries] == ["shared.txt"]
+
 
 # ---------------------------------------------------------------------------
 # /workspaces/{id}/file
@@ -1196,6 +1230,61 @@ class TestLocalWorkspaceUpdate:
         with pytest.raises(HTTPException) as exc_info:
             handlers._resolve_project_directory(
                 str(link), [approved_root.resolve()], privileged=False
+            )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_rejects_source_root_outside_safe_roots(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+        from backend.rbac import safe_roots as safe_roots_module
+        from backend.vtypes import Workspace
+        from backend.workspace import workspace as workspace_module
+
+        allowed_root = tmp_path / "allowed"
+        current_path = allowed_root / "current"
+        outside_path = tmp_path / "outside"
+        current_path.mkdir(parents=True)
+        outside_path.mkdir()
+        workspace = Workspace(
+            id="project",
+            name="Project",
+            cwd=str(current_path),
+            created_at="2026-01-01T00:00:00Z",
+            trusted=True,
+            owner_id="u1",
+        )
+        monkeypatch.setattr(
+            workspace_module.workspace_registry,
+            "get",
+            lambda workspace_id: workspace if workspace_id == workspace.id else None,
+        )
+        monkeypatch.setattr(
+            workspace_module.workspace_registry, "list_all", lambda: [workspace]
+        )
+        monkeypatch.setattr(
+            safe_roots_module,
+            "get_safe_root_registry",
+            lambda: SimpleNamespace(
+                all_roots=lambda: [SimpleNamespace(path=str(allowed_root))]
+            ),
+        )
+        request = _fake_request()
+        request.state.user.role = "member"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await handlers.update_local_workspace_rest(
+                request,
+                workspace.id,
+                handlers.UpdateLocalWorkspaceRequest(
+                    name="Project",
+                    path=str(current_path),
+                    source_roots=[str(outside_path)],
+                ),
             )
 
         assert exc_info.value.status_code == 403

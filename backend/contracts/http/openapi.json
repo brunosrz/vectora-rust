@@ -12908,6 +12908,20 @@
             "minLength": 1,
             "title": "Path",
             "type": "string"
+          },
+          "source_roots": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Roots"
           }
         },
         "required": [
@@ -13711,6 +13725,13 @@
               }
             ],
             "title": "Remote Path"
+          },
+          "source_roots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Roots",
+            "type": "array"
           },
           "transport": {
             "default": "local",

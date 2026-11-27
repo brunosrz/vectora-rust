@@ -243,7 +243,12 @@ class WorkspaceRegistry:
         return True
 
     def update_local_project(
-        self, workspace_id: str, *, name: str, cwd: str
+        self,
+        workspace_id: str,
+        *,
+        name: str,
+        cwd: str,
+        source_roots: list[str] | None = None,
     ) -> Workspace | None:
         """Atualiza nome e pasta principal sem trocar a identidade do projeto.
 
@@ -257,16 +262,20 @@ class WorkspaceRegistry:
         if not Path(cwd).is_absolute():
             raise ValueError("A pasta principal precisa ser um caminho absoluto.")
         resolved = cwd
+        configured_roots = (
+            getattr(ws, "source_roots", []) if source_roots is None else source_roots
+        )
+        normalized_roots: list[str] = []
+        for root in configured_roots:
+            if not Path(root).is_absolute():
+                raise ValueError("As pastas de origem precisam ser caminhos absolutos.")
+            if root not in normalized_roots:
+                normalized_roots.append(root)
         ws.name = name.strip() or Path(resolved).name or "workspace"
-        if ws.cwd != resolved:
+        primary_changed = ws.cwd != resolved
+        roots_changed = list(getattr(ws, "source_roots", [])) != normalized_roots
+        if primary_changed:
             ws.cwd = resolved
-            ws.trusted = False
-            ws.trusted_at = None
-            ws.trusted_by = None
-            ws.hooks_approved = False
-            ws.hooks_approved_at = None
-            ws.hooks_approved_by = None
-            ws.hooks_rules_digest = None
             try:
                 from backend.tools.git import detect_git_info
 
@@ -277,6 +286,15 @@ class WorkspaceRegistry:
             ws.git_remote = git_info.get("git_remote")
             ws.git_current_branch = git_info.get("git_current_branch")
             ws.git_default_branch = git_info.get("git_default_branch")
+        if roots_changed or primary_changed:
+            ws.trusted = False
+            ws.trusted_at = None
+            ws.trusted_by = None
+            ws.hooks_approved = False
+            ws.hooks_approved_at = None
+            ws.hooks_approved_by = None
+            ws.hooks_rules_digest = None
+        ws.source_roots = normalized_roots
         self._save()
         return ws
 

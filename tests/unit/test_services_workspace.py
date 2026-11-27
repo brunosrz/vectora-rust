@@ -106,7 +106,9 @@ def test_update_local_project_changes_primary_folder_and_revokes_trust(
     ws = reg.create(str(original), trust=True)
     ws.hooks_approved = True
 
-    updated = reg.update_local_project(ws.id, name="Meu projeto", cwd=str(replacement))
+    updated = reg.update_local_project(
+        ws.id, name="Meu projeto", cwd=str(replacement), source_roots=[]
+    )
 
     assert updated is ws
     assert updated.name == "Meu projeto"

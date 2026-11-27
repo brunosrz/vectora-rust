@@ -53,6 +53,7 @@ class WorkspaceInfo(BaseModel):
     id: str
     name: str
     cwd: str
+    source_roots: list[str] = Field(default_factory=list)
     trusted: bool = False
     hooks_approved: bool = False
     hooks_rules_pending: bool = False
@@ -110,6 +111,7 @@ class CreateWorkspaceRequest(BaseModel):
 class UpdateLocalWorkspaceRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     path: str = Field(min_length=1)
+    source_roots: list[str] | None = None
 
 
 def _resolve_project_directory(
@@ -391,6 +393,7 @@ def _to_info(ws: Any) -> WorkspaceInfo:
         id=ws.id,
         name=ws.name,
         cwd=ws.cwd,
+        source_roots=list(getattr(ws, "source_roots", [])),
         trusted=getattr(ws, "trusted", False),
         hooks_approved=getattr(ws, "hooks_approved", False),
         hooks_rules_pending=_hooks_rules_pending(ws),
@@ -1252,6 +1255,9 @@ async def update_local_workspace_rest(
         )
     safe_roots = get_safe_root_registry()
     privileged = _is_privileged(request)
+    requested_roots = body.source_roots
+    if requested_roots is None:
+        requested_roots = list(getattr(ws, "source_roots", []))
     try:
         active_roots = await asyncio.to_thread(safe_roots.all_roots)
         approved_roots = [
@@ -1260,8 +1266,20 @@ async def update_local_workspace_rest(
         resolved_path = _resolve_project_directory(
             body.path, approved_roots, privileged=privileged
         )
+        resolved_roots = [
+            str(_resolve_project_directory(root, approved_roots, privileged=privileged))
+            for root in requested_roots
+        ]
     except SafeRootPersistenceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if (
+        len(set(resolved_roots)) != len(resolved_roots)
+        or str(resolved_path) in resolved_roots
+    ):
+        raise HTTPException(
+            status_code=422, detail="As pastas do projeto devem ser únicas."
+        )
+    project_paths = [resolved_path, *(Path(root) for root in resolved_roots)]
     resolved = str(resolved_path)
     duplicate = next(
         (
@@ -1280,16 +1298,17 @@ async def update_local_workspace_rest(
         )
     if privileged:
         try:
-            await asyncio.to_thread(
-                safe_roots.add,
-                str(resolved_path),
-                resolved_path.name,
-                str(_user_id(request)),
-            )
+            for project_path in project_paths:
+                await asyncio.to_thread(
+                    safe_roots.add,
+                    str(project_path),
+                    project_path.name,
+                    str(_user_id(request)),
+                )
         except SafeRootPersistenceError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
     updated = workspace_registry.update_local_project(
-        workspace_id, name=body.name, cwd=resolved
+        workspace_id, name=body.name, cwd=resolved, source_roots=resolved_roots
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Workspace não encontrado.")
@@ -1497,9 +1516,23 @@ def _resolve_inside(workspace_id: str, rel_path: str) -> Path | None:
     ws = workspace_registry.get(workspace_id)
     if ws is None:
         return None
-    base = Path(ws.cwd)
-    candidate = base if not rel_path else base / rel_path
+    base, relative = _workspace_root_for_path(ws, rel_path)
+    candidate = base if not relative else base / relative
     return resolve_within_workspace(str(candidate), base)
+
+
+def _workspace_root_for_path(ws: Any, rel_path: str) -> tuple[Path, str]:
+    """Resolve a virtual ``@root-<id>/...`` prefix to an approved project root."""
+    match = re.match(r"^@root-([0-9a-f]{8})(?:/(.*))?$", rel_path)
+    if match:
+        from backend.workspace.workspace import WorkspaceRegistry
+
+        root_id, relative = match.groups()
+        for root in getattr(ws, "source_roots", []):
+            if WorkspaceRegistry.derive_id(root) == root_id:
+                return Path(root), relative or ""
+        return Path(ws.cwd), "../__invalid_workspace_root__"
+    return Path(ws.cwd), rel_path
 
 
 async def _remote_fs_context(
@@ -2187,6 +2220,19 @@ async def workspace_tree(
                 status_code=503, detail="Workspace remoto indisponível."
             ) from exc
 
+    from backend.workspace.workspace import workspace_registry
+
+    ws = workspace_registry.get(workspace_id)
+    if ws is not None and ws.transport == "local":
+        selected_root, _relative = _workspace_root_for_path(ws, normalized_path)
+        if normalized_path.startswith("@root-") and not selected_root.is_dir():
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    f"A pasta de origem '{selected_root}' não está disponível. "
+                    "Edite o projeto e escolha outra pasta."
+                ),
+            )
     resolved = _resolve_inside(workspace_id, normalized_path)
     if resolved is None:
         return TreeResponse(path=normalized_path, entries=[])
@@ -2195,23 +2241,36 @@ async def workspace_tree(
 
     ws = workspace_registry.get(workspace_id)
     base = Path(ws.cwd) if ws else resolved
-    fullpath = os.path.normcase(os.path.realpath(resolved))
     if ws is not None and ws.transport == "local":
+        base, _relative_path = _workspace_root_for_path(ws, normalized_path)
         root_path = os.path.normcase(os.path.realpath(base))
         base_path = f"{root_path.rstrip(os.sep)}{os.sep}"
+        fullpath = os.path.normcase(os.path.realpath(resolved))
         if fullpath != root_path and not fullpath.startswith(base_path):
             return TreeResponse(path=normalized_path, entries=[])
         resolved = Path(fullpath)
-    if not os.path.exists(fullpath) or not os.path.isdir(fullpath):  # noqa: PTH110, PTH112
-        if ws is not None and not Path(ws.cwd).is_dir():
-            raise HTTPException(
-                status_code=410,
-                detail=(
-                    "A pasta principal deste workspace não está disponível. "
-                    "Edite o projeto e escolha a pasta atual."
-                ),
-            )
-        raise HTTPException(status_code=404, detail="Pasta não encontrada.")
+        if not os.path.exists(fullpath) or not os.path.isdir(fullpath):  # noqa: PTH110, PTH112
+            selected_root, _relative = _workspace_root_for_path(ws, normalized_path)
+            if selected_root != Path(ws.cwd) and not selected_root.is_dir():
+                raise HTTPException(
+                    status_code=410,
+                    detail=(
+                        f"A pasta de origem '{selected_root}' não está disponível. "
+                        "Edite o projeto e escolha outra pasta."
+                    ),
+                )
+            if not Path(ws.cwd).is_dir():
+                raise HTTPException(
+                    status_code=410,
+                    detail=(
+                        "A pasta principal deste workspace não está disponível. "
+                        "Edite o projeto e escolha a pasta atual."
+                    ),
+                )
+            raise HTTPException(status_code=404, detail="Pasta não encontrada.")
+    root_prefix = (
+        normalized_path.split("/", 1)[0] if normalized_path.startswith("@root-") else ""
+    )
     entries: list[TreeEntry] = []
     try:
         for item in sorted(
@@ -2236,13 +2295,29 @@ async def workspace_tree(
             entries.append(
                 TreeEntry(
                     name=item.name,
-                    path=rel.replace("\\", "/"),
+                    path=(f"{root_prefix}/{rel}" if root_prefix else rel).replace(
+                        "\\", "/"
+                    ),
                     kind="dir" if is_dir else "file",
                     size=size,
                 )
             )
     except PermissionError:
         pass
+
+    if ws is not None and not path and ws.transport == "local":
+        from backend.workspace.workspace import WorkspaceRegistry
+
+        for root in getattr(ws, "source_roots", []):
+            root_id = WorkspaceRegistry.derive_id(root)
+            entries.append(
+                TreeEntry(
+                    name=f"{Path(root).name or root} (@root-{root_id})",
+                    path=f"@root-{root_id}",
+                    kind="dir",
+                )
+            )
+        entries.sort(key=lambda item: (item.kind != "dir", item.name.lower()))
 
     return TreeResponse(path=path, entries=entries)
 

@@ -69,6 +69,32 @@ class TestFileRead:
         result = await file_read(file_path=str(f), ctx=ctx_from_config(trusted_ws))
         assert result == "conteudo do arquivo"
 
+    async def test_reads_associated_source_root_by_explicit_virtual_path(
+        self, tmp_path: Path, trusted_ws: dict[str, dict[str, str]]
+    ) -> None:
+        from backend.tools.fs import file_read
+        from backend.workspace import workspace as ws_mod
+        from backend.workspace.workspace import WorkspaceRegistry
+
+        secondary = tmp_path / "shared"
+        secondary.mkdir()
+        (secondary / "file.txt").write_text("conteudo secundário", encoding="utf-8")
+        ws = ws_mod.workspace_registry.get("testws")
+        assert ws is not None
+        ws.source_roots = [str(secondary)]
+        virtual_path = f"@root-{WorkspaceRegistry.derive_id(str(secondary))}/file.txt"
+
+        result = await file_read(
+            file_path=virtual_path, ctx=ctx_from_config(trusted_ws)
+        )
+        escaped = await file_read(
+            file_path=virtual_path.replace("file.txt", "../primary/secret.txt"),
+            ctx=ctx_from_config(trusted_ws),
+        )
+
+        assert result == "conteudo secundário"
+        assert "fora do workspace" in escaped
+
     async def test_file_not_found(
         self, tmp_path: Path, trusted_ws: dict[str, dict[str, str]]
     ) -> None:
@@ -469,6 +495,23 @@ class TestListDir:
             path=str(tmp_path / "nope"), ctx=ctx_from_config(trusted_ws)
         )
         assert "not found" in result.lower() or "error" in result.lower()
+
+    async def test_lists_associated_roots_with_explicit_alias(
+        self, tmp_path, trusted_ws
+    ):
+        from backend.tools.fs import list_dir
+        from backend.workspace import workspace as ws_mod
+        from backend.workspace.workspace import WorkspaceRegistry
+
+        secondary = tmp_path / "shared"
+        secondary.mkdir()
+        ws = ws_mod.workspace_registry.get("testws")
+        assert ws is not None
+        ws.source_roots = [str(secondary)]
+
+        result = await list_dir(ctx=ctx_from_config(trusted_ws))
+
+        assert f"@root-{WorkspaceRegistry.derive_id(str(secondary))} (shared)" in result
 
 
 # ---------------------------------------------------------------------------
