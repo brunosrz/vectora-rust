@@ -41,12 +41,13 @@ export function registerDevelopmentDesktop(options: {
   const content = [
     "[Desktop Entry]",
     "Type=Application",
-    "Name=Vectora",
+    // A entrada precisa estar visível para shells que resolvem o ícone da janela
+    // pelo app_id somente entre aplicativos exibidos no launcher.
+    "Name=Vectora (dev)",
     `Exec=${execArgument(options.executable)} ${execArgument(options.main)}`,
     `Icon=${desktopString(options.icon)}`,
     `StartupWMClass=${DEVELOPMENT_DESKTOP_NAME.replace(/\.desktop$/, "")}`,
     "Terminal=false",
-    "NoDisplay=true",
     "Categories=Development;IDE;",
     "",
   ].join("\n");

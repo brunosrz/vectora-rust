@@ -41,11 +41,13 @@ describe("Linux development desktop identity", () => {
       join(dataHome, "applications", DEVELOPMENT_DESKTOP_NAME),
       "utf8",
     );
+    expect(entry).toContain("Name=Vectora (dev)\n");
     expect(entry).toContain(
       'Exec="/tools/Electron App/electron" "/repo 100%%/main.js"',
     );
     expect(entry).toContain("Icon=/repo/icon.png");
     expect(entry).toContain("StartupWMClass=company.vectora.vectora.dev\n");
+    expect(entry).not.toContain("NoDisplay=true");
   });
 
   it("rejects path injection instead of adding another desktop key", () => {
