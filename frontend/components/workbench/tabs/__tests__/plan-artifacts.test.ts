@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchArtifacts, shouldShowPlanLoadSpinner } from "../plan-tab";
+import {
+  fetchArtifactContent,
+  fetchArtifacts,
+  shouldShowPlanLoadSpinner,
+} from "../plan-tab";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -34,6 +38,33 @@ describe("fetchArtifacts", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "session_id=thread-1",
     );
+  });
+});
+
+describe("fetchArtifactContent", () => {
+  it("requests workspace plan content through the workspace-scoped source", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ content: "# plano" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchArtifactContent("thread-1", {
+        title: "Plano",
+        path: "/workspace/.vectora/plans/plano-local.md",
+        session_id: "thread-1",
+        created_at: "2026-11-25T00:00:00Z",
+        artifact_type: "workspace_plan",
+      }),
+    ).resolves.toBe("# plano");
+
+    const url = new URL(
+      String(fetchMock.mock.calls[0]?.[0]),
+      "http://localhost",
+    );
+    expect(url.pathname).toBe("/artifacts/plano-local");
+    expect(url.searchParams.get("session_id")).toBe("thread-1");
+    expect(url.searchParams.get("source")).toBe("workspace_plan");
   });
 });
 

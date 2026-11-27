@@ -53,6 +53,172 @@ def _write_artifact(home: Path, session_id: str, slug: str, content: str) -> Pat
 
 class TestListArtifacts:
     @pytest.mark.asyncio
+    async def test_lists_markdown_plans_from_the_owned_local_workspace(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        from backend.api.handlers.artifacts import get_artifact, list_artifacts
+        from backend.workspace.workspace import workspace_registry
+
+        workspace_root = tmp_path / "teste"
+        plans_dir = workspace_root / ".vectora" / "plans"
+        plans_dir.mkdir(parents=True)
+        first = plans_dir / (
+            "plano-de-execução-refatoração-reutilizável-do-jogo-godot-46.md"
+        )
+        first.write_text(
+            "# Plano de execução: arquitetura reutilizável para Godot 4.6\n\n"
+            "Conteúdo A",
+            encoding="utf-8",
+        )
+        second = plans_dir / (
+            "plano-de-refatoração-do-jogo-godot-46-com-classes-reutilizáveis-e-autoloads.md"
+        )
+        second.write_text(
+            "# Plano: arquitetura reutilizável para Godot 4.6\n\nConteúdo B",
+            encoding="utf-8",
+        )
+        external_plan = tmp_path / "outside.md"
+        external_plan.write_text("# Fora do workspace", encoding="utf-8")
+        (plans_dir / "link-externo.md").symlink_to(external_plan)
+
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/artifacts/",
+                "headers": [],
+                "query_string": b"",
+                "server": ("testserver", 80),
+                "client": ("testclient", 123),
+                "scheme": "http",
+                "http_version": "1.1",
+            }
+        )
+        request.state.user = SimpleNamespace(id="owner")
+
+        class SessionStore:
+            async def get_session(self, thread_id, *, user_id=None):
+                assert thread_id == "thread-with-workspace"
+                return {"workspace_id": "workspace-1", "user_id": "owner"}
+
+        async def get_session_store():
+            return SessionStore()
+
+        workspace = SimpleNamespace(
+            id="workspace-1", cwd=str(workspace_root), transport="local"
+        )
+        monkeypatch.setattr(
+            "backend.api.handlers.threads._get_session_store",
+            get_session_store,
+        )
+        monkeypatch.setattr(
+            "backend.api.handlers.threads._assert_existing_thread_ownership",
+            AsyncMock(),
+        )
+        monkeypatch.setattr(workspace_registry, "get", lambda workspace_id: workspace)
+        monkeypatch.setattr(
+            "backend.api.handlers.workspaces.require_workspace_access",
+            lambda workspace_id, request: workspace,
+        )
+
+        response = await list_artifacts(
+            session_id="thread-with-workspace", request=request
+        )
+
+        local_plans = {
+            item.path: item
+            for item in response.artifacts
+            if item.artifact_type == "workspace_plan"
+        }
+        assert set(local_plans) == {str(first), str(second)}
+        assert (
+            local_plans[str(first)].title
+            == "Plano de execução: arquitetura reutilizável para Godot 4.6"
+        )
+        assert (
+            local_plans[str(second)].title
+            == "Plano: arquitetura reutilizável para Godot 4.6"
+        )
+
+        opened = await get_artifact(
+            slug="plano-de-execução-refatoração-reutilizável-do-jogo-godot-46",
+            session_id="thread-with-workspace",
+            source="workspace_plan",
+            request=request,
+        )
+        assert opened.content == (
+            "# Plano de execução: arquitetura reutilizável para Godot 4.6\n\nConteúdo A"
+        )
+        assert opened.artifact_type == "workspace_plan"
+
+        def deny_workspace_access(workspace_id, request):
+            raise HTTPException(status_code=403, detail="Sem acesso")
+
+        monkeypatch.setattr(
+            "backend.api.handlers.workspaces.require_workspace_access",
+            deny_workspace_access,
+        )
+        with pytest.raises(HTTPException) as exc_info:
+            await list_artifacts(session_id="thread-with-workspace", request=request)
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_does_not_list_local_plans_for_remote_workspaces(
+        self, fake_home, tmp_path, monkeypatch
+    ):
+        from backend.api.handlers.artifacts import list_artifacts
+        from backend.workspace.workspace import workspace_registry
+
+        workspace_root = tmp_path / "remote-mount"
+        plans_dir = workspace_root / ".vectora" / "plans"
+        plans_dir.mkdir(parents=True)
+        (plans_dir / "remote-plan.md").write_text("# Remote", encoding="utf-8")
+        request = Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/artifacts/",
+                "headers": [],
+                "query_string": b"",
+                "server": ("testserver", 80),
+                "client": ("testclient", 123),
+                "scheme": "http",
+                "http_version": "1.1",
+            }
+        )
+        request.state.user = SimpleNamespace(id="owner")
+
+        class SessionStore:
+            async def get_session(self, thread_id, *, user_id=None):
+                return {"workspace_id": "workspace-remote", "user_id": "owner"}
+
+        async def get_session_store():
+            return SessionStore()
+
+        workspace = SimpleNamespace(
+            id="workspace-remote", cwd=str(workspace_root), transport="ssh"
+        )
+        monkeypatch.setattr(
+            "backend.api.handlers.threads._get_session_store",
+            get_session_store,
+        )
+        monkeypatch.setattr(
+            "backend.api.handlers.threads._assert_existing_thread_ownership",
+            AsyncMock(),
+        )
+        monkeypatch.setattr(workspace_registry, "get", lambda workspace_id: workspace)
+        monkeypatch.setattr(
+            "backend.api.handlers.workspaces.require_workspace_access",
+            lambda workspace_id, request: workspace,
+        )
+
+        response = await list_artifacts(
+            session_id="thread-with-remote-workspace", request=request
+        )
+
+        assert response.artifacts == []
+
+    @pytest.mark.asyncio
     async def test_storage_read_failure_is_not_reported_as_an_empty_plan(
         self, fake_home, monkeypatch
     ):
