@@ -164,4 +164,45 @@ describe("GodotTab", () => {
       screen.queryByText("godot_workbench_passed"),
     ).not.toBeInTheDocument();
   });
+
+  it.each([
+    [
+      "unconfigured",
+      "Godot não encontrado no PATH nem em VECTORA_GODOT_EXECUTABLE.",
+      "engine_discovery",
+    ],
+    [
+      "invalid selected file",
+      "O executável Godot selecionado não existe ou não pode ser executado.",
+      "engine_discovery",
+    ],
+    [
+      "incompatible version",
+      "O executável não corresponde à versão esperada pelo projeto.",
+      "engine_version",
+    ],
+  ])(
+    "shows a distinct result when Godot is %s",
+    async (_case, message, stage) => {
+      if (_case === "invalid selected file") {
+        localStorage.setItem("godot-executable:ws-1", "/missing/Godot");
+      }
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ status: "error", stage, message }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
+
+      render(<GodotTab />);
+      fireEvent.click(
+        screen.getByRole("button", { name: "godot_workbench_validate" }),
+      );
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+    },
+  );
 });

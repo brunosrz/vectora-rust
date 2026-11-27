@@ -183,7 +183,34 @@ async def test_validation_requires_matching_installed_engine(
     assert result["status"] == "error"
     assert result["stage"] == "engine_version"
     assert result["actual_version"] == "4.7"
+    assert (
+        result["message"]
+        == "O executável não corresponde à versão esperada pelo projeto."
+    )
     runner.assert_awaited_once()
+
+
+async def test_validation_reports_when_no_executable_is_configured_or_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project_dir = _project(tmp_path / "game")
+    monkeypatch.setattr(godot, "_require_trust", lambda _ctx: "")
+    monkeypatch.setattr(godot, "_require_local", lambda _ctx: None)
+    monkeypatch.setattr(godot, "_confine", lambda _path, _ctx: (project_dir, ""))
+    monkeypatch.setattr(godot.shutil, "which", lambda _name: None)
+    runner = AsyncMock()
+    monkeypatch.setattr(godot, "_run_engine", runner)
+
+    result = json.loads(await godot.validate_godot_project(ToolContext()))
+
+    assert result["status"] == "error"
+    assert result["stage"] == "engine_discovery"
+    assert result["code"] == "godot_unavailable"
+    assert (
+        result["message"]
+        == "Godot não encontrado no PATH nem em VECTORA_GODOT_EXECUTABLE."
+    )
+    runner.assert_not_awaited()
 
 
 async def test_validation_uses_user_selected_executable_path(
@@ -237,6 +264,11 @@ async def test_validation_rejects_missing_user_selected_executable(
 
     assert result["status"] == "error"
     assert result["stage"] == "engine_discovery"
+    assert result["code"] == "godot_unavailable"
+    assert (
+        result["message"]
+        == "O executável Godot selecionado não existe ou não pode ser executado."
+    )
     runner.assert_not_awaited()
 
 

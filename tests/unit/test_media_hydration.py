@@ -327,7 +327,6 @@ async def test_anexos_sobrevivem_tool_call_e_recarga_do_historico(
         sent.role is MessageRole.TOOL and "inspeção concluída" in sent.text()
         for sent in second_request
     )
-
     reloaded = await store.get_history(thread_id)
     persisted_user = next(item for item in reloaded if item.role is MessageRole.USER)
     persisted_images = [
@@ -340,6 +339,11 @@ async def test_anexos_sobrevivem_tool_call_e_recarga_do_historico(
         for block in persisted_user.content
     )
     assert any(item.role is MessageRole.TOOL for item in reloaded)
+    assert any(
+        item.role is MessageRole.ASSISTANT
+        and "Comparei as imagens e o código." in item.text()
+        for item in reloaded
+    )
 
     after_reload = hydrate_media_blocks(
         reloaded,
