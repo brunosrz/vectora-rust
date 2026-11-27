@@ -23,6 +23,7 @@ from backend.extensions.models import (
     Grants,
 )
 from backend.extensions.store import ExtensionStore
+from backend.vtypes.contracts import JsonObject
 
 
 class FakeClient:
@@ -314,10 +315,12 @@ async def test_call_tool_rejects_unserializable_and_oversized_arguments(
 ) -> None:
     await _active_host(host)
 
+    # Referência circular: um objeto que o JSON não consegue serializar.
+    circular: JsonObject = {}
+    circular["x"] = circular
+
     with pytest.raises(ExtensionError) as bad:
-        await host.call_tool(
-            "demo", "echo", {"x": object()}, workspace_id="ws1", actor="u"
-        )
+        await host.call_tool("demo", "echo", circular, workspace_id="ws1", actor="u")
     with pytest.raises(ExtensionError) as big:
         await host.call_tool(
             "demo", "echo", {"x": "a" * 300_000}, workspace_id="ws1", actor="u"

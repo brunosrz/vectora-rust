@@ -38,7 +38,9 @@ def mock_settings():
 
 class TestSampleRecentDocs:
     @pytest.mark.asyncio
-    async def test_amostra_documentos_do_workspace_certo(self, mock_db, mock_settings):
+    async def test_amostra_documentos_do_workspace_certo(
+        self, mock_db, mock_settings
+    ) -> None:
         mock_db.list_tables = AsyncMock(return_value=MagicMock(tables=["articles"]))
         table = AsyncMock()
         df = pd.DataFrame(
@@ -60,7 +62,9 @@ class TestSampleRecentDocs:
         assert "conteúdo do workspace certo" in samples[0]["text"]
 
     @pytest.mark.asyncio
-    async def test_filtra_documentos_de_outro_workspace(self, mock_db, mock_settings):
+    async def test_filtra_documentos_de_outro_workspace(
+        self, mock_db, mock_settings
+    ) -> None:
         mock_db.list_tables = AsyncMock(return_value=MagicMock(tables=["articles"]))
         table = AsyncMock()
         df = pd.DataFrame(
@@ -76,7 +80,7 @@ class TestSampleRecentDocs:
     @pytest.mark.asyncio
     async def test_colecao_sem_tabela_nao_derruba_a_amostragem(
         self, mock_db, mock_settings
-    ):
+    ) -> None:
         mock_db.list_tables = AsyncMock(return_value=MagicMock(tables=["quebrada"]))
         mock_db.open_table = AsyncMock(side_effect=RuntimeError("tabela sumiu"))
 

@@ -6,10 +6,12 @@ import argparse
 import asyncio
 import contextlib
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rich.console import Console
+
+    from backend.settings import Settings
 
 
 async def _run_storage_async(args: argparse.Namespace) -> None:
@@ -411,7 +413,7 @@ async def _storage_data_migrate(
         migrate_to_qdrant,
     )
 
-    _s: Any = None
+    _s: Settings | None = None
     with contextlib.suppress(Exception):
         from backend.settings import settings as _s
 

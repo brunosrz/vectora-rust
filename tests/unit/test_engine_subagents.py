@@ -124,7 +124,7 @@ def _spec(nome: str = "coder", tools=None) -> SubagentSpec:
 
 
 class TestRunSubagentSincrono:
-    async def test_devolve_o_texto_final_do_subagente(self, session_store, ctx):
+    async def test_devolve_o_texto_final_do_subagente(self, session_store, ctx) -> None:
         client = _ScriptedChatClient([[_texto_chunk("resultado do subagente")]])
 
         resultado = await run_subagent(
@@ -141,7 +141,7 @@ class TestRunSubagentSincrono:
 
     async def test_contexto_da_subthread_preserva_sessao_raiz_dos_artifacts(
         self, session_store, ctx, monkeypatch
-    ):
+    ) -> None:
         from types import SimpleNamespace
 
         from backend.engine import subagents
@@ -174,7 +174,7 @@ class TestRunSubagentSincrono:
 
     async def test_sub_thread_isolada_com_parent_thread_id_gravado(
         self, session_store, ctx
-    ):
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("ok")]])
 
         await run_subagent(
@@ -202,7 +202,9 @@ class TestRunSubagentSincrono:
         assert thread_id.startswith("thread-pai:search:")
         assert thread_id != "thread-pai"
 
-    async def test_historico_do_subagente_nao_herda_o_do_pai(self, session_store, ctx):
+    async def test_historico_do_subagente_nao_herda_o_do_pai(
+        self, session_store, ctx
+    ) -> None:
         # Popula o histórico do pai antes de delegar.
         from backend.vtypes.message import MessageRole, text_message
 
@@ -224,11 +226,13 @@ class TestRunSubagentSincrono:
         historico_pai = await session_store.get_history("thread-pai")
         assert [m.text() for m in historico_pai] == ["mensagem do pai"]
 
-    async def test_emite_subagent_output_running_e_complete(self, session_store, ctx):
+    async def test_emite_subagent_output_running_e_complete(
+        self, session_store, ctx
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("feito")]])
         eventos: list[SubagentOutput] = []
 
-        async def on_event(event):
+        async def on_event(event) -> None:
             if isinstance(event, SubagentOutput):
                 eventos.append(event)
 
@@ -251,7 +255,7 @@ class TestRunSubagentSincrono:
 
     async def test_hitl_dentro_do_subagente_pausa_sem_emitir_complete(
         self, session_store, ctx
-    ):
+    ) -> None:
         @vtool(extras=ToolExtras(destructive=True))
         async def escrever_no_subagente(ctx: ToolContext) -> str:
             """escreve algo."""
@@ -274,7 +278,7 @@ class TestRunSubagentSincrono:
         )
         eventos: list[SubagentOutput] = []
 
-        async def on_event(event):
+        async def on_event(event) -> None:
             if isinstance(event, SubagentOutput):
                 eventos.append(event)
 
@@ -296,7 +300,7 @@ class TestRunSubagentSincrono:
 class TestSpawnSubagentBackground:
     async def test_roda_em_background_e_pode_ser_esperada_depois(
         self, session_store, ctx
-    ):
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("resultado em background")]])
 
         task = spawn_subagent_background(
@@ -317,7 +321,7 @@ class TestSpawnSubagentBackground:
 class TestTurnBudgetDoTurnoPai:
     async def test_spawn_recusado_quando_teto_do_turno_pai_ja_estourou(
         self, session_store, ctx
-    ):
+    ) -> None:
         """`turn_budget` é o mesmo objeto do turno do agente pai — se já
         estourou (por qualquer dimensão), o spawn é recusado sem gastar
         nenhum recurso: nenhuma sessão criada, nenhuma chamada ao chat
@@ -342,7 +346,7 @@ class TestTurnBudgetDoTurnoPai:
 
     async def test_spawn_dentro_do_teto_incrementa_o_budget_do_pai(
         self, session_store, ctx
-    ):
+    ) -> None:
         budget = TurnBudget(config=LoopCapConfig(max_subagent_spawns_per_turn=2))
         client = _ScriptedChatClient([[_texto_chunk("ok")]])
 
@@ -365,7 +369,7 @@ class TestTurnBudgetDoTurnoPai:
 class TestLivenessAtiva:
     async def test_sem_liveness_config_roda_ate_completar_normalmente(
         self, session_store, ctx
-    ):
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("completou sem watchdog")]])
 
         resultado = await run_subagent(
@@ -382,7 +386,7 @@ class TestLivenessAtiva:
 
     async def test_subagente_progredindo_nao_dispara_cancelamento(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Happy path: watchdog ativo, mas o subagente termina rápido —
         nunca chega a competir com o watchdog."""
         client = _ScriptedChatClient([[_texto_chunk("terminei rápido")]])
@@ -402,14 +406,14 @@ class TestLivenessAtiva:
 
     async def test_subagente_sem_progresso_e_cancelado_pelo_watchdog(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Erro/borda: subagente travado (nunca emite evento) é cancelado
         depois de `heartbeat_interval_s * max_stalled_heartbeats`, resultado
         vira status='cancelled' — nunca trava o processo pai pra sempre."""
         client = _HangingChatClient()
         eventos: list[SubagentOutput] = []
 
-        async def on_event(event):
+        async def on_event(event) -> None:
             if isinstance(event, SubagentOutput):
                 eventos.append(event)
 
@@ -434,7 +438,7 @@ class TestLivenessAtiva:
 class TestEscopoRBACDoSubagente:
     async def test_soul_com_toolset_dentro_do_escopo_delega_normalmente(
         self, session_store, ctx, monkeypatch
-    ):
+    ) -> None:
         from backend.rbac import tool_policy
 
         @vtool(extras=ToolExtras())
@@ -462,7 +466,7 @@ class TestEscopoRBACDoSubagente:
 
     async def test_soul_pedindo_tool_fora_do_escopo_e_rejeitada_sem_chamar_llm(
         self, session_store, ctx, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: tool desabilitada (kill-switch global ou ABAC do
         usuário) nunca chega a rodar dentro do subagente — erro tipado
         antes de qualquer sessão/chamada ao chat client."""
@@ -499,7 +503,7 @@ class TestEscopoRBACDoSubagente:
 class TestDedupPorCorrelationId:
     async def test_correlation_id_duplicado_reaproveita_a_delegacao_em_andamento(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Duas delegações concorrentes com o mesmo `correlation_id` não
         criam duas sessões/chamadas ao chat client — a segunda reaproveita
         o resultado da primeira, já em andamento. Erro/borda coberto por
@@ -534,7 +538,7 @@ class TestDedupPorCorrelationId:
 
     async def test_correlation_id_reaproveita_so_dentro_da_mesma_identidade(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Par de erro: o mesmo `correlation_id` vindo de usuários diferentes
         não reaproveita a execução um do outro; cada identidade recebe o
         próprio resultado e o chat client é chamado duas vezes."""
@@ -575,7 +579,7 @@ class TestDedupPorCorrelationId:
 
     async def test_correlation_id_diferente_roda_delegacoes_independentes(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Erro/borda simétrico: ids diferentes nunca deduplicam — cada
         delegação roda e chama o chat client separadamente."""
         client = _ScriptedChatClient(
@@ -611,7 +615,7 @@ class TestDedupPorCorrelationId:
 class TestHardInterruptRealNaoPassivo:
     async def test_token_valido_cancela_a_task_de_verdade_invalido_e_rejeitado(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Erro/borda: token HMAC inválido nunca cancela nada, mesmo com o
         `correlation_id` certo e o subagente realmente em execução — só o
         token correto (`subagent_capability_token`) autoriza. Prova de que
@@ -657,7 +661,7 @@ class TestHardInterruptRealNaoPassivo:
 
     async def test_sem_task_em_execucao_devolve_false_mesmo_com_token_valido(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Erro/borda: `correlation_id` que nunca teve (ou já terminou) uma
         delegação em execução nunca é achado pra cancelar — mesmo com o
         token correto."""
@@ -676,7 +680,7 @@ class TestShouldRequireApprovalObrigatorio:
 
     async def test_run_subagent_sem_should_require_approval_estoura_typeerror(
         self, session_store, ctx
-    ):
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("nunca deveria rodar")]])
         with pytest.raises(TypeError, match="should_require_approval"):
             await run_subagent(  # type: ignore[call-arg]  # ty: ignore[missing-argument]

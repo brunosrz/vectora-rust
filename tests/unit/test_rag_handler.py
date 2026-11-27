@@ -77,7 +77,7 @@ def _bypass_workspace_ownership():
 
 class TestRagSettingsEndpoints:
     @pytest.mark.asyncio
-    async def test_get_returns_runtime_settings(self, tmp_path):
+    async def test_get_returns_runtime_settings(self, tmp_path) -> None:
         from backend.api.handlers import rag as handler
         from backend.workspace.runtime_settings import RuntimeSettings
 
@@ -95,7 +95,7 @@ class TestRagSettingsEndpoints:
 
     @pytest.mark.asyncio
     @pytest.mark.asyncio
-    async def test_patch_updates_and_returns(self, tmp_path):
+    async def test_patch_updates_and_returns(self, tmp_path) -> None:
         from backend.api.handlers import rag as handler
         from backend.api.handlers.rag import RagSettingsBody
         from backend.workspace.runtime_settings import RuntimeSettings
@@ -111,7 +111,7 @@ class TestRagSettingsEndpoints:
 
 class TestRagCollections:
     @pytest.mark.asyncio
-    async def test_list_empty_when_backend_has_no_collections(self):
+    async def test_list_empty_when_backend_has_no_collections(self) -> None:
         from backend.api.handlers import rag as handler
 
         fake = _FakeVectorStoreBackend()
@@ -123,7 +123,7 @@ class TestRagCollections:
         assert out == {"collections": []}
 
     @pytest.mark.asyncio
-    async def test_delete_raises_404_when_collection_missing(self):
+    async def test_delete_raises_404_when_collection_missing(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers import rag as handler
@@ -147,7 +147,7 @@ class TestWorkspaceRagSummary:
     """
 
     @pytest.mark.asyncio
-    async def test_empty_when_no_collections(self):
+    async def test_empty_when_no_collections(self) -> None:
         from backend.api.handlers import rag as handler
 
         fake = _FakeVectorStoreBackend()
@@ -159,7 +159,7 @@ class TestWorkspaceRagSummary:
         assert out == {"collections": []}
 
     @pytest.mark.asyncio
-    async def test_counts_only_rows_matching_workspace_id(self):
+    async def test_counts_only_rows_matching_workspace_id(self) -> None:
         from backend.api.handlers import rag as handler
 
         fake = _FakeVectorStoreBackend(
@@ -180,7 +180,7 @@ class TestWorkspaceRagSummary:
         assert out == {"collections": [{"name": "articles", "count": 2}]}
 
     @pytest.mark.asyncio
-    async def test_omits_collections_with_zero_matches(self):
+    async def test_omits_collections_with_zero_matches(self) -> None:
         from backend.api.handlers import rag as handler
 
         fake = _FakeVectorStoreBackend(
@@ -195,7 +195,9 @@ class TestWorkspaceRagSummary:
         assert out == {"collections": []}
 
     @pytest.mark.asyncio
-    async def test_tolerates_one_broken_collection_and_still_reports_others(self):
+    async def test_tolerates_one_broken_collection_and_still_reports_others(
+        self,
+    ) -> None:
         """Edge — uma coleção corrompida/sem schema não deve derrubar as demais."""
         from backend.api.handlers import rag as handler
 
@@ -219,7 +221,7 @@ class TestRagSearch:
     """POST /rag/search — busca direta do usuário, mesma vector_search do agente."""
 
     @pytest.mark.asyncio
-    async def test_search_with_explicit_collection_returns_sorted_results(self):
+    async def test_search_with_explicit_collection_returns_sorted_results(self) -> None:
         import json
 
         from backend.api.handlers import rag as handler
@@ -245,7 +247,9 @@ class TestRagSearch:
         assert all(r["collection"] == "articles" for r in out["results"])
 
     @pytest.mark.asyncio
-    async def test_search_without_collection_or_workspace_falls_back_to_articles(self):
+    async def test_search_without_collection_or_workspace_falls_back_to_articles(
+        self,
+    ) -> None:
         from backend.api.handlers import rag as handler
         from backend.api.handlers.rag import RagSearchBody
 
@@ -261,7 +265,9 @@ class TestRagSearch:
         assert out["results"] == []
 
     @pytest.mark.asyncio
-    async def test_search_with_workspace_but_nothing_indexed_returns_empty(self):
+    async def test_search_with_workspace_but_nothing_indexed_returns_empty(
+        self,
+    ) -> None:
         """Edge — workspace sem nenhuma coleção indexada não deve chamar vector_search."""
         from backend.api.handlers import rag as handler
         from backend.api.handlers.rag import RagSearchBody
@@ -323,7 +329,7 @@ class TestRagCollectionsRealLanceDB:
         factory._reset_singletons()
 
     @pytest.mark.asyncio
-    async def test_list_collections_shape_with_real_table(self, tmp_path):
+    async def test_list_collections_shape_with_real_table(self, tmp_path) -> None:
         import lancedb
         import pyarrow as pa
 
@@ -354,7 +360,7 @@ class TestRagCollectionsRealLanceDB:
         assert isinstance(collection["count"], int)
 
     @pytest.mark.asyncio
-    async def test_workspace_summary_shape_with_real_table(self, tmp_path):
+    async def test_workspace_summary_shape_with_real_table(self, tmp_path) -> None:
         import lancedb
         import pyarrow as pa
 

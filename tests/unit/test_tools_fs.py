@@ -138,7 +138,7 @@ class TestFileRead:
 
     async def test_remote_workspace_reads_through_transport(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         from unittest.mock import AsyncMock
 
         from backend.workspace import workspace as ws_mod
@@ -180,7 +180,7 @@ class TestFileRead:
 
     async def test_remote_workspace_rejects_parent_traversal(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         from unittest.mock import AsyncMock
 
         from backend.tools import fs as fs_mod
@@ -209,7 +209,7 @@ class TestFileRead:
 
     async def test_remote_write_requires_trust_and_uses_transport(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         from unittest.mock import AsyncMock
 
         from backend.tools import fs as fs_mod
@@ -282,7 +282,7 @@ class TestFileWorkbenchParity:
 
 
 class TestFileWrite:
-    async def test_creates_new_file(self, tmp_path, trusted_ws):
+    async def test_creates_new_file(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de creates new file."""
         from backend.tools.fs import file_write
 
@@ -293,7 +293,7 @@ class TestFileWrite:
         assert "ok" in result.lower() or "written" in result.lower()
         assert dest.read_text(encoding="utf-8") == "ola mundo"
 
-    async def test_overwrites_existing_file(self, tmp_path, trusted_ws):
+    async def test_overwrites_existing_file(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de overwrites existing file."""
         from backend.tools.fs import file_write
 
@@ -304,7 +304,7 @@ class TestFileWrite:
         )
         assert dest.read_text(encoding="utf-8") == "novo"
 
-    async def test_creates_parent_dirs(self, tmp_path, trusted_ws):
+    async def test_creates_parent_dirs(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de creates parent dirs."""
         from backend.tools.fs import file_write
 
@@ -314,7 +314,7 @@ class TestFileWrite:
         )
         assert dest.exists()
 
-    async def test_blocked_path(self, tmp_path, trusted_ws):
+    async def test_blocked_path(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de blocked path."""
         from backend.tools.fs import file_write
 
@@ -324,7 +324,7 @@ class TestFileWrite:
         )
         assert "fora do workspace" in result.lower() or "error" in result.lower()
 
-    async def test_requires_trust(self, tmp_path, monkeypatch):
+    async def test_requires_trust(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de requires trust."""
         from backend.tools.fs import file_write
         from backend.workspace import workspace as ws_mod
@@ -359,7 +359,7 @@ class TestFileWrite:
 
 
 class TestFileEdit:
-    async def test_replaces_text(self, tmp_path, trusted_ws):
+    async def test_replaces_text(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de replaces text."""
         from backend.tools.fs import file_edit
 
@@ -374,7 +374,7 @@ class TestFileEdit:
         assert "ok" in result.lower()
         assert "foo = 99" in f.read_text(encoding="utf-8")
 
-    async def test_replace_all(self, tmp_path, trusted_ws):
+    async def test_replace_all(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de replace all."""
         from backend.tools.fs import file_edit
 
@@ -389,7 +389,7 @@ class TestFileEdit:
         )
         assert f.read_text(encoding="utf-8") == "b b b"
 
-    async def test_creates_file_when_old_text_empty(self, tmp_path, trusted_ws):
+    async def test_creates_file_when_old_text_empty(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de creates file when old text empty."""
         from backend.tools.fs import file_edit
 
@@ -403,7 +403,7 @@ class TestFileEdit:
         assert "ok" in result.lower() or "created" in result.lower()
         assert dest.read_text(encoding="utf-8") == "criado"
 
-    async def test_text_not_found(self, tmp_path, trusted_ws):
+    async def test_text_not_found(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de text not found."""
         from backend.tools.fs import file_edit
 
@@ -424,7 +424,7 @@ class TestFileEdit:
 
 
 class TestGrep:
-    async def test_finds_pattern_in_file(self, tmp_path, trusted_ws):
+    async def test_finds_pattern_in_file(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de finds pattern in file."""
         from backend.tools.fs import grep
 
@@ -435,7 +435,7 @@ class TestGrep:
         )
         assert "def foo" in result
 
-    async def test_no_match_returns_message(self, tmp_path, trusted_ws):
+    async def test_no_match_returns_message(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de no match returns message."""
         from backend.tools.fs import grep
 
@@ -448,7 +448,7 @@ class TestGrep:
         )
         assert "no matches" in result.lower()
 
-    async def test_invalid_pattern(self, trusted_ws):
+    async def test_invalid_pattern(self, trusted_ws) -> None:
         """Verifica o comportamento de invalid pattern."""
         from backend.tools.fs import grep
 
@@ -465,7 +465,7 @@ class TestGrep:
 
 
 class TestListDir:
-    async def test_lists_files(self, tmp_path, trusted_ws):
+    async def test_lists_files(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de lists files."""
         from backend.tools.fs import list_dir
 
@@ -475,7 +475,7 @@ class TestListDir:
         assert "a.txt" in result
         assert "b.txt" in result
 
-    async def test_recursive(self, tmp_path, trusted_ws):
+    async def test_recursive(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de recursive."""
         from backend.tools.fs import list_dir
 
@@ -487,7 +487,7 @@ class TestListDir:
         )
         assert "deep.txt" in result
 
-    async def test_nonexistent_dir(self, tmp_path, trusted_ws):
+    async def test_nonexistent_dir(self, tmp_path, trusted_ws) -> None:
         """Verifica o comportamento de nonexistent dir."""
         from backend.tools.fs import list_dir
 
@@ -498,7 +498,7 @@ class TestListDir:
 
     async def test_lists_associated_roots_with_explicit_alias(
         self, tmp_path, trusted_ws
-    ):
+    ) -> None:
         from backend.tools.fs import list_dir
         from backend.workspace import workspace as ws_mod
         from backend.workspace.workspace import WorkspaceRegistry
@@ -527,7 +527,7 @@ class TestActiveWorkspaceFallback:
 
     async def test_sem_workspace_id_usa_o_workspace_ativo_do_usuario(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de sem workspace id usa o workspace ativo do usuario."""
         from backend.tools.context import ToolContext
         from backend.tools.fs import _active_workspace
@@ -559,7 +559,7 @@ class TestActiveWorkspaceFallback:
 
     async def test_sem_workspace_ativo_cai_no_ultimo_recurso(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: nenhum workspace ativo registrado (primeiro uso,
         registry vazio) — só aí o último recurso (cwd do processo) é
         aceitável."""
@@ -599,12 +599,12 @@ def _cfg(thread_id: str) -> dict:
 
 class TestCreateArtifact:
     @pytest.fixture(autouse=True)
-    def _isolate_artifact_home(self, tmp_path, monkeypatch):
+    def _isolate_artifact_home(self, tmp_path, monkeypatch) -> None:
         from backend.settings import settings
 
         monkeypatch.setattr(settings, "vectora_home", tmp_path / ".vectora")
 
-    async def test_creates_file_and_returns_json(self, tmp_path, monkeypatch):
+    async def test_creates_file_and_returns_json(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de creates file and returns json."""
         from backend.tools.fs import create_artifact
 
@@ -629,7 +629,7 @@ class TestCreateArtifact:
 
     async def test_subagent_artifact_is_saved_under_parent_session(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         from backend.tools.fs import create_artifact
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -650,7 +650,9 @@ class TestCreateArtifact:
         assert Path(result["path"]).parent.name == "parent-thread"
         assert Path(result["path"]).is_file()
 
-    async def test_rejects_invalid_artifact_session_path(self, tmp_path, monkeypatch):
+    async def test_rejects_invalid_artifact_session_path(
+        self, tmp_path, monkeypatch
+    ) -> None:
         from backend.tools.fs import create_artifact
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -669,7 +671,7 @@ class TestCreateArtifact:
         assert "error" in result
         assert not (tmp_path.parent / "outside").exists()
 
-    async def test_saved_under_session_dir(self, tmp_path, monkeypatch):
+    async def test_saved_under_session_dir(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de saved under session dir."""
         from backend.tools.fs import create_artifact
 
@@ -688,7 +690,7 @@ class TestCreateArtifact:
 
     async def test_same_title_rewrites_current_and_keeps_previous_as_history(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Versionamento: salvar de novo com o MESMO título mantém o path
         atual estável (a UI sempre acha a versão mais recente no mesmo
         lugar) — a versão anterior vira histórico imutável numerado, não é
@@ -730,7 +732,7 @@ class TestCreateArtifact:
 
     async def test_third_write_rotates_history_without_losing_the_first(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de third write rotates history without losing the first."""
         from backend.tools.fs import create_artifact
 
@@ -766,7 +768,7 @@ class TestCreateArtifact:
 
     async def test_sidecar_rotation_failure_keeps_current_artifact(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Uma falha ao mover o sidecar não pode perder o Markdown atual."""
         from backend.tools.fs import _rotate_artifact_history
 
@@ -792,7 +794,7 @@ class TestCreateArtifact:
 
     async def test_writes_artifact_type_sidecar_read_by_api(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """A API (handlers/artifacts.py) lê `{slug}.artifact_type` pra
         colorir/iconizar a Plan tab por tipo — precisa existir ao lado do
         .md da versão atual."""
@@ -811,7 +813,7 @@ class TestCreateArtifact:
         assert sidecar.exists()
         assert sidecar.read_text(encoding="utf-8") == "architecture"
 
-    async def test_generic_title_rejected(self, tmp_path, monkeypatch):
+    async def test_generic_title_rejected(self, tmp_path, monkeypatch) -> None:
         """Erro/borda: título só com o nome do tipo ('Plano') é rejeitado —
         viraria plan.md sem dizer do que trata (bug real observado ao vivo:
         artifact criado sem título descritivo)."""
@@ -828,7 +830,9 @@ class TestCreateArtifact:
         assert "error" in data
         assert not (tmp_path / ".vectora").exists()  # nada foi escrito
 
-    async def test_descriptive_title_still_accepted(self, tmp_path, monkeypatch):
+    async def test_descriptive_title_still_accepted(
+        self, tmp_path, monkeypatch
+    ) -> None:
         """Verifica o comportamento de descriptive title still accepted."""
         from backend.tools.fs import create_artifact
 
@@ -845,7 +849,7 @@ class TestCreateArtifact:
 
     async def test_mirrors_current_version_to_active_workspace(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Com workspace_id no config, a versão atual é espelhada em
         <workspace>/.vectora/{tipo}s/{slug}.md — sem histórico, sempre a
         última versão, visível direto no projeto (não só em ~/.vectora)."""
@@ -886,7 +890,7 @@ class TestCreateArtifact:
 
     async def test_sem_workspace_id_nao_resolve_workspace_default(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: sem workspace_id explícito, nunca chama
         get_or_create (não força a criação/uso de um workspace default só
         pra tentar espelhar o artifact)."""
@@ -909,7 +913,7 @@ class TestCreateArtifact:
         data = json.loads(result)
         assert "error" not in data
 
-    async def test_invalid_type_returns_error(self, tmp_path, monkeypatch):
+    async def test_invalid_type_returns_error(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de invalid type returns error."""
         from backend.tools.fs import create_artifact
 
@@ -923,7 +927,7 @@ class TestCreateArtifact:
         data = json.loads(result)
         assert "error" in data
 
-    async def test_empty_title_returns_error(self, tmp_path, monkeypatch):
+    async def test_empty_title_returns_error(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de empty title returns error."""
         from backend.tools.fs import create_artifact
 
@@ -937,7 +941,7 @@ class TestCreateArtifact:
         data = json.loads(result)
         assert "error" in data
 
-    async def test_empty_content_returns_error(self, tmp_path, monkeypatch):
+    async def test_empty_content_returns_error(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de empty content returns error."""
         from backend.tools.fs import create_artifact
 
@@ -951,7 +955,7 @@ class TestCreateArtifact:
         data = json.loads(result)
         assert "error" in data
 
-    async def test_all_valid_types_accepted(self, tmp_path, monkeypatch):
+    async def test_all_valid_types_accepted(self, tmp_path, monkeypatch) -> None:
         """Verifica o comportamento de all valid types accepted."""
         from backend.tools.fs import _VALID_ARTIFACT_TYPES, create_artifact
 
@@ -968,7 +972,7 @@ class TestCreateArtifact:
 
     async def test_missing_thread_id_returns_error_instead_of_silent_default(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Regressão: session_id="000000" como default oculto fazia o artifact
         cair num diretório errado sempre que o config não trazia o thread_id
         real (ex.: modelo "esquecia" de passar o parâmetro, já que dependia
@@ -995,14 +999,14 @@ class TestCreateArtifact:
 
 
 class TestArtifactSlug:
-    def test_basic_slug(self):
+    def test_basic_slug(self) -> None:
         """Verifica o comportamento de basic slug."""
         from backend.tools.fs import _artifact_slug
 
         slug = _artifact_slug("Plano de Implementacao")
         assert slug == "plano-de-implementacao"
 
-    def test_long_title_not_truncated(self):
+    def test_long_title_not_truncated(self) -> None:
         """Sem limite de comprimento (ver tests/unit/test_artifact_slug.py —
         um limite de 50 chars foi um bug já corrigido de propósito)."""
         from backend.tools.fs import _artifact_slug
@@ -1010,20 +1014,20 @@ class TestArtifactSlug:
         long_title = "a" * 100
         assert len(_artifact_slug(long_title)) == 100
 
-    def test_empty_falls_back(self):
+    def test_empty_falls_back(self) -> None:
         """Verifica o comportamento de empty falls back."""
         from backend.tools.fs import _artifact_slug
 
         assert _artifact_slug("") == "artifact"
         assert _artifact_slug("   !@#  ") == "artifact"
 
-    def test_spaces_become_hyphens(self):
+    def test_spaces_become_hyphens(self) -> None:
         """Verifica o comportamento de spaces become hyphens."""
         from backend.tools.fs import _artifact_slug
 
         assert _artifact_slug("hello world") == "hello-world"
 
-    def test_no_consecutive_hyphens(self):
+    def test_no_consecutive_hyphens(self) -> None:
         """Verifica o comportamento de no consecutive hyphens."""
         from backend.tools.fs import _artifact_slug
 
@@ -1049,7 +1053,7 @@ def _approve_current_hooks(root: Path) -> None:
 
 
 class TestPostWriteHooksAndAutoCommit:
-    async def test_file_write_runs_post_write_hook(self, tmp_path, trusted_ws):
+    async def test_file_write_runs_post_write_hook(self, tmp_path, trusted_ws) -> None:
         """[hooks] post_file_write roda com {file} substituído pelo path real."""
         from backend.tools.fs import file_write
 
@@ -1070,7 +1074,7 @@ class TestPostWriteHooksAndAutoCommit:
 
     async def test_post_write_hook_alterado_depois_da_aprovacao_nao_roda(
         self, tmp_path, trusted_ws
-    ):
+    ) -> None:
         """O digest cobre post_file_write: comando trocado depois da aprovação
         não executa e a resposta avisa."""
         from backend.tools.fs import file_write
@@ -1094,7 +1098,7 @@ class TestPostWriteHooksAndAutoCommit:
 
     async def test_file_write_without_config_does_not_run_hooks(
         self, tmp_path, trusted_ws
-    ):
+    ) -> None:
         """Sem vectora.toml (ou sem seções configuradas), nenhum hook roda — edge."""
         from backend.tools.fs import file_write
 
@@ -1106,7 +1110,7 @@ class TestPostWriteHooksAndAutoCommit:
 
     async def test_hook_not_approved_does_not_run_and_warns(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Workspace confiável mas sem aprovação de hooks — hook NÃO roda, e a
         resposta da tool avisa o motivo: efeito de shell arbitrário vindo de
         vectora.toml não herda a confiança de leitura/escrita."""
@@ -1142,7 +1146,9 @@ class TestPostWriteHooksAndAutoCommit:
         assert not marker_file.exists()
         assert "aprovad" in result.lower()
 
-    async def test_hook_approved_after_approve_hooks_runs(self, tmp_path, monkeypatch):
+    async def test_hook_approved_after_approve_hooks_runs(
+        self, tmp_path, monkeypatch
+    ) -> None:
         """Depois de WorkspaceRegistry.approve_hooks(...), o hook passa a rodar."""
         from backend.tools.fs import file_write
         from backend.workspace.workspace import WorkspaceRegistry
@@ -1171,7 +1177,7 @@ class TestPostWriteHooksAndAutoCommit:
         marker_file = Path(str(dest) + ".marker")
         assert marker_file.exists()
 
-    def test_build_hook_argv_never_reinterprets_file_as_shell(self, tmp_path):
+    def test_build_hook_argv_never_reinterprets_file_as_shell(self, tmp_path) -> None:
         """Nome de arquivo com metacaracteres de shell vira argumento literal,
         não comando novo — a classe de injeção que motivou a troca de
         create_subprocess_shell por create_subprocess_exec."""
@@ -1187,7 +1193,9 @@ class TestPostWriteHooksAndAutoCommit:
         # não há shell no meio, é só substring dentro de um argv item.
         assert "rm" not in argv
 
-    async def test_file_edit_auto_commit_creates_git_commit(self, tmp_path, trusted_ws):
+    async def test_file_edit_auto_commit_creates_git_commit(
+        self, tmp_path, trusted_ws
+    ) -> None:
         """agent.auto_commit=true faz file_edit gerar um commit git automático."""
         import git
 
@@ -1219,7 +1227,7 @@ class TestPostWriteHooksAndAutoCommit:
 
     async def test_file_edit_auto_commit_disabled_by_default_leaves_changes_uncommitted(
         self, tmp_path, trusted_ws
-    ):
+    ) -> None:
         """Edge — sem auto_commit=true (default), a edição NÃO vira commit."""
         import git
 

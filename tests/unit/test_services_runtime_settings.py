@@ -397,7 +397,7 @@ class TestFrontendPrefs:
     @pytest.mark.parametrize("failure", ["write", "commit"])
     def test_failed_preference_write_preserves_revision_and_durable_state(
         self, tmp_path, failure
-    ):
+    ) -> None:
         first = RuntimeSettings(tmp_path / "failed-prefs.db")
         second = RuntimeSettings(tmp_path / "failed-prefs.db")
         first.set_frontend_prefs(
@@ -417,7 +417,7 @@ class TestFrontendPrefs:
                     raise sqlite3.OperationalError("commit failed")
                 connection.commit()
 
-            def rollback(self):
+            def rollback(self) -> None:
                 connection.rollback()
 
         first._conn = cast("sqlite3.Connection", FailingConnection())
@@ -445,7 +445,9 @@ class TestFrontendPrefs:
     def test_defaults_vazio(self, rs) -> None:
         assert rs.get_frontend_prefs("u1") == {}
 
-    def test_independent_connections_merge_and_observe_revocation(self, tmp_path):
+    def test_independent_connections_merge_and_observe_revocation(
+        self, tmp_path
+    ) -> None:
         first = RuntimeSettings(tmp_path / "prefs.db")
         second = RuntimeSettings(tmp_path / "prefs.db")
         try:
@@ -459,7 +461,7 @@ class TestFrontendPrefs:
             first._conn.close()
             second._conn.close()
 
-    def test_decision_revision_detects_aba_and_preserves_scope(self, tmp_path):
+    def test_decision_revision_detects_aba_and_preserves_scope(self, tmp_path) -> None:
         first = RuntimeSettings(tmp_path / "revision.db")
         second = RuntimeSettings(tmp_path / "revision.db")
         try:

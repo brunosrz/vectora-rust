@@ -162,7 +162,7 @@ async def test_history_hides_not_verified_on_a_plain_chat_turn() -> None:
         async def list_agent_runs(self, thread_id: str, *, limit: int = 50):
             return [chat_run]
 
-        async def latest_assistant_message_id(self, thread_id: str, run_id: str):
+        async def latest_assistant_message_id(self, thread_id: str, run_id: str) -> int:
             return 42
 
     assert await _history_verifications(_Store(), "t") == {}  # ty: ignore[invalid-argument-type]
@@ -182,7 +182,7 @@ async def test_history_keeps_not_verified_when_the_turn_touched_files() -> None:
         async def list_agent_runs(self, thread_id: str, *, limit: int = 50):
             return [edit_run]
 
-        async def latest_assistant_message_id(self, thread_id: str, run_id: str):
+        async def latest_assistant_message_id(self, thread_id: str, run_id: str) -> int:
             return 42
 
     verifications = await _history_verifications(_Store(), "t")  # ty: ignore[invalid-argument-type]

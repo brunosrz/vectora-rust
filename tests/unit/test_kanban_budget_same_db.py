@@ -54,7 +54,7 @@ async def db_real(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_kanban_e_budget_convergem_pro_banco_de_background_tasks(db_real):
+async def test_kanban_e_budget_convergem_pro_banco_de_background_tasks(db_real) -> None:
     from backend.scheduling import background_tasks as bg
     from backend.scheduling import budget, kanban
 
@@ -81,7 +81,7 @@ async def test_kanban_e_budget_convergem_pro_banco_de_background_tasks(db_real):
 @pytest.mark.asyncio
 async def test_kanban_no_checkpoints_db_falharia_com_tabela_ausente(
     tmp_path, monkeypatch
-):
+) -> None:
     """Erro/borda que documenta o bug original: se `_get_db` apontar pro
     banco de threads/checkpoints (sem `schema.sql` aplicado), a mesma
     chamada lança `OperationalError` — prova que o teste acima realmente

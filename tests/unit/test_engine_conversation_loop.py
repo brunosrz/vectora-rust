@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -45,6 +46,7 @@ from backend.engine.stream_events import (
     WorkbenchInvalidate,
 )
 from backend.persistence.native.session_store import SessionStore
+from backend.persistence.native.store import Item, SearchItem
 from backend.persistence.telemetry import telemetry
 from backend.scheduling.dag import DAGStore
 from backend.services.context_planner import compute_transcript_hash
@@ -258,23 +260,35 @@ async def test_load_persistent_context_memories_uses_memory_tool_namespace() -> 
     """Verifica o comportamento de load persistent context memories uses memory tool namespace."""
 
     class Store:
-        async def asearch(self, namespace, *, limit):
+        async def aget(self, namespace: tuple[str, ...], key: str) -> Item | None:
+            raise AssertionError("o carregamento não lê itens por chave")
+
+        async def aput(
+            self, namespace: tuple[str, ...], key: str, value: JsonObject
+        ) -> None:
+            raise AssertionError("o carregamento não grava")
+
+        async def adelete(self, namespace: tuple[str, ...], key: str) -> None:
+            raise AssertionError("o carregamento não apaga")
+
+        async def asearch(
+            self,
+            namespace: tuple[str, ...],
+            *,
+            query: str | None = None,
+            limit: int = 10,
+            include_expired: bool = False,
+        ) -> list[SearchItem]:
             """Executa a operação asearch."""
+            assert not include_expired
             assert namespace == ("user", "workspace_ws-1", "memories")
             assert limit == 5
-            return [
-                type(
-                    "Item",
-                    (),
-                    {
-                        "key": "rule",
-                        "value": {
-                            "content": "Use testes determinísticos",
-                            "metadata": {"domain": "project"},
-                        },
-                    },
-                )()
-            ]
+            now = datetime.now(UTC)
+            value: JsonObject = {
+                "content": "Use testes determinísticos",
+                "metadata": {"domain": "project"},
+            }
+            return [SearchItem(value, "rule", namespace, now, now)]
 
     context = ToolContext(user_id="local", workspace_id="ws-1", store=Store())
     records = await _load_persistent_context_memories(context)
@@ -369,7 +383,7 @@ async def test_decision_snapshot_survives_preference_change_without_duplicate_ev
 )
 async def test_disabled_decision_surface_reaches_executor_without_model_call(
     session_store, ctx, tmp_path, monkeypatch, tool_name, disabled, provenance
-):
+) -> None:
     from pydantic import create_model
 
     from backend.evaluation.recording import cassette_from_run
@@ -419,7 +433,7 @@ async def test_disabled_decision_surface_reaches_executor_without_model_call(
         {
             "decisionModelsEnabled": True,
             "decisionModelProvider": "clef-local",
-            "decisionModelSurfaces": surfaces,
+            "decisionModelSurfaces": {**surfaces},
         },
         workspace_id=ctx.workspace_id,
     )
@@ -567,7 +581,7 @@ async def test_snapshot_revocation_survives_aba_and_independent_connection(
         monkeypatch.setattr(
             "backend.workspace.runtime_settings.runtime_settings", second
         )
-        prefs: dict[str, object] = {
+        prefs: JsonObject = {
             "decisionModelsEnabled": True,
             "decisionModelProvider": "clef-local",
             "decisionModelSurfaces": {"hitl": True},
@@ -779,7 +793,7 @@ async def test_decision_model_audit_persists_redacted_agent_run_and_ledger(
         name="file_write",
         args={"path": "private/customer.txt", "token": "do-not-persist"},
     )
-    decision = {
+    decision: JsonObject = {
         "decision": "allow",
         "reason": "risk_below_threshold",
         "provider": "clef-local",
@@ -850,7 +864,7 @@ async def test_decision_model_audit_persists_redacted_agent_run_and_ledger(
 class TestParadaNormal:
     async def test_quality_gate_persiste_evidencia_antes_do_status_terminal(
         self, session_store, ctx, monkeypatch
-    ):
+    ) -> None:
         """A evidência fica durável enquanto o run ainda está em verifying.
 
         Isso evita que uma falha entre o upsert da evidência e a transição
@@ -866,7 +880,7 @@ class TestParadaNormal:
         statuses_seen: list[str] = []
         original_upsert = session_store.upsert_agent_run
 
-        async def record_upsert(run):
+        async def record_upsert(run) -> None:
             """Executa a operação record upsert."""
             statuses_seen.append(run.status)
             await original_upsert(run)
@@ -904,7 +918,7 @@ class TestParadaNormal:
 
     async def test_run_sem_gates_termina_nao_verificado(
         self, session_store, ctx, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Sem quality gates, o motor real devolve ``not_run`` e o loop grava o
         run como ``degraded``, sem a mensagem de verificação bem-sucedida."""
         from backend.contracts.models import WorkspaceVerificationProfile
@@ -939,7 +953,9 @@ class TestParadaNormal:
         assert stored.evidence[-1]["outcome"] == "not_run"
         assert stored.evidence[-1]["gates_evaluated"] == 0
 
-    async def test_checkpoint_de_tool_impede_reexecucao_cego(self, session_store, ctx):
+    async def test_checkpoint_de_tool_impede_reexecucao_cego(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de checkpoint de tool impede reexecucao cego."""
         from backend.persistence.native.agent_run import AgentRun
 
@@ -978,7 +994,9 @@ class TestParadaNormal:
         assert stored.status == "recovery_required"
         assert stored.error_code == "CHECKPOINT_TOOL_RECONCILIATION_REQUIRED"
 
-    async def test_sem_tool_calls_para_no_primeiro_turno(self, session_store, ctx):
+    async def test_sem_tool_calls_para_no_primeiro_turno(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de sem tool calls para no primeiro turno."""
         client = _ScriptedChatClient([[_text_chunk("olá!")]])
         result = await run_conversation(
@@ -1079,7 +1097,7 @@ class TestParadaNormal:
 class TestMaxIterations:
     async def test_estoura_o_teto_sem_nunca_parar_naturalmente(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de estoura o teto sem nunca parar naturalmente."""
 
         @vtool(extras=ToolExtras())
@@ -1117,7 +1135,7 @@ class TestMaxIterations:
 class TestGuardrailDeRepeticao:
     async def test_chamadas_identicas_disparam_aviso_diferentes_nao(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de chamadas identicas disparam aviso diferentes nao."""
 
         @vtool(extras=ToolExtras())
@@ -1262,7 +1280,9 @@ class TestGuardrailDeRepeticao:
 
 
 class TestToolCallsSequenciais:
-    async def test_chama_tool_depois_para_no_turno_seguinte(self, session_store, ctx):
+    async def test_chama_tool_depois_para_no_turno_seguinte(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de chama tool depois para no turno seguinte."""
 
         @vtool(extras=ToolExtras())
@@ -1312,7 +1332,7 @@ class TestToolCallsSequenciais:
 class TestToolCallsParalelos:
     async def test_duas_tools_nao_destrutivas_executam_e_retornam(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de duas tools nao destrutivas executam e retornam."""
 
         @vtool(extras=ToolExtras(destructive=False))
@@ -1357,7 +1377,7 @@ class TestToolCallsParalelos:
 class TestHitl:
     async def test_lote_misto_com_uma_tool_sensivel_pausa_sem_executar_nenhuma(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de lote misto com uma tool sensivel pausa sem executar nenhuma."""
 
         @vtool(extras=ToolExtras(destructive=False))
@@ -1408,7 +1428,9 @@ class TestHitl:
         assert [m.role.value for m in historico] == ["assistant"]
         assert len(historico[0].tool_calls) == 2
 
-    async def test_sem_should_require_approval_nunca_pausa(self, session_store, ctx):
+    async def test_sem_should_require_approval_nunca_pausa(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de sem should require approval nunca pausa."""
 
         @vtool(extras=ToolExtras(destructive=True))
@@ -1440,7 +1462,9 @@ class TestHitl:
 
 
 class TestEmissaoDeEventos:
-    async def test_token_e_message_break_emitidos_na_ordem(self, session_store, ctx):
+    async def test_token_e_message_break_emitidos_na_ordem(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de token e message break emitidos na ordem."""
         client = _ScriptedChatClient([[_text_chunk("oi"), _text_chunk(" tudo bem")]])
         events: list[EngineEvent] = []
@@ -1465,7 +1489,7 @@ class TestEmissaoDeEventos:
             MessageBreak(),
         ]
 
-    async def test_tool_result_emitido_apos_execucao(self, session_store, ctx):
+    async def test_tool_result_emitido_apos_execucao(self, session_store, ctx) -> None:
         """Verifica o comportamento de tool result emitido apos execucao."""
 
         @vtool(extras=ToolExtras())
@@ -1513,7 +1537,7 @@ class TestEmissaoDeEventos:
 
     async def test_hitl_requested_emitido_com_argumentos_da_tool(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de hitl requested emitido com argumentos da tool."""
 
         @vtool(extras=ToolExtras(destructive=True))
@@ -1639,7 +1663,7 @@ class TestEmissaoDeEventos:
 
     async def test_tool_call_started_e_activity_emitidos_antes_e_depois(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de tool call started e activity emitidos antes e depois."""
 
         @vtool(extras=ToolExtras(category="general", icon="wrench"))
@@ -1703,7 +1727,7 @@ class TestEmissaoDeEventos:
 
     async def test_tool_com_invalidates_emite_workbench_invalidate(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de tool com invalidates emite workbench invalidate."""
 
         @vtool(extras=ToolExtras(invalidates=["files", "git"]))
@@ -1745,7 +1769,7 @@ class TestEmissaoDeEventos:
 class TestArgsPreview:
     async def test_campo_semantico_vira_preview_no_inicio_e_no_fim(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de campo semantico vira preview no inicio e no fim."""
 
         @vtool(extras=ToolExtras())
@@ -1793,7 +1817,7 @@ class TestArgsPreview:
         assert activities[0].args_preview == "backend/auth.py"
         assert activities[1].args_preview == "backend/auth.py"
 
-    async def test_preview_trunca_em_80_chars(self, session_store, ctx):
+    async def test_preview_trunca_em_80_chars(self, session_store, ctx) -> None:
         """Verifica o comportamento de preview trunca em 80 chars."""
 
         @vtool(extras=ToolExtras())
@@ -1841,7 +1865,9 @@ class TestArgsPreview:
         assert all(len(a.args_preview) == 80 for a in activities)
         assert activities[0].args_preview == "x" * 80
 
-    async def test_sem_campo_semantico_usa_fallback_k_igual_v(self, session_store, ctx):
+    async def test_sem_campo_semantico_usa_fallback_k_igual_v(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de sem campo semantico usa fallback k igual v."""
 
         @vtool(extras=ToolExtras())
@@ -1952,7 +1978,7 @@ class TestTodosUpdated:
 
     async def test_write_todos_emite_todos_updated_com_lista_completa(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de write todos emite todos updated com lista completa."""
         registry = ToolRegistry()
         _register(registry, "write_todos")
@@ -2002,7 +2028,7 @@ class TestTodosUpdated:
 
     async def test_tool_diferente_de_write_todos_nunca_emite_todos_updated(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de tool diferente de write todos nunca emite todos updated."""
 
         @vtool(extras=ToolExtras())
@@ -2039,7 +2065,7 @@ class TestTodosUpdated:
 
     async def test_write_todos_com_args_invalidos_nao_emite_todos_updated(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Borda: status fora da taxonomia é rejeitado na validação de args
         (Error: argumentos inválidos) antes mesmo do handler rodar — o loop
         não deve emitir TodosUpdated a partir de um resultado de erro."""
@@ -2268,7 +2294,7 @@ async def test_agent_receives_godot_errors_repairs_causal_files_and_revalidates(
 class TestLoopCapGuardrail:
     async def test_estoura_teto_de_tool_calls_encerra_turno_sem_esgotar_max_iterations(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de estoura teto de tool calls encerra turno sem esgotar max iterations."""
 
         @vtool(extras=ToolExtras())
@@ -2315,7 +2341,9 @@ class TestLoopCapGuardrail:
         sinais = [e for e in events if isinstance(e, ErrorSignal)]
         assert any(e.code == "LOOP_CAP_EXCEEDED" for e in sinais)
 
-    async def test_dentro_do_teto_nunca_dispara_o_guardrail(self, session_store, ctx):
+    async def test_dentro_do_teto_nunca_dispara_o_guardrail(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de dentro do teto nunca dispara o guardrail."""
 
         @vtool(extras=ToolExtras())
@@ -2426,7 +2454,7 @@ class TestResumeConversation:
 
     async def test_aprovar_executa_a_tool_sinalizada_e_libera_a_pendencia(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de aprovar executa a tool sinalizada e libera a pendencia."""
 
         @vtool(extras=ToolExtras(destructive=True))
@@ -2507,7 +2535,7 @@ class TestResumeConversation:
 
     async def test_aprovar_classifica_erro_mcp_localizado_e_registra_uso(
         self, session_store, ctx, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de aprovar classifica erro mcp localizado e registra uso."""
         chamadas: list[tuple[str, str, str]] = []
 
@@ -2561,7 +2589,7 @@ class TestResumeConversation:
 
     async def test_rejeitar_nao_executa_a_tool_e_persiste_mensagem_de_erro(
         self, session_store, ctx
-    ):
+    ) -> None:
         """Verifica o comportamento de rejeitar nao executa a tool e persiste mensagem de erro."""
 
         @vtool(extras=ToolExtras(destructive=True))
@@ -2602,7 +2630,9 @@ class TestResumeConversation:
         assert historico[-1].is_error is True
         assert "rejeitou" in historico[-1].text().lower()
 
-    async def test_sem_pendencia_nao_faz_nada_e_devolve_false(self, session_store, ctx):
+    async def test_sem_pendencia_nao_faz_nada_e_devolve_false(
+        self, session_store, ctx
+    ) -> None:
         """Verifica o comportamento de sem pendencia nao faz nada e devolve false."""
         resumiu = await resume_conversation(
             session_store=session_store,
@@ -2838,7 +2868,7 @@ class TestResumeConversation:
 @pytest.mark.asyncio
 async def test_decision_snapshot_requires_durable_evidence(
     session_store, ctx, monkeypatch
-):
+) -> None:
     from unittest.mock import AsyncMock
 
     from backend.persistence.native.agent_run import AgentRun
@@ -2859,7 +2889,7 @@ async def test_decision_snapshot_requires_durable_evidence(
 @pytest.mark.parametrize("failure", ["evidence", "ledger", "missing_evidence"])
 async def test_preapproval_audit_failure_does_not_authorize_or_reuse_grant(
     session_store, ctx, tmp_path, monkeypatch, failure
-):
+) -> None:
     from unittest.mock import AsyncMock
 
     from backend.persistence.native.agent_run import AgentRun
@@ -3201,8 +3231,10 @@ async def test_plan_proposal_approval_and_stages_complete_through_harness(
 
     final = await store.get_plan(plan["plan_id"])
     assert final is not None
-    assert final["execution"]["status"] == "passed"
-    assert [stage["status"] for stage in final["execution"]["stages"]] == [
+    execution_view = final["execution"]
+    assert execution_view is not None
+    assert execution_view["status"] == "passed"
+    assert [stage["status"] for stage in execution_view.get("stages", [])] == [
         "passed",
         "passed",
     ]

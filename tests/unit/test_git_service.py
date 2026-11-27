@@ -46,9 +46,9 @@ def test_status_snapshot_is_available_without_tools_dependency(tmp_path: Path) -
 
     result = status_snapshot(repo)
 
-    assert result["status"] == "ok"
-    assert result["clean"] is False
-    assert result["modified"] == ["README.md"]
+    assert result.status == "ok"
+    assert result.clean is False
+    assert result.modified == ["README.md"]
 
 
 @pytest.mark.asyncio
@@ -143,9 +143,9 @@ async def test_latest_and_history_retain_recent_operations(tmp_path: Path) -> No
     latest = await service.latest("workspace")
 
     assert latest is not None
-    assert latest["operation"] == "pull"
+    assert latest.operation == "pull"
     history = await service.history("workspace")
-    assert [item["operation"] for item in history] == ["pull", "fetch"]
+    assert [item.operation for item in history] == ["pull", "fetch"]
 
 
 @pytest.mark.asyncio
@@ -170,7 +170,7 @@ async def test_history_limit_is_bounded_and_failure_is_retained(tmp_path: Path) 
 
     history = await service.history("workspace", limit=0)
     assert len(history) == 1
-    assert history[0]["state"] == "failed"
+    assert history[0].state == "failed"
     assert "TOKEN" not in str(history[0])
 
 
@@ -214,9 +214,9 @@ async def test_generic_callback_failure_is_terminal(tmp_path: Path) -> None:
     latest = await service.latest("workspace")
 
     assert latest is not None
-    assert latest["state"] == "failed"
-    assert latest["error_code"] == "git_operation_failed"
-    assert latest["error"] == "token=***"
+    assert latest.state == "failed"
+    assert latest.error_code == "git_operation_failed"
+    assert latest.error == "token=***"
 
 
 @pytest.mark.asyncio

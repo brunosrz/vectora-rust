@@ -18,6 +18,7 @@ from backend.api.handlers.threads import (
     get_smart_approval_allowlist,
     remove_smart_approval_allowlist,
 )
+from backend.vtypes.contracts import JsonObject
 from backend.vtypes.workspace import Workspace
 
 
@@ -40,7 +41,7 @@ def _authenticated_request(user_id: str = "user-1") -> Request:
 
 
 def _grant_request(
-    *, workspace_id: str = "ws1", args: dict[str, object] | None = None
+    *, workspace_id: str = "ws1", args: JsonObject | None = None
 ) -> SmartApprovalAllowlistRequest:
     return SmartApprovalAllowlistRequest(
         workspace_id=workspace_id,
@@ -93,7 +94,7 @@ def _runtime_settings_isolado(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_add_e_remove_via_endpoint(monkeypatch):
+async def test_add_e_remove_via_endpoint(monkeypatch) -> None:
     body = _grant_request()
     _install_pending(monkeypatch, body)
     resposta = await add_smart_approval_allowlist(
@@ -129,7 +130,7 @@ async def test_get_workspace_desconhecido_no_modo_local_usa_store() -> None:
 
 
 @pytest.mark.asyncio
-async def test_regra_longa_usa_id_opaco_e_pode_ser_revogada():
+async def test_regra_longa_usa_id_opaco_e_pode_ser_revogada() -> None:
     from backend.services.smart_approval import add_to_allowlist
 
     comando = "x" * 200
@@ -147,7 +148,7 @@ async def test_regra_longa_usa_id_opaco_e_pode_ser_revogada():
 
 
 @pytest.mark.asyncio
-async def test_workspace_vazio_vira_400_nao_500(monkeypatch):
+async def test_workspace_vazio_vira_400_nao_500(monkeypatch) -> None:
     """Erro/borda: `ValueError` do módulo vira HTTP 400 com mensagem clara,
     não um 500 cru que não diz o que corrigir."""
     from fastapi import HTTPException
@@ -237,7 +238,7 @@ async def test_persistence_failure_returns_503_and_rolls_back(
 
 
 @pytest.mark.asyncio
-async def test_endpoints_rejeitam_workspace_nao_autorizado(monkeypatch):
+async def test_endpoints_rejeitam_workspace_nao_autorizado(monkeypatch) -> None:
     from fastapi import HTTPException
 
     monkeypatch.setattr(
@@ -310,7 +311,7 @@ async def test_endpoints_rejeitam_workspace_de_outro_usuario(
 
 
 @pytest.mark.asyncio
-async def test_mutacoes_concorrentes_preservam_todas_as_regras():
+async def test_mutacoes_concorrentes_preservam_todas_as_regras() -> None:
     from backend.services.smart_approval import add_to_allowlist, get_allowlist
 
     with ThreadPoolExecutor(max_workers=8) as executor:
@@ -330,7 +331,7 @@ async def test_mutacoes_concorrentes_preservam_todas_as_regras():
 
 
 @pytest.mark.asyncio
-async def test_auditoria_de_mutacao_nao_expoe_assinatura(monkeypatch):
+async def test_auditoria_de_mutacao_nao_expoe_assinatura(monkeypatch) -> None:
     from backend.rbac import auth
 
     monkeypatch.setattr(
@@ -342,7 +343,7 @@ async def test_auditoria_de_mutacao_nao_expoe_assinatura(monkeypatch):
     async def fake_db():
         return object()
 
-    async def fake_audit(_db, _user_id, action, **kwargs):
+    async def fake_audit(_db, _user_id, action, **kwargs) -> None:
         eventos.append({"action": action, **kwargs})
 
     monkeypatch.setattr(auth, "get_db_for_audit", fake_db)
@@ -388,7 +389,7 @@ async def session_store(tmp_path):
 @pytest.mark.asyncio
 async def test_authenticated_http_grant_reaches_durable_executor_without_auth_bypass(
     tmp_path, monkeypatch, session_store
-):
+) -> None:
     import aiosqlite
 
     from backend.api.handlers import threads

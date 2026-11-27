@@ -36,11 +36,13 @@ class TestBootstrapVectoraHome:
 
     def test_respeita_vectora_home_quando_setado(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         monkeypatch.setenv("VECTORA_HOME", str(tmp_path))
         assert lic._bootstrap_vectora_home() == tmp_path
 
-    def test_cai_pro_home_real_sem_vectora_home(self, monkeypatch: pytest.MonkeyPatch):
+    def test_cai_pro_home_real_sem_vectora_home(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("VECTORA_HOME", raising=False)
         assert lic._bootstrap_vectora_home() == Path.home() / ".vectora"
 

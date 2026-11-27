@@ -22,8 +22,10 @@ import json
 import sys
 import time
 import types
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -94,7 +96,7 @@ class TestOptIn:
 
 class TestAcoes:
     @pytest.fixture(autouse=True)
-    def _habilitado(self, monkeypatch):
+    def _habilitado(self, monkeypatch) -> None:
         monkeypatch.setattr(cu, "_computer_use_enabled", lambda _workspace_id: True)
         info = WindowInfo("window-1", "Fixture", 0, 0, 1200, 800, True)
         selection = SimpleNamespace(
@@ -177,7 +179,7 @@ class TestAcoes:
         saida = json.loads(await cu.computer_use(action="click", x=1, y=1, ctx=_ctx()))
         assert saida == {"status": "error", "code": "platform_failure"}
 
-    async def test_acao_desconhecida_e_recusada(self):
+    async def test_acao_desconhecida_e_recusada(self) -> None:
         saida = json.loads(await cu.computer_use(action="explodir_tudo", ctx=_ctx()))
         assert saida == {"status": "error", "code": "invalid_action"}
         assert "explodir_tudo" not in saida
@@ -223,7 +225,7 @@ class TestApisWindowsSimuladas:
     def test_hwnd_invalida_falha_fechado(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("platform.system", lambda: "Windows")
         with pytest.raises(RuntimeError, match="HWND"):
-            cu._native_window_handle(types.SimpleNamespace(_hWnd=0))
+            cu._native_window_handle(MagicMock(_hWnd=0))
 
     def test_captura_passes_a_hwnd_validada_ao_imagegrab(
         self, monkeypatch: pytest.MonkeyPatch
@@ -247,7 +249,7 @@ class TestApisWindowsSimuladas:
 
 
 class TestAprovacaoSempreObrigatoria:
-    def test_computer_use_pausa_mesmo_em_bypass(self):
+    def test_computer_use_pausa_mesmo_em_bypass(self) -> None:
         """Invariante de maior risco do plano: nenhuma tool além desta
         ignora o `permission_mode` da sessão — `bypass`/`auto` normalmente
         nunca pausam, mas `computer_use` sempre pausa."""
@@ -258,14 +260,14 @@ class TestAprovacaoSempreObrigatoria:
             assert _mode_should_interrupt(modo, "select_desktop_window", []) is True
             assert _mode_should_interrupt(modo, "focus_desktop_window", []) is True
 
-    def test_esta_em_require_approval(self):
+    def test_esta_em_require_approval(self) -> None:
         from backend.engine.hitl import REQUIRE_APPROVAL
 
         assert "computer_use" in REQUIRE_APPROVAL
         assert "select_desktop_window" in REQUIRE_APPROVAL
         assert "focus_desktop_window" in REQUIRE_APPROVAL
 
-    def test_registrada_em_all_tools(self):
+    def test_registrada_em_all_tools(self) -> None:
         from backend.nodes.tools import ALL_TOOLS
 
         assert "computer_use" in {t.name for t in ALL_TOOLS}
@@ -366,17 +368,30 @@ def test_desktop_registry_invalidate_e_rate_limit_atomico() -> None:
     assert registry.allow_action(**scope) is True
 
 
+@dataclass
+class _JanelaInerte:
+    title: str = "Editor"
+    left: int = 0
+    top: int = 0
+    width: int = 1
+    height: int = 1
+    isMinimized: bool = False  # noqa: N815 — nome do pygetwindow
+
+    def activate(self) -> None:
+        pass
+
+
 def test_desktop_registry_expira_selecao_e_isola_contextos() -> None:
     registry = DesktopWindowRegistry()
     registry._selections[("u1", "w1", "t1")] = _Selection(
         "w1",
-        SimpleNamespace(),
+        _JanelaInerte(),
         WindowInfo("w1", "Editor", 0, 0, 1, 1, True),
         time.monotonic() - 9999,
     )
     registry._selections[("u2", "w1", "t1")] = _Selection(
         "w2",
-        SimpleNamespace(),
+        _JanelaInerte(),
         WindowInfo("w2", "Editor", 0, 0, 1, 1, True),
         time.monotonic() - 9999,
     )

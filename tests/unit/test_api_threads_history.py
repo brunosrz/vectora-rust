@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 from typing import Any, Literal, cast
-from unittest.mock import AsyncMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from fastapi import FastAPI
@@ -956,13 +956,11 @@ async def test_safe_history_cursor_uses_latest_available_sequence(
     """Skip missing IDs and sequences, stopping at the first represented event."""
     from backend.api.handlers.threads import _safe_history_cursor
 
-    store = SimpleNamespace(
-        get_event_seq_by_message_id=AsyncMock(side_effect=sequences)
-    )
+    store = MagicMock(get_event_seq_by_message_id=AsyncMock(side_effect=sequences))
     entries = [
-        SimpleNamespace(message_id=1),
-        SimpleNamespace(message_id=2),
-        SimpleNamespace(message_id=None),
+        MagicMock(message_id=1),
+        MagicMock(message_id=2),
+        MagicMock(message_id=None),
     ]
     assert await _safe_history_cursor(store, "t1", entries, 99) == expected_cursor
     assert store.get_event_seq_by_message_id.await_args_list == [
@@ -974,8 +972,8 @@ async def test_safe_history_cursor_without_message_ids_or_lookup() -> None:
     """An empty page returns zero; old stores retain the provided fallback."""
     from backend.api.handlers.threads import _safe_history_cursor
 
-    store = SimpleNamespace(get_event_seq_by_message_id=AsyncMock())
-    assert await _safe_history_cursor(store, "t1", [SimpleNamespace()], 99) == 0
+    store = MagicMock(get_event_seq_by_message_id=AsyncMock())
+    assert await _safe_history_cursor(store, "t1", [MagicMock(spec=[])], 99) == 0
     store.get_event_seq_by_message_id.assert_not_awaited()
     assert await _safe_history_cursor(None, "t1", [], 99) == 99
 

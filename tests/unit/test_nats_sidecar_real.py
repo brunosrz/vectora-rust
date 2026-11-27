@@ -49,7 +49,7 @@ def _port_is_open(port: int, timeout: float = 1.0) -> bool:
 
 
 @pytest.mark.asyncio
-async def test_ensure_nats_sidecar_sobe_processo_real_e_url_responde():
+async def test_ensure_nats_sidecar_sobe_processo_real_e_url_responde() -> None:
     url = await ensure_nats_sidecar()
 
     assert url is not None
@@ -70,7 +70,7 @@ async def test_ensure_nats_sidecar_sobe_processo_real_e_url_responde():
 
 
 @pytest.mark.asyncio
-async def test_ensure_nats_sidecar_reusa_processo_ja_rodando_de_verdade():
+async def test_ensure_nats_sidecar_reusa_processo_ja_rodando_de_verdade() -> None:
     first_url = await ensure_nats_sidecar()
     assert nats_sidecar._proc is not None
     first_pid = nats_sidecar._proc.pid
@@ -84,7 +84,7 @@ async def test_ensure_nats_sidecar_reusa_processo_ja_rodando_de_verdade():
 
 
 @pytest.mark.asyncio
-async def test_stop_nats_sidecar_e_idempotente_com_processo_real():
+async def test_stop_nats_sidecar_e_idempotente_com_processo_real() -> None:
     await ensure_nats_sidecar()
 
     await stop_nats_sidecar()
@@ -95,7 +95,9 @@ async def test_stop_nats_sidecar_e_idempotente_com_processo_real():
 
 
 @pytest.mark.asyncio
-async def test_ensure_nats_sidecar_chamado_concorrentemente_nao_duplica_processo():
+async def test_ensure_nats_sidecar_chamado_concorrentemente_nao_duplica_processo() -> (
+    None
+):
     """Regra 18 — edge case de concorrência.
 
     `ensure_nats_sidecar()` checa `_proc is not None` antes de spawnar, sem

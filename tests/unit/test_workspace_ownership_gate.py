@@ -92,7 +92,7 @@ def _register_workspace(monkeypatch, workspace_id: str, owner_id: str | None, tm
 
 
 class TestWorkspaceOwnershipGate:
-    def test_dono_acessa_normalmente(self, gate_client, monkeypatch, tmp_path):
+    def test_dono_acessa_normalmente(self, gate_client, monkeypatch, tmp_path) -> None:
         _register_workspace(monkeypatch, "ws-owned", "owner-1", tmp_path)
 
         r = gate_client.get("/workspaces/ws-owned/tree", headers=_headers("owner-1"))
@@ -102,7 +102,7 @@ class TestWorkspaceOwnershipGate:
 
     def test_outro_usuario_recebe_403_sem_handler_rodar(
         self, gate_client, monkeypatch, tmp_path
-    ):
+    ) -> None:
         _register_workspace(monkeypatch, "ws-alheio", "owner-2", tmp_path)
 
         r = gate_client.get("/workspaces/ws-alheio/tree", headers=_headers("intruso-1"))
@@ -114,7 +114,7 @@ class TestWorkspaceOwnershipGate:
 
     def test_workspace_sem_owner_id_continua_livre(
         self, gate_client, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Regressão: workspace legado/desktop (sem owner_id) não pode
         passar a exigir dono depois desta migração — mesmo comportamento
         de hoje, qualquer autenticado acessa."""
@@ -128,7 +128,7 @@ class TestWorkspaceOwnershipGate:
 
     def test_workspace_inexistente_mantem_404_do_handler(
         self, gate_client, monkeypatch
-    ):
+    ) -> None:
         """A dependency só barra 403 de dono errado — 404 de workspace
         inexistente continua sendo decisão de cada handler (aqui,
         `workspace_sandbox_init`, que já levanta 404 explícito)."""
@@ -142,7 +142,9 @@ class TestWorkspaceOwnershipGate:
 
         assert r.status_code == 404
 
-    def test_admin_acessa_qualquer_workspace(self, gate_client, monkeypatch, tmp_path):
+    def test_admin_acessa_qualquer_workspace(
+        self, gate_client, monkeypatch, tmp_path
+    ) -> None:
         """root/admin sempre têm acesso, mesmo sem ser dono — mesmo
         comportamento de `can_access_workspace`/`_is_privileged` já
         vigente antes desta migração."""

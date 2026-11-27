@@ -29,7 +29,7 @@ def _null_console(*_a: object, **_kw: object) -> _Console:
 # ---------------------------------------------------------------------------
 
 
-def test_parser_sem_subcomando_nao_define_command():
+def test_parser_sem_subcomando_nao_define_command() -> None:
     parser = _build_parser()
     args = parser.parse_args([])
     assert getattr(args, "command", None) is None
@@ -109,7 +109,7 @@ def test_parser_nao_expoe_o_antigo_comando_run() -> None:
     assert exc_info.value.code == 2
 
 
-def test_parser_start_headless_e_porta():
+def test_parser_start_headless_e_porta() -> None:
     parser = _build_parser()
     args = parser.parse_args(["start", "--headless", "--port", "9000"])
     assert args.command == "start"
@@ -117,7 +117,7 @@ def test_parser_start_headless_e_porta():
     assert args.port == 9000
 
 
-def test_parser_config_keys_docker_qdrant_redis():
+def test_parser_config_keys_docker_qdrant_redis() -> None:
     parser = _build_parser()
     assert parser.parse_args(["config", "keys"]).config_action == "keys"
 
@@ -137,7 +137,7 @@ def test_parser_config_keys_docker_qdrant_redis():
     assert redis.config_arg == "redis://localhost:6379/0"
 
 
-def test_parser_config_sem_acao_aceita_set():
+def test_parser_config_sem_acao_aceita_set() -> None:
     parser = _build_parser()
     args = parser.parse_args(["config", "--set", "verbosity=2"])
     assert args.config_action is None
@@ -205,7 +205,7 @@ def test_mcp_install_remove_reutiliza_handlers(monkeypatch: pytest.MonkeyPatch) 
 # ---------------------------------------------------------------------------
 
 
-def test_upsert_env_key_insere_e_atualiza(tmp_path: Path):
+def test_upsert_env_key_insere_e_atualiza(tmp_path: Path) -> None:
     env = tmp_path / ".env"
 
     keys.upsert_env_key(env, "FOO", "1")
@@ -229,7 +229,7 @@ def test_upsert_env_key_insere_e_atualiza(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_run_docker_status_ok(monkeypatch, capsys):
+def test_run_docker_status_ok(monkeypatch, capsys) -> None:
     from backend.storage.dev_stack import StackResult
 
     monkeypatch.setattr(

@@ -58,7 +58,7 @@ def _tool_extras(name: str):
 
 
 @pytest.mark.asyncio
-async def test_git_stage_ok(mock_ws):
+async def test_git_stage_ok(mock_ws) -> None:
     """Stageia arquivo existente com sucesso."""
     mock_repo = MagicMock()
     with patch("backend.tools.git.git.Repo", return_value=mock_repo):
@@ -75,7 +75,7 @@ async def test_git_stage_ok(mock_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_stage_path_vazio(mock_ws):
+async def test_git_stage_path_vazio(mock_ws) -> None:
     """Path vazio deve retornar erro, não propagar exceção."""
     mock_repo = MagicMock()
     with patch("backend.tools.git.git.Repo", return_value=mock_repo):
@@ -90,7 +90,7 @@ async def test_git_stage_path_vazio(mock_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_stage_git_error(mock_ws):
+async def test_git_stage_git_error(mock_ws) -> None:
     """GitCommandError vira resposta de erro, não exceção."""
     import git as gitpy
 
@@ -113,7 +113,7 @@ async def test_git_stage_git_error(mock_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_unstage_ok(mock_ws):
+async def test_git_unstage_ok(mock_ws) -> None:
     """Remove arquivo do stage com sucesso."""
     mock_repo = MagicMock()
     with patch("backend.tools.git.git.Repo", return_value=mock_repo):
@@ -129,7 +129,7 @@ async def test_git_unstage_ok(mock_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_unstage_path_vazio(mock_ws):
+async def test_git_unstage_path_vazio(mock_ws) -> None:
     """Path vazio retorna erro estruturado."""
     mock_repo = MagicMock()
     with patch("backend.tools.git.git.Repo", return_value=mock_repo):
@@ -144,7 +144,7 @@ async def test_git_unstage_path_vazio(mock_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_unstage_git_error(mock_ws):
+async def test_git_unstage_git_error(mock_ws) -> None:
     """GitCommandError vira resposta de erro."""
     import git as gitpy
 
@@ -202,7 +202,7 @@ def real_repo_ws(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_git_stage_real_repo_adds_to_index(real_repo_ws):
+async def test_git_stage_real_repo_adds_to_index(real_repo_ws) -> None:
     ws, repo, root = real_repo_ws
     (root / "novo.py").write_text("x = 1\n", encoding="utf-8")
 
@@ -217,7 +217,7 @@ async def test_git_stage_real_repo_adds_to_index(real_repo_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_unstage_real_repo_removes_from_index(real_repo_ws):
+async def test_git_unstage_real_repo_removes_from_index(real_repo_ws) -> None:
     ws, repo, root = real_repo_ws
     (root / "novo.py").write_text("x = 1\n", encoding="utf-8")
     repo.index.add(["novo.py"])
@@ -239,7 +239,7 @@ async def test_git_unstage_real_repo_removes_from_index(real_repo_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_discard_real_repo_reverte_mudanca_nao_staged(real_repo_ws):
+async def test_git_discard_real_repo_reverte_mudanca_nao_staged(real_repo_ws) -> None:
     ws, repo, root = real_repo_ws
     readme = root / "README.md"
     readme.write_text("# repo\nmudança não staged\n", encoding="utf-8")
@@ -255,7 +255,7 @@ async def test_git_discard_real_repo_reverte_mudanca_nao_staged(real_repo_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_discard_path_vazio(mock_ws):
+async def test_git_discard_path_vazio(mock_ws) -> None:
     mock_repo = MagicMock()
     with patch("backend.tools.git.git.Repo", return_value=mock_repo):
         result_raw = await git_discard(
@@ -268,7 +268,7 @@ async def test_git_discard_path_vazio(mock_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_discard_arquivo_sem_mudanca_nao_lanca(real_repo_ws):
+async def test_git_discard_arquivo_sem_mudanca_nao_lanca(real_repo_ws) -> None:
     ws, _repo, _root = real_repo_ws
 
     result_raw = await git_discard(
@@ -279,7 +279,7 @@ async def test_git_discard_arquivo_sem_mudanca_nao_lanca(real_repo_ws):
     assert result["status"] == "ok"
 
 
-def test_git_discard_e_destructive():
+def test_git_discard_e_destructive() -> None:
     meta = _tool_extras("git_discard")
     assert meta.destructive is True
 
@@ -290,7 +290,7 @@ def test_git_discard_e_destructive():
 
 
 @pytest.mark.asyncio
-async def test_git_stash_apply_aplica_sem_remover(real_repo_ws):
+async def test_git_stash_apply_aplica_sem_remover(real_repo_ws) -> None:
     ws, repo, root = real_repo_ws
     (root / "README.md").write_text("# repo\nstashed\n", encoding="utf-8")
     repo.git.stash("push")
@@ -310,7 +310,7 @@ async def test_git_stash_apply_aplica_sem_remover(real_repo_ws):
 
 
 @pytest.mark.asyncio
-async def test_git_stash_pop_ainda_remove_do_stash_regressao(real_repo_ws):
+async def test_git_stash_pop_ainda_remove_do_stash_regressao(real_repo_ws) -> None:
     ws, repo, root = real_repo_ws
     (root / "README.md").write_text("# repo\nstashed\n", encoding="utf-8")
     repo.git.stash("push")
@@ -332,7 +332,7 @@ async def test_git_stash_pop_ainda_remove_do_stash_regressao(real_repo_ws):
 @pytest.mark.asyncio
 async def test_git_compare_sem_file_path_mantem_lista_de_arquivos_regressao(
     real_repo_ws,
-):
+) -> None:
     ws, repo, root = real_repo_ws
     repo.git.checkout("-b", "feature")
     (root / "README.md").write_text("# repo\nmudou\n", encoding="utf-8")
@@ -353,7 +353,7 @@ async def test_git_compare_sem_file_path_mantem_lista_de_arquivos_regressao(
 
 
 @pytest.mark.asyncio
-async def test_git_compare_com_file_path_devolve_hunks_do_arquivo(real_repo_ws):
+async def test_git_compare_com_file_path_devolve_hunks_do_arquivo(real_repo_ws) -> None:
     ws, repo, root = real_repo_ws
     repo.git.checkout("-b", "feature")
     (root / "README.md").write_text("# repo\nlinha nova\n", encoding="utf-8")
@@ -418,7 +418,7 @@ def test_git_pull_tem_invalidates_files_e_git() -> None:
 
 class TestGitCommandNotFound:
     @pytest.mark.asyncio
-    async def test_git_diff_com_git_nao_instalado_nao_propaga(self, mock_ws):
+    async def test_git_diff_com_git_nao_instalado_nao_propaga(self, mock_ws) -> None:
         import git as gitpy
 
         mock_repo = MagicMock()
@@ -436,7 +436,7 @@ class TestGitCommandNotFound:
         assert result["status"] == "git_not_found"
 
     @pytest.mark.asyncio
-    async def test_git_log_com_git_nao_instalado_nao_propaga(self, mock_ws):
+    async def test_git_log_com_git_nao_instalado_nao_propaga(self, mock_ws) -> None:
         import git as gitpy
 
         mock_repo = MagicMock()
@@ -453,7 +453,7 @@ class TestGitCommandNotFound:
         result = json.loads(result_raw)
         assert result["status"] == "git_not_found"
 
-    def test_safe_call_converte_git_command_not_found(self):
+    def test_safe_call_converte_git_command_not_found(self) -> None:
         import git as gitpy
 
         from backend.tools.git import _safe_call
@@ -464,7 +464,7 @@ class TestGitCommandNotFound:
         result = _safe_call(_boom)
         assert result["status"] == "git_not_found"
 
-    def test_safe_call_converte_excecao_generica(self):
+    def test_safe_call_converte_excecao_generica(self) -> None:
         from backend.tools.git import _safe_call
 
         def _boom():
@@ -472,9 +472,9 @@ class TestGitCommandNotFound:
 
         result = _safe_call(_boom)
         assert result["status"] == "error"
-        assert "algo inesperado" in result["message"]
+        assert "algo inesperado" in str(result["message"])
 
-    def test_safe_call_repassa_resultado_de_sucesso(self):
+    def test_safe_call_repassa_resultado_de_sucesso(self) -> None:
         from backend.tools.git import _safe_call
 
         result = _safe_call(lambda: {"status": "ok", "value": 42})

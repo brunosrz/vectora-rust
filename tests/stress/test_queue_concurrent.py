@@ -23,7 +23,7 @@ from backend.embedding.queue import EmbeddingQueue
 
 @pytest.mark.stress
 @pytest.mark.asyncio
-async def test_queue_concurrent_enqueue(tmp_path):
+async def test_queue_concurrent_enqueue(tmp_path) -> None:
     """100 enqueues simultâneos — sem perda, sem colisão, dentro do budget."""
     N = 100
     db_path = tmp_path / "stress_queue.db"
@@ -52,7 +52,7 @@ async def test_queue_concurrent_enqueue(tmp_path):
 @pytest.mark.stress
 @pytest.mark.asyncio
 @pytest.mark.parametrize("n", [1, 10, 50, 250, 500, 1000], ids=lambda n: f"n={n}")
-async def test_queue_concurrent_enqueue_scales(tmp_path, n):
+async def test_queue_concurrent_enqueue_scales(tmp_path, n) -> None:
     """Enqueue concorrente em volumes crescentes — sem perda, sem colisão em nenhuma escala."""
     db_path = tmp_path / f"stress_scale_{n}.db"
     queue = EmbeddingQueue(f"sqlite+aiosqlite:///{db_path}")
@@ -69,7 +69,9 @@ async def test_queue_concurrent_enqueue_scales(tmp_path, n):
 @pytest.mark.stress
 @pytest.mark.asyncio
 @pytest.mark.parametrize("text_len", [10, 100, 1_000, 10_000], ids=lambda n: f"len={n}")
-async def test_queue_concurrent_enqueue_various_text_lengths(tmp_path, text_len):
+async def test_queue_concurrent_enqueue_various_text_lengths(
+    tmp_path, text_len
+) -> None:
     """Enqueue concorrente com payloads de tamanhos variados — texto grande não corrompe a fila."""
     N = 50
     db_path = tmp_path / f"stress_len_{text_len}.db"
@@ -90,7 +92,9 @@ async def test_queue_concurrent_enqueue_various_text_lengths(tmp_path, text_len)
 @pytest.mark.parametrize(
     "n_collections", [1, 5, 20, 50], ids=lambda n: f"collections={n}"
 )
-async def test_queue_concurrent_enqueue_across_collections(tmp_path, n_collections):
+async def test_queue_concurrent_enqueue_across_collections(
+    tmp_path, n_collections
+) -> None:
     """Enqueue distribuído por múltiplas coleções ao mesmo tempo — isolamento por collection."""
     per_collection = 20
     db_path = tmp_path / f"stress_multicol_{n_collections}.db"
@@ -111,7 +115,7 @@ async def test_queue_concurrent_enqueue_across_collections(tmp_path, n_collectio
 
 @pytest.mark.stress
 @pytest.mark.asyncio
-async def test_queue_concurrent_burst_pattern(tmp_path):
+async def test_queue_concurrent_burst_pattern(tmp_path) -> None:
     """3 rajadas sucessivas de 100 enqueues — sem degradação de uma rajada pra outra."""
     db_path = tmp_path / "stress_burst.db"
     queue = EmbeddingQueue(f"sqlite+aiosqlite:///{db_path}")
@@ -130,7 +134,7 @@ async def test_queue_concurrent_burst_pattern(tmp_path):
 
 @pytest.mark.stress
 @pytest.mark.asyncio
-async def test_queue_concurrent_no_id_collision_high_volume(tmp_path):
+async def test_queue_concurrent_no_id_collision_high_volume(tmp_path) -> None:
     """2000 enqueues simultâneos — UUID4 não colide mesmo em alto volume."""
     N = 2000
     db_path = tmp_path / "stress_highvol.db"
@@ -147,7 +151,7 @@ async def test_queue_concurrent_no_id_collision_high_volume(tmp_path):
 @pytest.mark.stress
 @pytest.mark.asyncio
 @pytest.mark.parametrize("n", [5, 15, 30], ids=lambda n: f"n={n}")
-async def test_queue_concurrent_enqueue_same_text_repeated(tmp_path, n):
+async def test_queue_concurrent_enqueue_same_text_repeated(tmp_path, n) -> None:
     """N enqueues do MESMO texto — cada chamada gera um queue_id distinto (não é dedup)."""
     db_path = tmp_path / f"stress_dup_{n}.db"
     queue = EmbeddingQueue(f"sqlite+aiosqlite:///{db_path}")

@@ -18,7 +18,7 @@ from backend.sandbox.policy import (
 
 
 @pytest.fixture(autouse=True)
-def _sem_deteccao_do_ambiente(monkeypatch):
+def _sem_deteccao_do_ambiente(monkeypatch) -> None:
     monkeypatch.setattr(policy_module, "_native_sandbox_available_sync", lambda: False)
 
 
@@ -30,15 +30,15 @@ def _repo(root, toml: str) -> None:
     (root / "vectora.toml").write_text(toml, encoding="utf-8")
 
 
-def test_sem_nenhum_arquivo_segue_o_padrao_do_ambiente(tmp_path):
+def test_sem_nenhum_arquivo_segue_o_padrao_do_ambiente(tmp_path) -> None:
     assert resolve_policy(tmp_path) == DISABLED_POLICY
 
 
-def test_politica_do_usuario_fica_fora_do_workspace(tmp_path):
+def test_politica_do_usuario_fica_fora_do_workspace(tmp_path) -> None:
     assert not trusted_policy_path(tmp_path).is_relative_to(tmp_path)
 
 
-def test_caminhos_de_workspaces_diferentes_nao_colidem(tmp_path):
+def test_caminhos_de_workspaces_diferentes_nao_colidem(tmp_path) -> None:
     a, b = tmp_path / "a", tmp_path / "b"
     a.mkdir()
     b.mkdir()
@@ -46,7 +46,7 @@ def test_caminhos_de_workspaces_diferentes_nao_colidem(tmp_path):
     assert trusted_policy_path(a) != trusted_policy_path(b)
 
 
-def test_politica_do_usuario_define_o_que_o_repositorio_nao_pode(tmp_path):
+def test_politica_do_usuario_define_o_que_o_repositorio_nao_pode(tmp_path) -> None:
     _user(
         tmp_path,
         '[sandbox]\nrw_paths = ["/dados"]\nenv_pass = ["NPM_TOKEN"]\n'
@@ -65,7 +65,7 @@ def test_politica_do_usuario_define_o_que_o_repositorio_nao_pode(tmp_path):
 # ── o repositório só restringe ──────────────────────────────────────────────
 
 
-def test_repositorio_nao_amplia_caminhos_graveis(tmp_path):
+def test_repositorio_nao_amplia_caminhos_graveis(tmp_path) -> None:
     _repo(tmp_path, '[sandbox]\nrw_paths = ["/etc", "/home"]\n')
 
     policy = resolve_policy(tmp_path)
@@ -74,7 +74,7 @@ def test_repositorio_nao_amplia_caminhos_graveis(tmp_path):
     assert "rw_paths" in policy.ignored_repo_keys
 
 
-def test_repositorio_nao_amplia_leitura_nem_ambiente_nem_portas(tmp_path):
+def test_repositorio_nao_amplia_leitura_nem_ambiente_nem_portas(tmp_path) -> None:
     _repo(
         tmp_path,
         '[sandbox]\nro_paths = ["/segredos"]\nenv_pass = ["AWS_SECRET"]\n'
@@ -89,7 +89,7 @@ def test_repositorio_nao_amplia_leitura_nem_ambiente_nem_portas(tmp_path):
     assert set(policy.ignored_repo_keys) == {"ro_paths", "env_pass", "allow_tcp_ports"}
 
 
-def test_repositorio_nao_libera_a_escrita_no_git(tmp_path):
+def test_repositorio_nao_libera_a_escrita_no_git(tmp_path) -> None:
     _repo(tmp_path, "[sandbox]\ngit_writable = true\n")
 
     policy = resolve_policy(tmp_path)
@@ -98,7 +98,7 @@ def test_repositorio_nao_libera_a_escrita_no_git(tmp_path):
     assert "git_writable" in policy.ignored_repo_keys
 
 
-def test_repositorio_nao_troca_backend_nem_imagem_nem_host(tmp_path):
+def test_repositorio_nao_troca_backend_nem_imagem_nem_host(tmp_path) -> None:
     _repo(
         tmp_path,
         '[sandbox]\nbackend = "docker"\ndocker_image = "evil:latest"\n'
@@ -119,7 +119,7 @@ def test_repositorio_nao_troca_backend_nem_imagem_nem_host(tmp_path):
     }
 
 
-def test_repositorio_nao_desliga_o_sandbox_do_usuario(tmp_path):
+def test_repositorio_nao_desliga_o_sandbox_do_usuario(tmp_path) -> None:
     _user(tmp_path, "[sandbox]\nenabled = true\n")
     _repo(tmp_path, "[sandbox]\nenabled = false\n")
 
@@ -129,7 +129,7 @@ def test_repositorio_nao_desliga_o_sandbox_do_usuario(tmp_path):
     assert "enabled" in policy.ignored_repo_keys
 
 
-def test_repositorio_nao_desliga_lockdown_nem_liga_gpu_do_usuario(tmp_path):
+def test_repositorio_nao_desliga_lockdown_nem_liga_gpu_do_usuario(tmp_path) -> None:
     _user(tmp_path, "[sandbox]\nlockdown = true\nno_gpu = true\n")
     _repo(tmp_path, "[sandbox]\nlockdown = false\nno_gpu = false\n")
 
@@ -140,7 +140,7 @@ def test_repositorio_nao_desliga_lockdown_nem_liga_gpu_do_usuario(tmp_path):
     assert set(policy.ignored_repo_keys) == {"lockdown", "no_gpu"}
 
 
-def test_repositorio_pode_ligar_o_sandbox_e_o_lockdown(tmp_path):
+def test_repositorio_pode_ligar_o_sandbox_e_o_lockdown(tmp_path) -> None:
     _repo(tmp_path, "[sandbox]\nlockdown = true\n")
 
     policy = resolve_policy(tmp_path)
@@ -150,7 +150,7 @@ def test_repositorio_pode_ligar_o_sandbox_e_o_lockdown(tmp_path):
     assert policy.ignored_repo_keys == ()
 
 
-def test_repositorio_acrescenta_mascaras_sem_perder_as_do_usuario(tmp_path):
+def test_repositorio_acrescenta_mascaras_sem_perder_as_do_usuario(tmp_path) -> None:
     _user(tmp_path, '[sandbox]\nmask = ["segredo.txt"]\n')
     _repo(tmp_path, '[sandbox]\nmask = ["outro.key"]\n')
 
@@ -159,7 +159,7 @@ def test_repositorio_acrescenta_mascaras_sem_perder_as_do_usuario(tmp_path):
     assert policy.mask == ("segredo.txt", "outro.key")
 
 
-def test_repositorio_pode_estreitar_o_que_o_usuario_permite(tmp_path):
+def test_repositorio_pode_estreitar_o_que_o_usuario_permite(tmp_path) -> None:
     _user(
         tmp_path,
         '[sandbox]\nrw_paths = ["/a", "/b"]\nenv_pass = ["X", "Y"]\n'
@@ -180,7 +180,7 @@ def test_repositorio_pode_estreitar_o_que_o_usuario_permite(tmp_path):
     assert policy.ignored_repo_keys == ()
 
 
-def test_repositorio_pode_exigir_isolamento_completo(tmp_path):
+def test_repositorio_pode_exigir_isolamento_completo(tmp_path) -> None:
     _repo(tmp_path, "[sandbox]\nrequire_full_isolation = true\n")
 
     assert resolve_policy(tmp_path).require_full_isolation is True
@@ -188,13 +188,15 @@ def test_repositorio_pode_exigir_isolamento_completo(tmp_path):
 
 def test_repositorio_sem_secao_sandbox_mantem_desabilitado_sem_politica_do_usuario(
     tmp_path,
-):
+) -> None:
     _repo(tmp_path, '[hooks]\npost_file_write = ["true"]\n')
 
     assert resolve_policy(tmp_path).enabled is False
 
 
-def test_repositorio_sem_secao_sandbox_nao_mexe_na_politica_do_usuario(tmp_path):
+def test_repositorio_sem_secao_sandbox_nao_mexe_na_politica_do_usuario(
+    tmp_path,
+) -> None:
     _user(tmp_path, '[sandbox]\nrw_paths = ["/a"]\n')
     _repo(tmp_path, '[hooks]\npost_file_write = ["true"]\n')
 
@@ -207,7 +209,7 @@ def test_repositorio_sem_secao_sandbox_nao_mexe_na_politica_do_usuario(tmp_path)
 # ── falha fechada ───────────────────────────────────────────────────────────
 
 
-def test_vectora_toml_malformado_vira_lockdown(tmp_path):
+def test_vectora_toml_malformado_vira_lockdown(tmp_path) -> None:
     _repo(tmp_path, "[sandbox\nquebrado")
 
     policy = resolve_policy(tmp_path)
@@ -217,7 +219,7 @@ def test_vectora_toml_malformado_vira_lockdown(tmp_path):
     assert policy.rw_paths == ()
 
 
-def test_politica_do_usuario_malformada_vira_lockdown(tmp_path):
+def test_politica_do_usuario_malformada_vira_lockdown(tmp_path) -> None:
     _user(tmp_path, "[sandbox\nquebrado")
 
     policy = resolve_policy(tmp_path)
@@ -226,7 +228,7 @@ def test_politica_do_usuario_malformada_vira_lockdown(tmp_path):
     assert policy.lockdown is True
 
 
-def test_campo_com_tipo_errado_no_repositorio_vira_lockdown(tmp_path):
+def test_campo_com_tipo_errado_no_repositorio_vira_lockdown(tmp_path) -> None:
     _repo(tmp_path, '[sandbox]\nrw_paths = "nao-e-lista"\n')
 
     policy = resolve_policy(tmp_path)
@@ -237,7 +239,7 @@ def test_campo_com_tipo_errado_no_repositorio_vira_lockdown(tmp_path):
 # ── gravação ────────────────────────────────────────────────────────────────
 
 
-def test_write_trusted_policy_vai_e_volta(tmp_path):
+def test_write_trusted_policy_vai_e_volta(tmp_path) -> None:
     original = SandboxPolicy(
         enabled=True,
         rw_paths=("/dados",),
@@ -256,7 +258,7 @@ def test_write_trusted_policy_vai_e_volta(tmp_path):
     assert relida == original
 
 
-def test_policy_toml_persiste_bindings_sem_mover_campos_para_a_tabela(tmp_path):
+def test_policy_toml_persiste_bindings_sem_mover_campos_para_a_tabela(tmp_path) -> None:
     policy = SandboxPolicy(
         enabled=True,
         credential_bindings=(
@@ -275,14 +277,16 @@ def test_policy_toml_persiste_bindings_sem_mover_campos_para_a_tabela(tmp_path):
     assert restored.credential_bindings == policy.credential_bindings
 
 
-def test_policy_to_toml_escapa_caminhos_com_aspas_e_unicode():
+def test_policy_to_toml_escapa_caminhos_com_aspas_e_unicode() -> None:
     texto = policy_to_toml(SandboxPolicy(enabled=True, rw_paths=('/a "b"', "/ção")))
 
     assert '"/a \\"b\\""' in texto
     assert '"/ção"' in texto
 
 
-def test_aviso_de_chaves_ignoradas_aparece_uma_vez_por_workspace(tmp_path, caplog):
+def test_aviso_de_chaves_ignoradas_aparece_uma_vez_por_workspace(
+    tmp_path, caplog
+) -> None:
     policy_module._logged_ignored.clear()
     _repo(tmp_path, '[sandbox]\nrw_paths = ["/etc"]\n')
 
@@ -297,7 +301,7 @@ def test_aviso_de_chaves_ignoradas_aparece_uma_vez_por_workspace(tmp_path, caplo
 # ── limites de recursos ─────────────────────────────────────────────────────
 
 
-def test_limites_padrao():
+def test_limites_padrao() -> None:
     policy = SandboxPolicy(enabled=True)
 
     assert (policy.max_file_mb, policy.memory_limit_mb, policy.tmp_size_mb) == (
@@ -307,7 +311,7 @@ def test_limites_padrao():
     )
 
 
-def test_parse_le_os_limites(tmp_path):
+def test_parse_le_os_limites(tmp_path) -> None:
     arquivo = tmp_path / "p.toml"
     arquivo.write_text(
         "[sandbox]\nmax_file_mb = 100\nmemory_limit_mb = 2048\ntmp_size_mb = 256\n"
@@ -331,14 +335,14 @@ def test_parse_le_os_limites(tmp_path):
         "memory_limit_mb = true",
     ],
 )
-def test_limite_invalido_falha_fechado(tmp_path, linha):
+def test_limite_invalido_falha_fechado(tmp_path, linha) -> None:
     arquivo = tmp_path / "p.toml"
     arquivo.write_text(f"[sandbox]\n{linha}\n")
 
     assert policy_module.parse_policy(arquivo).lockdown is True
 
 
-def test_repositorio_so_pode_baixar_os_limites(tmp_path):
+def test_repositorio_so_pode_baixar_os_limites(tmp_path) -> None:
     trusted_policy_path(tmp_path).write_text(
         "[sandbox]\nmax_file_mb = 1000\ntmp_size_mb = 500\nmemory_limit_mb = 4000\n"
     )
@@ -354,7 +358,9 @@ def test_repositorio_so_pode_baixar_os_limites(tmp_path):
     assert set(policy.ignored_repo_keys) == {"tmp_size_mb", "memory_limit_mb"}
 
 
-def test_repositorio_pode_impor_limite_de_memoria_quando_o_usuario_nao_tem(tmp_path):
+def test_repositorio_pode_impor_limite_de_memoria_quando_o_usuario_nao_tem(
+    tmp_path,
+) -> None:
     (tmp_path / "vectora.toml").write_text("[sandbox]\nmemory_limit_mb = 1024\n")
 
     policy = resolve_policy(tmp_path)
@@ -363,7 +369,7 @@ def test_repositorio_pode_impor_limite_de_memoria_quando_o_usuario_nao_tem(tmp_p
     assert policy.ignored_repo_keys == ()
 
 
-def test_limites_vao_e_voltam_pelo_toml(tmp_path):
+def test_limites_vao_e_voltam_pelo_toml(tmp_path) -> None:
     original = SandboxPolicy(
         enabled=True, max_file_mb=50, memory_limit_mb=512, tmp_size_mb=64
     )

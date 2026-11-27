@@ -214,7 +214,8 @@ async def test_new_tab_mantem_guard_apos_navegacao_e_libera_ao_fechar(
 
     assert tab_id
     assert cast("Any", page)._vectora_route_handler is registered["**/*"]
-    await browser_session._release_route_guard(page)
+    tab = browser_session._sessions["ws-persistent-guard"]["tabs"][tab_id]
+    await browser_session._release_route_guard(tab.page)
     assert unroutes == [("**/*", registered["**/*"])]
 
 
@@ -324,7 +325,7 @@ def test_find_agent_page_rejeita_vectora_app_e_ui() -> None:
     workbench_tab_page = MagicMock()
     workbench_tab_page.url = "https://github.com/vectora-company/vectora/pull/355"
 
-    context_with_only_app = SimpleNamespace(
+    context_with_only_app = MagicMock(
         pages=[app_shell_page, localhost_page, devtools_page]
     )
     with pytest.raises(
@@ -332,7 +333,7 @@ def test_find_agent_page_rejeita_vectora_app_e_ui() -> None:
     ):
         browser_session._find_agent_page(context_with_only_app)
 
-    context_with_real_tab = SimpleNamespace(pages=[app_shell_page, workbench_tab_page])
+    context_with_real_tab = MagicMock(pages=[app_shell_page, workbench_tab_page])
     assert browser_session._find_agent_page(context_with_real_tab) is workbench_tab_page
 
 
@@ -491,7 +492,7 @@ async def test_pagina_sem_sessao_cdp_nao_instala_guarda() -> None:
         return True, ""
 
     assert (
-        await browser_session.install_redirect_guard(SimpleNamespace(), check, {})
+        await browser_session.install_redirect_guard(MagicMock(spec=[]), check, {})
         is None
     )
 

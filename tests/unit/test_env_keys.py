@@ -16,7 +16,7 @@ from backend.services import env_keys
 
 
 class TestKnownLlmEnvKeys:
-    def test_covers_all_expected_providers(self):
+    def test_covers_all_expected_providers(self) -> None:
         assert {
             "GOOGLE_API_KEY",
             "OPENAI_API_KEY",
@@ -26,14 +26,14 @@ class TestKnownLlmEnvKeys:
             "OPENROUTER_API_KEY",
         } == env_keys.KNOWN_LLM_ENV_KEYS
 
-    def test_github_token_not_included(self):
+    def test_github_token_not_included(self) -> None:
         """Erro/borda: tokens de integração (OAuth) não são keys de LLM —
         não devem ser tratados por esse caminho."""
         assert "GITHUB_TOKEN" not in env_keys.KNOWN_LLM_ENV_KEYS
 
 
 class TestDefaultEnvFile:
-    def test_returns_vectora_env_path(self, tmp_path, monkeypatch):
+    def test_returns_vectora_env_path(self, tmp_path, monkeypatch) -> None:
         from backend.settings import settings
 
         monkeypatch.setattr(settings, "vectora_home", tmp_path / ".vectora")
@@ -62,7 +62,7 @@ def _restore_settings():
 class TestApplyLlmEnvKey:
     def test_persists_env_and_updates_os_environ(
         self, tmp_path, monkeypatch, _restore_settings
-    ):
+    ) -> None:
         env_file = tmp_path / ".env"
         monkeypatch.setenv("GOOGLE_API_KEY", "placeholder")  # monkeypatch "adota" a key
 
@@ -73,7 +73,9 @@ class TestApplyLlmEnvKey:
         assert __import__("os").environ["GOOGLE_API_KEY"] == "AIza-nova-key"
         assert _restore_settings.google_api_key == "AIza-nova-key"
 
-    def test_empty_value_clears_key(self, tmp_path, monkeypatch, _restore_settings):
+    def test_empty_value_clears_key(
+        self, tmp_path, monkeypatch, _restore_settings
+    ) -> None:
         """Erro/borda: valor vazio 'esquece' a key — mesmo comportamento
         de patch_api_keys (não é um erro, é uma limpeza intencional)."""
         import os
@@ -87,7 +89,7 @@ class TestApplyLlmEnvKey:
         assert os.environ["TAVILY_API_KEY"] == ""
         assert _restore_settings.tavily_api_key is None
 
-    def test_whitespace_only_value_is_stripped(self, tmp_path, monkeypatch):
+    def test_whitespace_only_value_is_stripped(self, tmp_path, monkeypatch) -> None:
         import os
 
         env_file = tmp_path / ".env"
@@ -98,7 +100,7 @@ class TestApplyLlmEnvKey:
         mock_upsert.assert_called_once_with(env_file, "COHERE_API_KEY", "")
         assert os.environ["COHERE_API_KEY"] == ""
 
-    def test_unknown_settings_attr_does_not_raise(self, tmp_path, monkeypatch):
+    def test_unknown_settings_attr_does_not_raise(self, tmp_path, monkeypatch) -> None:
         """Erro/borda: env var sem atributo correspondente em `settings`
         (hasattr False) não deve quebrar — só não atualiza settings."""
         env_file = tmp_path / ".env"

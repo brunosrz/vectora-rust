@@ -52,7 +52,7 @@ async def db(tmp_path, monkeypatch):
 
 
 class TestCreateProfile:
-    async def test_cria_perfil_com_defaults(self, db):
+    async def test_cria_perfil_com_defaults(self, db) -> None:
         profile = await ap.create_profile("user-1", "QA Bot")
 
         assert profile.name == "QA Bot"
@@ -60,32 +60,32 @@ class TestCreateProfile:
         assert profile.tool_scope == []
         assert profile.budget_cents is None
 
-    async def test_cria_perfil_com_tool_scope_valido(self, db):
+    async def test_cria_perfil_com_tool_scope_valido(self, db) -> None:
         profile = await ap.create_profile(
             "user-1", "Reader", tool_scope=["file_read", "grep"]
         )
 
         assert profile.tool_scope == ["file_read", "grep"]
 
-    async def test_nome_vazio_rejeitado(self, db):
+    async def test_nome_vazio_rejeitado(self, db) -> None:
         with pytest.raises(ValueError, match="name"):
             await ap.create_profile("user-1", "  ")
 
-    async def test_budget_negativo_rejeitado(self, db):
+    async def test_budget_negativo_rejeitado(self, db) -> None:
         with pytest.raises(ValueError, match="budget_cents"):
             await ap.create_profile("user-1", "X", budget_cents=-1)
 
-    async def test_tool_scope_com_tool_inexistente_rejeitado(self, db):
+    async def test_tool_scope_com_tool_inexistente_rejeitado(self, db) -> None:
         with pytest.raises(ValueError, match="tool_scope"):
             await ap.create_profile("user-1", "X", tool_scope=["tool_que_nao_existe"])
 
-    async def test_status_invalido_rejeitado(self, db):
+    async def test_status_invalido_rejeitado(self, db) -> None:
         with pytest.raises(ValueError, match="status"):
             await ap.create_profile("user-1", "X", status="deleted")
 
 
 class TestListProfiles:
-    async def test_lista_so_do_usuario(self, db):
+    async def test_lista_so_do_usuario(self, db) -> None:
         await ap.create_profile("user-1", "A")
         await ap.create_profile("user-2", "B")
 
@@ -94,13 +94,13 @@ class TestListProfiles:
         assert len(result) == 1
         assert result[0].name == "A"
 
-    async def test_usuario_sem_perfis_retorna_lista_vazia(self, db):
+    async def test_usuario_sem_perfis_retorna_lista_vazia(self, db) -> None:
         result = await ap.list_profiles("user-sem-perfis")
         assert result == []
 
 
 class TestUpdateProfile:
-    async def test_atualiza_campos(self, db):
+    async def test_atualiza_campos(self, db) -> None:
         created = await ap.create_profile("user-1", "Original")
 
         updated = await ap.update_profile(created.id, name="Renomeado", title="T")
@@ -109,11 +109,11 @@ class TestUpdateProfile:
         assert updated.name == "Renomeado"
         assert updated.title == "T"
 
-    async def test_perfil_inexistente_retorna_none(self, db):
+    async def test_perfil_inexistente_retorna_none(self, db) -> None:
         result = await ap.update_profile("nao-existe", name="X")
         assert result is None
 
-    async def test_atualizacao_invalida_nao_aplica(self, db):
+    async def test_atualizacao_invalida_nao_aplica(self, db) -> None:
         """Erro/borda: budget negativo na atualização é rejeitado, perfil
         original não muda."""
         created = await ap.create_profile("user-1", "Original")
@@ -127,7 +127,7 @@ class TestUpdateProfile:
 
 
 class TestDeleteProfile:
-    async def test_apaga_perfil_existente(self, db):
+    async def test_apaga_perfil_existente(self, db) -> None:
         created = await ap.create_profile("user-1", "X")
 
         deleted = await ap.delete_profile(created.id)
@@ -135,6 +135,6 @@ class TestDeleteProfile:
         assert deleted is True
         assert await ap.get_profile(created.id) is None
 
-    async def test_perfil_inexistente_retorna_false(self, db):
+    async def test_perfil_inexistente_retorna_false(self, db) -> None:
         deleted = await ap.delete_profile("nao-existe")
         assert deleted is False

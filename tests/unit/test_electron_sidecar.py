@@ -63,22 +63,26 @@ def _reset_sidecar_state(monkeypatch: pytest.MonkeyPatch):
 
 
 class TestShouldSpawnElectron:
-    def test_ja_sob_electron_retorna_false(self, monkeypatch: pytest.MonkeyPatch):
+    def test_ja_sob_electron_retorna_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("VECTORA_DESKTOP", "1")
         assert electron_sidecar.should_spawn_electron() is False
 
-    def test_headless_retorna_false(self, monkeypatch: pytest.MonkeyPatch):
+    def test_headless_retorna_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("VECTORA_DESKTOP", raising=False)
         monkeypatch.setenv("VECTORA_HEADLESS", "1")
         assert electron_sidecar.should_spawn_electron() is False
 
-    def test_sem_display_retorna_false(self, monkeypatch: pytest.MonkeyPatch):
+    def test_sem_display_retorna_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("VECTORA_DESKTOP", raising=False)
         monkeypatch.delenv("VECTORA_HEADLESS", raising=False)
         with patch("backend.services.electron_sidecar.has_display", return_value=False):
             assert electron_sidecar.should_spawn_electron() is False
 
-    def test_sem_build_de_dev_retorna_false(self, monkeypatch: pytest.MonkeyPatch):
+    def test_sem_build_de_dev_retorna_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # Par de erro/edge case: display disponível mas Electron não
         # buildado (scons frontend não rodou) — não trava, só diz não.
         monkeypatch.delenv("VECTORA_DESKTOP", raising=False)
@@ -92,7 +96,9 @@ class TestShouldSpawnElectron:
         ):
             assert electron_sidecar.should_spawn_electron() is False
 
-    def test_tudo_disponivel_retorna_true(self, monkeypatch: pytest.MonkeyPatch):
+    def test_tudo_disponivel_retorna_true(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("VECTORA_DESKTOP", raising=False)
         monkeypatch.delenv("VECTORA_HEADLESS", raising=False)
         with (
@@ -111,7 +117,7 @@ class TestShouldSpawnElectron:
 
 
 @pytest.mark.asyncio
-async def test_ensure_electron_sidecar_retorna_none_sem_build_resolvido():
+async def test_ensure_electron_sidecar_retorna_none_sem_build_resolvido() -> None:
     with patch(
         "backend.services.electron_sidecar.resolve_electron_launch",
         return_value=None,
@@ -125,7 +131,7 @@ async def test_ensure_electron_sidecar_retorna_none_sem_build_resolvido():
 @pytest.mark.asyncio
 async def test_ensure_electron_sidecar_spawna_e_guarda_o_processo(
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     monkeypatch.delenv("VECTORA_OZONE_PLATFORM", raising=False)
     fake_proc = MagicMock()
     fake_proc.pid = 4242
@@ -173,7 +179,7 @@ async def test_ensure_electron_sidecar_usa_plataforma_ozone_configurada(
     monkeypatch: pytest.MonkeyPatch,
     ozone_platform: str,
     expected_args: tuple[str, ...],
-):
+) -> None:
     monkeypatch.setattr(electron_sidecar.sys, "platform", "linux")
     monkeypatch.setenv("VECTORA_OZONE_PLATFORM", ozone_platform)
     fake_proc = MagicMock()
@@ -202,7 +208,7 @@ async def test_ensure_electron_sidecar_usa_plataforma_ozone_configurada(
 @pytest.mark.asyncio
 async def test_ensure_electron_sidecar_rejeita_plataforma_ozone_desconhecida(
     monkeypatch: pytest.MonkeyPatch,
-):
+) -> None:
     monkeypatch.setattr(electron_sidecar.sys, "platform", "linux")
     monkeypatch.setenv("VECTORA_OZONE_PLATFORM", "mir")
 
@@ -219,7 +225,7 @@ async def test_ensure_electron_sidecar_rejeita_plataforma_ozone_desconhecida(
 
 
 @pytest.mark.asyncio
-async def test_ensure_electron_sidecar_reusa_processo_ja_rodando():
+async def test_ensure_electron_sidecar_reusa_processo_ja_rodando() -> None:
     fake_proc = MagicMock()
     fake_proc.returncode = None
     electron_sidecar._proc = fake_proc
@@ -232,7 +238,7 @@ async def test_ensure_electron_sidecar_reusa_processo_ja_rodando():
 
 
 @pytest.mark.asyncio
-async def test_ensure_electron_sidecar_falha_de_spawn_retorna_none_sem_lancar():
+async def test_ensure_electron_sidecar_falha_de_spawn_retorna_none_sem_lancar() -> None:
     # Par de erro: binário corrompido/permissão negada não propaga —
     # o backend segue de pé sem janela.
     with (
@@ -252,7 +258,7 @@ async def test_ensure_electron_sidecar_falha_de_spawn_retorna_none_sem_lancar():
 
 
 @pytest.mark.asyncio
-async def test_stop_electron_sidecar_termina_e_limpa_estado():
+async def test_stop_electron_sidecar_termina_e_limpa_estado() -> None:
     fake_proc = MagicMock()
     fake_proc.returncode = None
     fake_proc.wait = AsyncMock(return_value=None)
@@ -274,7 +280,7 @@ async def test_stop_electron_sidecar_termina_e_limpa_estado():
 
 
 @pytest.mark.asyncio
-async def test_stop_electron_sidecar_sem_processo_e_noop():
+async def test_stop_electron_sidecar_sem_processo_e_noop() -> None:
     await electron_sidecar.stop_electron_sidecar()
     assert electron_sidecar._proc is None
 
@@ -290,7 +296,7 @@ async def test_stop_electron_sidecar_sem_processo_e_noop():
 
 
 @pytest.mark.asyncio
-async def test_stop_sem_processo_rastreado_loga_o_motivo(caplog):
+async def test_stop_sem_processo_rastreado_loga_o_motivo(caplog) -> None:
     caplog.set_level(logging.INFO, logger="backend.services.electron_sidecar")
 
     await electron_sidecar.stop_electron_sidecar()
@@ -299,7 +305,9 @@ async def test_stop_sem_processo_rastreado_loga_o_motivo(caplog):
 
 
 @pytest.mark.asyncio
-async def test_stop_com_processo_ja_morto_loga_o_code_sem_chamar_terminate(caplog):
+async def test_stop_com_processo_ja_morto_loga_o_code_sem_chamar_terminate(
+    caplog,
+) -> None:
     caplog.set_level(logging.INFO, logger="backend.services.electron_sidecar")
     fake_proc = MagicMock()
     fake_proc.returncode = 0
@@ -313,7 +321,7 @@ async def test_stop_com_processo_ja_morto_loga_o_code_sem_chamar_terminate(caplo
 
 
 @pytest.mark.asyncio
-async def test_stop_com_processo_vivo_loga_sucesso_apos_terminar(caplog):
+async def test_stop_com_processo_vivo_loga_sucesso_apos_terminar(caplog) -> None:
     caplog.set_level(logging.INFO, logger="backend.services.electron_sidecar")
     fake_proc = MagicMock()
     fake_proc.pid = 4242
@@ -341,7 +349,7 @@ class TestJobObjectIntegration:
     @pytest.mark.asyncio
     async def test_nao_associa_job_object_fora_do_windows(
         self, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         monkeypatch.setattr(electron_sidecar.sys, "platform", "linux")
         fake_proc = MagicMock()
         fake_proc.pid = 4242
@@ -367,7 +375,7 @@ class TestJobObjectIntegration:
     @pytest.mark.asyncio
     async def test_associa_processo_a_job_object_no_windows(
         self, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         monkeypatch.setattr(electron_sidecar.sys, "platform", "win32")
         fake_proc = MagicMock()
         fake_proc.pid = 4242
@@ -402,7 +410,7 @@ class TestJobObjectIntegration:
     @pytest.mark.asyncio
     async def test_job_object_falhando_nao_impede_sidecar_de_subir(
         self, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         # Par de erro/borda: exceção na criação da Job Object nunca deve
         # impedir o Electron de subir — best-effort, só loga.
         monkeypatch.setattr(electron_sidecar.sys, "platform", "win32")

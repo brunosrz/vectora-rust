@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.handlers import github
+from backend.vtypes.contracts import JsonValue
 
 
 def _request(user_id: str | None = "alice"):
@@ -339,7 +340,9 @@ async def test_issue_detail_reports_errors(monkeypatch) -> None:
 
 
 def test_comment_list_is_capped() -> None:
-    many = [{"author": {"login": "a"}, "body": str(i)} for i in range(500)]
+    many: list[JsonValue] = [
+        {"author": {"login": "a"}, "body": str(i)} for i in range(500)
+    ]
 
     assert len(github._comments(many)) == 100
 
@@ -348,7 +351,7 @@ def test_comment_list_is_capped() -> None:
 
 
 @pytest.mark.asyncio
-async def test_leitura_repetida_usa_o_cache_e_chama_o_gh_uma_vez(monkeypatch):
+async def test_leitura_repetida_usa_o_cache_e_chama_o_gh_uma_vez(monkeypatch) -> None:
     calls = _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
 
     first = await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
@@ -359,7 +362,7 @@ async def test_leitura_repetida_usa_o_cache_e_chama_o_gh_uma_vez(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cache_nao_mistura_usuarios_nem_argumentos(monkeypatch):
+async def test_cache_nao_mistura_usuarios_nem_argumentos(monkeypatch) -> None:
     calls = _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
 
     await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
@@ -370,7 +373,7 @@ async def test_cache_nao_mistura_usuarios_nem_argumentos(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_erro_nao_fica_em_cache(monkeypatch):
+async def test_erro_nao_fica_em_cache(monkeypatch) -> None:
     calls = _fake_gh(monkeypatch, {"status": "error", "message": "boom"})
 
     await github._gh_read(["pr", "list"], cwd="/w", user_id="u1")
@@ -380,7 +383,9 @@ async def test_erro_nao_fica_em_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chamadas_simultaneas_iguais_compartilham_uma_execucao(monkeypatch):
+async def test_chamadas_simultaneas_iguais_compartilham_uma_execucao(
+    monkeypatch,
+) -> None:
     import asyncio
 
     started = 0
@@ -401,7 +406,7 @@ async def test_chamadas_simultaneas_iguais_compartilham_uma_execucao(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_cache_expira_depois_do_ttl(monkeypatch):
+async def test_cache_expira_depois_do_ttl(monkeypatch) -> None:
     calls = _fake_gh(monkeypatch, {"status": "ok", "output": "[]"})
     clock = [100.0]
     monkeypatch.setattr(github.time, "monotonic", lambda: clock[0])

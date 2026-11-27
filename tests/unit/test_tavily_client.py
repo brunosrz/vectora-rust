@@ -18,6 +18,7 @@ from backend.tools.tavily.client import (
     TavilyQuotaError,
     TavilyResponseError,
 )
+from tests.json_values import as_object
 
 
 def _client(handler) -> TavilyClient:
@@ -29,7 +30,7 @@ def _client(handler) -> TavilyClient:
 
 class TestAuth:
     @pytest.mark.asyncio
-    async def test_manda_bearer_com_o_prefixo_tvly(self):
+    async def test_manda_bearer_com_o_prefixo_tvly(self) -> None:
         visto: dict[str, str] = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -41,14 +42,14 @@ class TestAuth:
 
         assert visto["auth"] == "Bearer tvly-test"
 
-    def test_sem_api_key_falha_na_construcao(self):
+    def test_sem_api_key_falha_na_construcao(self) -> None:
         """Erro/borda: key vazia tem que falhar aqui, não render 401 confuso
         lá na frente."""
         with pytest.raises(TavilyAuthError, match="TAVILY_API_KEY"):
             TavilyClient(api_key="")
 
     @pytest.mark.asyncio
-    async def test_401_e_432_viram_erros_distintos(self):
+    async def test_401_e_432_viram_erros_distintos(self) -> None:
         """Chave inválida e cota estourada exigem ações diferentes do
         usuário, e hoje viram a mesma mensagem genérica."""
 
@@ -69,7 +70,7 @@ class TestAuth:
 
 class TestSearch:
     @pytest.mark.asyncio
-    async def test_resultados_saem_na_forma_esperada_pelas_tools(self):
+    async def test_resultados_saem_na_forma_esperada_pelas_tools(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -92,7 +93,7 @@ class TestSearch:
         assert resultados[0]["title"] == "Vectora"
 
     @pytest.mark.asyncio
-    async def test_parametros_por_chamada_e_nao_por_instanciacao(self):
+    async def test_parametros_por_chamada_e_nao_por_instanciacao(self) -> None:
         """`search_depth`/`max_results` são parâmetros por chamada, não
         presos na criação do client."""
         capturado: dict = {}
@@ -120,7 +121,7 @@ class TestSearch:
         assert capturado["include_domains"] == ["github.com"]
 
     @pytest.mark.asyncio
-    async def test_filtro_nao_informado_fica_ausente_do_payload(self):
+    async def test_filtro_nao_informado_fica_ausente_do_payload(self) -> None:
         """Erro/borda: mandar `include_domains: null` restringe a busca em
         alguns casos em vez de deixar aberta."""
         capturado: dict = {}
@@ -138,7 +139,7 @@ class TestSearch:
         assert "time_range" not in capturado
 
     @pytest.mark.asyncio
-    async def test_busca_sem_resultado_devolve_lista_vazia_sem_lancar(self):
+    async def test_busca_sem_resultado_devolve_lista_vazia_sem_lancar(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"results": []})
 
@@ -146,7 +147,7 @@ class TestSearch:
             assert await c.search("termo improvável") == []
 
     @pytest.mark.asyncio
-    async def test_resposta_sem_results_vira_erro_tipado(self):
+    async def test_resposta_sem_results_vira_erro_tipado(self) -> None:
         """Erro/borda: `results` ausente é resposta malformada, diferente de
         `results: []` — confundir os dois esconde falha de contrato."""
 
@@ -160,7 +161,7 @@ class TestSearch:
 
 class TestExtract:
     @pytest.mark.asyncio
-    async def test_extrai_conteudo_das_urls(self):
+    async def test_extrai_conteudo_das_urls(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -176,7 +177,7 @@ class TestExtract:
         assert extraidos[0]["raw_content"] == "conteúdo"
 
     @pytest.mark.asyncio
-    async def test_url_que_falhou_nao_some_em_silencio(self):
+    async def test_url_que_falhou_nao_some_em_silencio(self) -> None:
         """Erro/borda: o Tavily separa `failed_results`. Ignorar faz o agente
         achar que a página estava vazia, em vez de saber que não foi lida."""
 
@@ -196,7 +197,7 @@ class TestExtract:
                 await c.extract(["https://morta.test"])
 
     @pytest.mark.asyncio
-    async def test_lista_de_urls_vazia_nem_chama_a_api(self):
+    async def test_lista_de_urls_vazia_nem_chama_a_api(self) -> None:
         chamou = False
 
         def handler(_req):
@@ -211,7 +212,7 @@ class TestExtract:
 
 class TestUsage:
     @pytest.mark.asyncio
-    async def test_usage_devolve_consumo_da_key_e_do_plano(self):
+    async def test_usage_devolve_consumo_da_key_e_do_plano(self) -> None:
         """`GET /usage` — endpoint que o medidor de consumo usa para
         reportar o gasto da key/plano."""
 
@@ -232,11 +233,11 @@ class TestUsage:
         async with _client(handler) as c:
             uso = await c.usage()
 
-        assert uso["key"]["usage"] == 120
-        assert uso["account"]["current_plan"] == "researcher"
+        assert as_object(uso["key"])["usage"] == 120
+        assert as_object(uso["account"])["current_plan"] == "researcher"
 
     @pytest.mark.asyncio
-    async def test_usage_com_401_vira_erro_de_credencial(self):
+    async def test_usage_com_401_vira_erro_de_credencial(self) -> None:
         def handler(_req):
             return httpx.Response(401, json={"detail": "bad key"})
 

@@ -43,7 +43,7 @@ def client(tmp_path, monkeypatch):
     app = create_app(serve_static=False)
     yield TestClient(app, raise_server_exceptions=False)
 
-    async def _close():
+    async def _close() -> None:
         if auth_mod._db_conn is not None:
             await auth_mod._db_conn.close()
             auth_mod._db_conn = None
@@ -51,19 +51,19 @@ def client(tmp_path, monkeypatch):
     asyncio.run(_close())
 
 
-def test_available_true_em_banco_vazio(client):
+def test_available_true_em_banco_vazio(client) -> None:
     r = client.get("/auth/username-available", params={"username": "bruno"})
     assert r.status_code == 200
     assert r.json() == {"normalized": "bruno", "available": True, "suggestion": "bruno"}
 
 
-def test_normaliza_a_consulta(client):
+def test_normaliza_a_consulta(client) -> None:
     r = client.get("/auth/username-available", params={"username": "  Bruno! "})
     assert r.status_code == 200
     assert r.json()["normalized"] == "bruno"
 
 
-def test_available_false_com_sugestao_quando_em_uso(client):
+def test_available_false_com_sugestao_quando_em_uso(client) -> None:
     # Primeiro usuário (root) fica com username "bruno".
     r = client.post(
         "/auth/signup",
@@ -79,7 +79,7 @@ def test_available_false_com_sugestao_quando_em_uso(client):
     assert body["suggestion"].split("#", 1)[1].isdigit()
 
 
-def test_signup_persiste_username_explicito(client):
+def test_signup_persiste_username_explicito(client) -> None:
     r = client.post(
         "/auth/signup",
         json={
@@ -93,7 +93,7 @@ def test_signup_persiste_username_explicito(client):
     assert r.json()["user"]["username"] == "brunocoder"
 
 
-def test_signup_username_em_uso_retorna_409(client, monkeypatch):
+def test_signup_username_em_uso_retorna_409(client, monkeypatch) -> None:
     """Par de erro: username já em uso no signup → 409 (não 400 nem 200)."""
     import backend.rbac.auth as auth_mod
 

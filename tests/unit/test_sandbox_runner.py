@@ -25,7 +25,7 @@ def _fake_proc(stdout=b"ok\n", stderr=b"", returncode=0):
 
 @pytest.mark.usefixtures("sem_bwrap_automatico")
 @pytest.mark.asyncio
-async def test_no_vectora_toml_runs_unsandboxed(tmp_path, monkeypatch):
+async def test_no_vectora_toml_runs_unsandboxed(tmp_path, monkeypatch) -> None:
     proc = _fake_proc(stdout=b"hello\n")
     create_mock = AsyncMock(return_value=proc)
     monkeypatch.setattr(runner.asyncio, "create_subprocess_exec", create_mock)
@@ -40,7 +40,7 @@ async def test_no_vectora_toml_runs_unsandboxed(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_enabled_local_policy_dispatches_to_bwrap(tmp_path, monkeypatch):
+async def test_enabled_local_policy_dispatches_to_bwrap(tmp_path, monkeypatch) -> None:
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = "local"\n', encoding="utf-8"
     )
@@ -59,7 +59,7 @@ async def test_enabled_local_policy_dispatches_to_bwrap(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_unknown_backend_fails_closed_without_running_anything(
     tmp_path, monkeypatch
-):
+) -> None:
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = "not-a-real-backend"\n', encoding="utf-8"
     )
@@ -74,7 +74,7 @@ async def test_unknown_backend_fails_closed_without_running_anything(
 
 
 @pytest.mark.asyncio
-async def test_docker_backend_dispatches_to_docker_run(tmp_path, monkeypatch):
+async def test_docker_backend_dispatches_to_docker_run(tmp_path, monkeypatch) -> None:
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = "docker"\n', encoding="utf-8"
     )
@@ -91,7 +91,7 @@ async def test_docker_backend_dispatches_to_docker_run(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ssh_backend_without_remote_host_fails_closed(tmp_path):
+async def test_ssh_backend_without_remote_host_fails_closed(tmp_path) -> None:
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = "ssh"\n', encoding="utf-8"
     )
@@ -103,7 +103,7 @@ async def test_ssh_backend_without_remote_host_fails_closed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_disabled_sandbox_section_runs_unsandboxed(tmp_path, monkeypatch):
+async def test_disabled_sandbox_section_runs_unsandboxed(tmp_path, monkeypatch) -> None:
     trusted_policy_path(tmp_path).write_text(
         "[sandbox]\nenabled = false\n", encoding="utf-8"
     )
@@ -121,7 +121,7 @@ async def test_disabled_sandbox_section_runs_unsandboxed(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_ssh_backend_with_remote_host_dispatches_to_ssh_transport(
     tmp_path, monkeypatch
-):
+) -> None:
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = "ssh"\nremote_host = "user@host"\n',
         encoding="utf-8",
@@ -143,7 +143,7 @@ async def test_ssh_backend_with_remote_host_dispatches_to_ssh_transport(
 @pytest.mark.asyncio
 async def test_modal_backend_without_sdk_installed_fails_with_clear_message(
     tmp_path, monkeypatch
-):
+) -> None:
     import sys
 
     trusted_policy_path(tmp_path).write_text(
@@ -158,7 +158,7 @@ async def test_modal_backend_without_sdk_installed_fails_with_clear_message(
 
 
 @pytest.mark.asyncio
-async def test_empty_backend_string_fails_closed(tmp_path, monkeypatch):
+async def test_empty_backend_string_fails_closed(tmp_path, monkeypatch) -> None:
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = ""\n', encoding="utf-8"
     )
@@ -174,7 +174,7 @@ async def test_empty_backend_string_fails_closed(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_malformed_vectora_toml_fails_closed_and_never_runs_command(
     tmp_path, monkeypatch
-):
+) -> None:
     trusted_policy_path(tmp_path).write_text("[sandbox\nbroken", encoding="utf-8")
     proc = _fake_proc(stdout=b"bwrap-output\n")
     create_mock = AsyncMock(return_value=proc)
@@ -192,10 +192,10 @@ async def test_malformed_vectora_toml_fails_closed_and_never_runs_command(
 @pytest.mark.asyncio
 async def test_timeout_propagates_through_dispatcher_for_unsandboxed_run(
     tmp_path, monkeypatch
-):
+) -> None:
     proc = MagicMock()
 
-    async def _hang(*_args, **_kwargs):
+    async def _hang(*_args, **_kwargs) -> None:
         import asyncio
 
         await asyncio.sleep(10)
@@ -214,7 +214,7 @@ async def test_timeout_propagates_through_dispatcher_for_unsandboxed_run(
 
 
 @pytest.mark.asyncio
-async def test_case_sensitive_backend_name_fails_closed(tmp_path, monkeypatch):
+async def test_case_sensitive_backend_name_fails_closed(tmp_path, monkeypatch) -> None:
     # "Local" com maiúscula não é igual a "local" registrado — fail-closed.
     trusted_policy_path(tmp_path).write_text(
         '[sandbox]\nenabled = true\nbackend = "Local"\n', encoding="utf-8"
@@ -230,7 +230,9 @@ async def test_case_sensitive_backend_name_fails_closed(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_comando_vazio_sem_policy_ainda_dispara_subprocess(tmp_path, monkeypatch):
+async def test_comando_vazio_sem_policy_ainda_dispara_subprocess(
+    tmp_path, monkeypatch
+) -> None:
     # Borda: lista de comando vazia não é validada pelo runner — quem
     # decide se isso é um erro é o subprocess/shell, não o dispatcher.
     proc = _fake_proc()
@@ -246,7 +248,7 @@ async def test_comando_vazio_sem_policy_ainda_dispara_subprocess(tmp_path, monke
 @pytest.mark.asyncio
 async def test_policy_e_relida_do_disco_a_cada_chamada_nao_e_cacheada(
     tmp_path, monkeypatch
-):
+) -> None:
     # Duas chamadas sucessivas com vectora.toml alterado entre elas devem
     # respeitar a política nova — não pode haver cache implícito de policy.
     toml_path = trusted_policy_path(tmp_path)
@@ -272,7 +274,7 @@ async def test_policy_e_relida_do_disco_a_cada_chamada_nao_e_cacheada(
 @pytest.mark.asyncio
 async def test_duas_workspaces_com_policies_diferentes_dispatcham_isoladamente(
     tmp_path, monkeypatch
-):
+) -> None:
     # Concorrência/isolamento: dois workspaces distintos, um com sandbox
     # ligado e outro desligado, não podem vazar a política um pro outro.
     ws_sandboxed = tmp_path / "ws_a"
@@ -300,7 +302,7 @@ async def test_duas_workspaces_com_policies_diferentes_dispatcham_isoladamente(
 
 
 @pytest.mark.asyncio
-async def test_backend_none_via_toml_nulo_falha_fechado(tmp_path, monkeypatch):
+async def test_backend_none_via_toml_nulo_falha_fechado(tmp_path, monkeypatch) -> None:
     # Erro/borda: backend explicitamente vazio já coberto; aqui um valor
     # com espaços em branco também deve falhar fechado (não faz strip
     # mágico que coincida com "local").
@@ -334,7 +336,9 @@ def _quota_limpa():
 
 
 @pytest.mark.asyncio
-async def test_quota_de_execucoes_batch_rejeita_acima_do_limite(tmp_path, monkeypatch):
+async def test_quota_de_execucoes_batch_rejeita_acima_do_limite(
+    tmp_path, monkeypatch
+) -> None:
     ws = _docker_workspace(tmp_path)
     solta = asyncio.Event()
     limite = runner.MAX_CONCURRENT_BATCH_RUNS_PER_WORKSPACE
@@ -372,7 +376,7 @@ async def test_quota_de_execucoes_batch_rejeita_acima_do_limite(tmp_path, monkey
 @pytest.mark.asyncio
 async def test_quota_e_por_workspace_e_nao_atinge_backends_nao_batch(
     tmp_path, monkeypatch
-):
+) -> None:
     ws_a = _docker_workspace(tmp_path / "a")
     ws_b = _docker_workspace(tmp_path / "b")
     solta = asyncio.Event()

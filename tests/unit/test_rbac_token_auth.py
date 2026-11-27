@@ -40,7 +40,7 @@ async def db(tmp_path):
 
 class TestCreateAndVerify:
     @pytest.mark.asyncio
-    async def test_token_criado_verifica_com_sucesso(self, db):
+    async def test_token_criado_verifica_com_sucesso(self, db) -> None:
         token_obj, raw_token = await token_auth.create_service_token(
             db, "ci-bot", ["webhook:trigger"]
         )
@@ -54,7 +54,9 @@ class TestCreateAndVerify:
         assert verificado.id == token_obj.id
 
     @pytest.mark.asyncio
-    async def test_token_invalido_ou_ausente_nunca_autentica_sem_lancar(self, db):
+    async def test_token_invalido_ou_ausente_nunca_autentica_sem_lancar(
+        self, db
+    ) -> None:
         """Erro/borda: token desconhecido, vazio, e um token real revogado
         — os três devolvem None, nunca lançam."""
         assert await token_auth.verify_service_token(db, "vst_nao_existe") is None
@@ -67,7 +69,7 @@ class TestCreateAndVerify:
 
 class TestRevoke:
     @pytest.mark.asyncio
-    async def test_revoga_e_segunda_chamada_e_idempotente(self, db):
+    async def test_revoga_e_segunda_chamada_e_idempotente(self, db) -> None:
         token_obj, _ = await token_auth.create_service_token(db, "x", [])
 
         assert await token_auth.revoke_service_token(db, token_obj.id) is True
@@ -75,13 +77,13 @@ class TestRevoke:
         assert await token_auth.revoke_service_token(db, token_obj.id) is False
 
     @pytest.mark.asyncio
-    async def test_revogar_id_inexistente_retorna_false_sem_lancar(self, db):
+    async def test_revogar_id_inexistente_retorna_false_sem_lancar(self, db) -> None:
         assert await token_auth.revoke_service_token(db, "id-inexistente") is False
 
 
 class TestListServiceTokens:
     @pytest.mark.asyncio
-    async def test_lista_inclui_revogados_sem_token_cru(self, db):
+    async def test_lista_inclui_revogados_sem_token_cru(self, db) -> None:
         t1, _ = await token_auth.create_service_token(db, "ativo", [])
         t2, _ = await token_auth.create_service_token(db, "revogado", [])
         await token_auth.revoke_service_token(db, t2.id)
@@ -96,12 +98,12 @@ class TestListServiceTokens:
             assert not hasattr(t, "token_hash")
 
     @pytest.mark.asyncio
-    async def test_banco_vazio_retorna_lista_vazia_sem_erro(self, db):
+    async def test_banco_vazio_retorna_lista_vazia_sem_erro(self, db) -> None:
         assert await token_auth.list_service_tokens(db) == []
 
 
 class TestHasScope:
-    def test_escopo_explicito_e_coringa(self):
+    def test_escopo_explicito_e_coringa(self) -> None:
         t = token_auth.ServiceToken(
             id="1", name="x", scopes=["webhook:trigger"], created_at="now"
         )
@@ -112,7 +114,7 @@ class TestHasScope:
         )
         assert token_auth.has_scope(admin, "qualquer:coisa") is True
 
-    def test_escopo_ausente_e_negado(self):
+    def test_escopo_ausente_e_negado(self) -> None:
         """Erro/borda: token sem o escopo pedido (nem coringa) é negado."""
         t = token_auth.ServiceToken(id="1", name="x", scopes=["read"], created_at="now")
         assert token_auth.has_scope(t, "write") is False

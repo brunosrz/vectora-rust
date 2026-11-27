@@ -12,6 +12,7 @@ import git
 import pytest
 
 from backend.workspace.workspace import WorkspaceRegistry
+from tests.json_values import as_list, as_object
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -39,30 +40,30 @@ def _req(user=None):
 
 
 class TestTrust:
-    def test_added_folder_starts_untrusted(self, reg, tmp_path):
+    def test_added_folder_starts_untrusted(self, reg, tmp_path) -> None:
         # Pasta diferente do cwd do processo → não confiada por padrão
         sub = tmp_path / "sub"
         sub.mkdir()
         ws = reg.get_or_create(str(sub))
         assert ws.trusted is False
 
-    def test_trust_marks_trusted(self, reg, tmp_path):
+    def test_trust_marks_trusted(self, reg, tmp_path) -> None:
         ws = reg.get_or_create(str(tmp_path))
         assert reg.trust(ws.id, "user1") is True
         assert reg.get(ws.id).trusted is True
         assert reg.get(ws.id).trusted_by == "user1"
         assert reg.get(ws.id).trusted_at is not None
 
-    def test_trust_unknown_returns_false(self, reg):
+    def test_trust_unknown_returns_false(self, reg) -> None:
         assert reg.trust("naoexiste", "user1") is False
 
-    def test_is_trusted(self, reg, tmp_path):
+    def test_is_trusted(self, reg, tmp_path) -> None:
         ws = reg.get_or_create(str(tmp_path))
         assert reg.is_trusted(ws.id) is False
         reg.trust(ws.id)
         assert reg.is_trusted(ws.id) is True
 
-    def test_create_with_trust(self, reg, tmp_path):
+    def test_create_with_trust(self, reg, tmp_path) -> None:
         ws = reg.create(str(tmp_path), trust=True, user_id="u")
         assert ws.trusted is True
 
@@ -70,7 +71,7 @@ class TestTrust:
 class TestSessionWorkspace:
     def test_session_root_can_be_configured_independently_from_runtime_home(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         from backend.workspace.workspace import _session_workspaces_root
 
         configured = tmp_path / "user-documents" / "vectora"
@@ -79,7 +80,7 @@ class TestSessionWorkspace:
 
     def test_registers_workspace_without_creating_folder(
         self, reg, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Pasta não é criada no registro; apenas na primeira operação real."""
         monkeypatch.setattr(
             "backend.workspace.workspace._session_workspaces_root",
@@ -91,7 +92,7 @@ class TestSessionWorkspace:
         # …mas a pasta em disco NÃO é criada imediatamente.
         assert not (tmp_path / "docs" / "thread123").exists()
 
-    def test_session_workspace_is_trusted(self, reg, tmp_path, monkeypatch):
+    def test_session_workspace_is_trusted(self, reg, tmp_path, monkeypatch) -> None:
         monkeypatch.setattr(
             "backend.workspace.workspace._session_workspaces_root",
             lambda: tmp_path / "docs",
@@ -99,7 +100,7 @@ class TestSessionWorkspace:
         ws = reg.get_or_create_session_workspace("thread123", "u")
         assert ws.trusted is True
 
-    def test_session_workspace_is_idempotent(self, reg, tmp_path, monkeypatch):
+    def test_session_workspace_is_idempotent(self, reg, tmp_path, monkeypatch) -> None:
         monkeypatch.setattr(
             "backend.workspace.workspace._session_workspaces_root",
             lambda: tmp_path / "docs",
@@ -115,21 +116,21 @@ class TestSessionWorkspace:
 
 
 class TestGitInit:
-    def test_init_empty_dir(self, tmp_path):
+    def test_init_empty_dir(self, tmp_path) -> None:
         from backend.tools.git import git_init_repo
 
         result = git_init_repo(str(tmp_path))
         assert result["status"] == "ok"
         assert (tmp_path / ".git").exists()
 
-    def test_init_is_idempotent(self, tmp_path):
+    def test_init_is_idempotent(self, tmp_path) -> None:
         from backend.tools.git import git_init_repo
 
         git_init_repo(str(tmp_path))
         again = git_init_repo(str(tmp_path))
         assert again["status"] == "already"
 
-    def test_detect_reflects_init(self, tmp_path):
+    def test_detect_reflects_init(self, tmp_path) -> None:
         from backend.tools.git import detect_git_info, git_init_repo
 
         assert detect_git_info(str(tmp_path)).get("is_git_repo") is False
@@ -162,7 +163,7 @@ def repo_with_commit(tmp_path, monkeypatch):
 
 
 class TestWorktree:
-    def test_add_creates_worktree(self, repo_with_commit):
+    def test_add_creates_worktree(self, repo_with_commit) -> None:
         from backend.tools.git import _git_worktree_impl
 
         result = _git_worktree_impl(
@@ -171,7 +172,7 @@ class TestWorktree:
         assert result["status"] == "ok"
         assert result["name"] == "feat-x"
 
-    def test_list_includes_added_worktree(self, repo_with_commit):
+    def test_list_includes_added_worktree(self, repo_with_commit) -> None:
         from backend.tools.git import _git_worktree_impl
 
         _git_worktree_impl(
@@ -179,16 +180,18 @@ class TestWorktree:
         )
         listed = _git_worktree_impl(repo_with_commit, "ws1", action="list")
         assert listed["status"] == "ok"
-        paths = " ".join(w.get("path", "") for w in listed["worktrees"])
+        paths = " ".join(
+            str(as_object(w).get("path", "")) for w in as_list(listed["worktrees"])
+        )
         assert "feat-y" in paths
 
-    def test_add_without_name_errors(self, repo_with_commit):
+    def test_add_without_name_errors(self, repo_with_commit) -> None:
         from backend.tools.git import _git_worktree_impl
 
         result = _git_worktree_impl(repo_with_commit, "ws1", action="add")
         assert result["status"] == "error"
 
-    def test_unknown_action_errors(self, repo_with_commit):
+    def test_unknown_action_errors(self, repo_with_commit) -> None:
         from backend.tools.git import _git_worktree_impl
 
         result = _git_worktree_impl(repo_with_commit, "ws1", action="bogus")
@@ -202,7 +205,7 @@ class TestWorktree:
 
 class TestWorkspaceHandlers:
     @pytest.mark.asyncio
-    async def test_create_then_list(self, reg, tmp_path):
+    async def test_create_then_list(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import (
             CreateWorkspaceRequest,
             create_workspace,
@@ -221,7 +224,7 @@ class TestWorkspaceHandlers:
         assert listing.active_id == created.workspace.id
 
     @pytest.mark.asyncio
-    async def test_create_nonexistent_path(self, reg, tmp_path):
+    async def test_create_nonexistent_path(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import (
             CreateWorkspaceRequest,
             create_workspace,
@@ -232,7 +235,7 @@ class TestWorkspaceHandlers:
         assert result.status == "error"
 
     @pytest.mark.asyncio
-    async def test_trust_handler(self, reg, tmp_path):
+    async def test_trust_handler(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import (
             TrustRequest,
             trust_workspace,
@@ -245,7 +248,7 @@ class TestWorkspaceHandlers:
         assert result.workspace.trusted is True
 
     @pytest.mark.asyncio
-    async def test_set_active_unknown(self, reg):
+    async def test_set_active_unknown(self, reg) -> None:
         from backend.api.handlers.workspaces import (
             SetActiveRequest,
             set_active_workspace,
@@ -257,7 +260,7 @@ class TestWorkspaceHandlers:
         assert result.status == "error"
 
     @pytest.mark.asyncio
-    async def test_browse_lists_subdirs(self, tmp_path):
+    async def test_browse_lists_subdirs(self, tmp_path) -> None:
         from types import SimpleNamespace
         from typing import cast
 
@@ -285,7 +288,7 @@ class TestWorkspaceHandlers:
         assert "file.txt" in {entry.name for entry in file_result.entries}
 
     @pytest.mark.asyncio
-    async def test_browse_file_returns_selected_file(self, tmp_path):
+    async def test_browse_file_returns_selected_file(self, tmp_path) -> None:
         from types import SimpleNamespace
         from typing import cast
 
@@ -301,7 +304,7 @@ class TestWorkspaceHandlers:
         assert response.media_type == "text/plain"
 
     @pytest.mark.asyncio
-    async def test_browse_file_rejects_directories(self, tmp_path):
+    async def test_browse_file_rejects_directories(self, tmp_path) -> None:
         from types import SimpleNamespace
 
         from fastapi import HTTPException
@@ -316,7 +319,7 @@ class TestWorkspaceHandlers:
     @pytest.mark.asyncio
     async def test_browse_file_rejects_symlink_outside_selected_directory(
         self, tmp_path
-    ):
+    ) -> None:
         from types import SimpleNamespace
         from typing import cast
 
@@ -337,7 +340,7 @@ class TestWorkspaceHandlers:
         assert error.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_browse_file_enforces_safe_roots(self, monkeypatch, tmp_path):
+    async def test_browse_file_enforces_safe_roots(self, monkeypatch, tmp_path) -> None:
         from types import SimpleNamespace
 
         from fastapi import HTTPException
@@ -362,7 +365,7 @@ class TestWorkspaceHandlers:
     @pytest.mark.asyncio
     async def test_resolve_dir_rejects_paths_outside_safe_roots_before_isdir(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         from typing import cast
 
         from fastapi import HTTPException
@@ -395,7 +398,7 @@ class TestWorkspaceHandlers:
         assert filesystem_probes == []
 
     @pytest.mark.asyncio
-    async def test_resolve_dir_allows_member_inside_safe_root(self, tmp_path):
+    async def test_resolve_dir_allows_member_inside_safe_root(self, tmp_path) -> None:
         from typing import cast
 
         from backend.api.handlers.workspaces import _resolve_and_authorize_dir
@@ -416,7 +419,7 @@ class TestWorkspaceHandlers:
         assert root_id == "safe-root"
 
     @pytest.mark.asyncio
-    async def test_mkdir_creates_subdir_then_relists(self, tmp_path):
+    async def test_mkdir_creates_subdir_then_relists(self, tmp_path) -> None:
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
 
         fake_request = SimpleNamespace(state=SimpleNamespace(user=None))
@@ -430,7 +433,7 @@ class TestWorkspaceHandlers:
         assert result.created_path == str(tmp_path / "minha-pasta")
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejeita_traversal(self, tmp_path):
+    async def test_mkdir_rejeita_traversal(self, tmp_path) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -444,7 +447,7 @@ class TestWorkspaceHandlers:
         assert exc_traversal.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejeita_conflito(self, tmp_path):
+    async def test_mkdir_rejeita_conflito(self, tmp_path) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -459,7 +462,7 @@ class TestWorkspaceHandlers:
         assert exc_conflict.value.status_code == 409
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejeita_nome_vazio(self, tmp_path):
+    async def test_mkdir_rejeita_nome_vazio(self, tmp_path) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -474,7 +477,7 @@ class TestWorkspaceHandlers:
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejeita_caminho_vazio(self, tmp_path):
+    async def test_mkdir_rejeita_caminho_vazio(self, tmp_path) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -488,7 +491,9 @@ class TestWorkspaceHandlers:
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejeita_pai_stale_sem_redirecionar_para_home(self, tmp_path):
+    async def test_mkdir_rejeita_pai_stale_sem_redirecionar_para_home(
+        self, tmp_path
+    ) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -504,7 +509,9 @@ class TestWorkspaceHandlers:
         assert not missing_parent.exists()
 
     @pytest.mark.asyncio
-    async def test_mkdir_common_user_outside_safe_root_forbidden(self, tmp_path):
+    async def test_mkdir_common_user_outside_safe_root_forbidden(
+        self, tmp_path
+    ) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -522,7 +529,7 @@ class TestWorkspaceHandlers:
         assert exc.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejects_empty_name(self, tmp_path):
+    async def test_mkdir_rejects_empty_name(self, tmp_path) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -536,7 +543,7 @@ class TestWorkspaceHandlers:
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.asyncio
-    async def test_mkdir_rejects_empty_path(self, tmp_path):
+    async def test_mkdir_rejects_empty_path(self, tmp_path) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import MkdirRequest, mkdir_dir
@@ -553,43 +560,43 @@ class TestWorkspaceHandlers:
 
 
 class TestWorkspaceOwnership:
-    def test_create_claims_ownership_for_first_user(self, reg, tmp_path):
+    def test_create_claims_ownership_for_first_user(self, reg, tmp_path) -> None:
         ws = reg.create(str(tmp_path), user_id="alice")
         assert ws.owner_id == "alice"
 
-    def test_create_does_not_reassign_existing_owner(self, reg, tmp_path):
+    def test_create_does_not_reassign_existing_owner(self, reg, tmp_path) -> None:
         reg.create(str(tmp_path), user_id="alice")
         ws = reg.create(str(tmp_path), user_id="bob")
         assert ws.owner_id == "alice"
 
-    def test_legacy_workspace_without_owner_stays_open(self, reg, tmp_path):
+    def test_legacy_workspace_without_owner_stays_open(self, reg, tmp_path) -> None:
         # get_or_create() puro (sem create()) nunca seta owner_id — simula
         # um workspace legado sem dono.
         ws = reg.get_or_create(str(tmp_path))
         assert ws.owner_id is None
 
-    def test_can_access_workspace_owner_allowed(self, reg, tmp_path):
+    def test_can_access_workspace_owner_allowed(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import can_access_workspace
 
         ws = reg.create(str(tmp_path), user_id="alice")
         req = _req(SimpleNamespace(id="alice", role="member"))
         assert can_access_workspace(ws, req) is True
 
-    def test_can_access_workspace_other_user_denied(self, reg, tmp_path):
+    def test_can_access_workspace_other_user_denied(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import can_access_workspace
 
         ws = reg.create(str(tmp_path), user_id="alice")
         req = _req(SimpleNamespace(id="bob", role="member"))
         assert can_access_workspace(ws, req) is False
 
-    def test_can_access_workspace_root_bypasses_ownership(self, reg, tmp_path):
+    def test_can_access_workspace_root_bypasses_ownership(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import can_access_workspace
 
         ws = reg.create(str(tmp_path), user_id="alice")
         req = _req(SimpleNamespace(id="bob", role="root"))
         assert can_access_workspace(ws, req) is True
 
-    def test_can_access_workspace_no_owner_open_to_anyone(self, reg, tmp_path):
+    def test_can_access_workspace_no_owner_open_to_anyone(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import can_access_workspace
 
         ws = reg.get_or_create(str(tmp_path))
@@ -598,14 +605,16 @@ class TestWorkspaceOwnership:
 
     def test_can_access_workspace_no_authenticated_user_treated_as_local_root(
         self, reg, tmp_path
-    ):
+    ) -> None:
         from backend.api.handlers.workspaces import can_access_workspace
 
         ws = reg.create(str(tmp_path), user_id="alice")
         # request.state.user None = CLI local sem auth → _is_privileged=True
         assert can_access_workspace(ws, _req(None)) is True
 
-    def test_require_workspace_access_raises_403_for_other_user(self, reg, tmp_path):
+    def test_require_workspace_access_raises_403_for_other_user(
+        self, reg, tmp_path
+    ) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.workspaces import require_workspace_access
@@ -616,22 +625,26 @@ class TestWorkspaceOwnership:
             require_workspace_access(ws.id, req)
         assert exc.value.status_code == 403
 
-    def test_require_workspace_access_returns_none_for_unknown_workspace(self, reg):
+    def test_require_workspace_access_returns_none_for_unknown_workspace(
+        self, reg
+    ) -> None:
         from backend.api.handlers.workspaces import require_workspace_access
 
         assert require_workspace_access("naoexiste", _req(None)) is None
 
-    def test_require_workspace_access_allows_owner(self, reg, tmp_path):
+    def test_require_workspace_access_allows_owner(self, reg, tmp_path) -> None:
         from backend.api.handlers.workspaces import require_workspace_access
 
         ws = reg.create(str(tmp_path), user_id="alice")
         req = _req(SimpleNamespace(id="alice", role="member"))
-        assert require_workspace_access(ws.id, req).id == ws.id
+        allowed = require_workspace_access(ws.id, req)
+        assert allowed is not None
+        assert allowed.id == ws.id
 
     @pytest.mark.asyncio
     async def test_list_workspaces_filters_out_other_users_workspaces(
         self, reg, tmp_path
-    ):
+    ) -> None:
         from backend.api.handlers.workspaces import list_workspaces
 
         sub_a = tmp_path / "a"
@@ -649,7 +662,9 @@ class TestWorkspaceOwnership:
         assert str(sub_b.resolve()) not in ids
 
     @pytest.mark.asyncio
-    async def test_set_active_workspace_forbidden_for_other_user(self, reg, tmp_path):
+    async def test_set_active_workspace_forbidden_for_other_user(
+        self, reg, tmp_path
+    ) -> None:
         from backend.api.handlers.workspaces import (
             SetActiveRequest,
             set_active_workspace,

@@ -18,19 +18,19 @@ from backend.sandbox.policy import SandboxPolicy
 
 
 class TestBuildSeatbeltProfile:
-    def test_starts_with_version_and_deny_default(self, tmp_path):
+    def test_starts_with_version_and_deny_default(self, tmp_path) -> None:
         profile = build_seatbelt_profile(SandboxPolicy(enabled=True), str(tmp_path))
 
         assert profile.startswith("(version 1)\n(deny default)")
 
-    def test_allows_workspace_read_and_write(self, tmp_path):
+    def test_allows_workspace_read_and_write(self, tmp_path) -> None:
         profile = build_seatbelt_profile(SandboxPolicy(enabled=True), str(tmp_path))
 
         ws = _sbpl_escape(str(tmp_path))
         assert f'(allow file-read* (subpath "{ws}"))' in profile
         assert f'(allow file-write* (subpath "{ws}"))' in profile
 
-    def test_ro_paths_never_get_write_allow(self, tmp_path):
+    def test_ro_paths_never_get_write_allow(self, tmp_path) -> None:
         ro_dir = tmp_path / "readonly"
         ro_dir.mkdir()
         profile = build_seatbelt_profile(
@@ -41,7 +41,7 @@ class TestBuildSeatbeltProfile:
         assert f'(allow file-read* (subpath "{escaped}"))' in profile
         assert f'(allow file-write* (subpath "{escaped}"))' not in profile
 
-    def test_rw_paths_get_both_read_and_write(self, tmp_path):
+    def test_rw_paths_get_both_read_and_write(self, tmp_path) -> None:
         rw_dir = tmp_path / "extra"
         rw_dir.mkdir()
         profile = build_seatbelt_profile(
@@ -52,7 +52,7 @@ class TestBuildSeatbeltProfile:
         assert f'(allow file-read* (subpath "{escaped}"))' in profile
         assert f'(allow file-write* (subpath "{escaped}"))' in profile
 
-    def test_lockdown_denies_network(self, tmp_path):
+    def test_lockdown_denies_network(self, tmp_path) -> None:
         profile = build_seatbelt_profile(
             SandboxPolicy(enabled=True, lockdown=True), str(tmp_path)
         )
@@ -60,14 +60,14 @@ class TestBuildSeatbeltProfile:
         assert "(deny network-outbound)" in profile
         assert "(allow network-outbound)" not in profile
 
-    def test_no_lockdown_allows_network(self, tmp_path):
+    def test_no_lockdown_allows_network(self, tmp_path) -> None:
         profile = build_seatbelt_profile(
             SandboxPolicy(enabled=True, lockdown=False), str(tmp_path)
         )
 
         assert "(allow network-outbound)" in profile
 
-    def test_env_file_masked_by_default(self, tmp_path):
+    def test_env_file_masked_by_default(self, tmp_path) -> None:
         env_file = tmp_path / ".env"
         env_file.write_text("SECRET=x")
         profile = build_seatbelt_profile(SandboxPolicy(enabled=True), str(tmp_path))
@@ -76,7 +76,9 @@ class TestBuildSeatbeltProfile:
         assert f'(deny file-read* (literal "{escaped}"))' in profile
         assert f'(deny file-write* (literal "{escaped}"))' in profile
 
-    def test_vectora_toml_always_masked_even_without_explicit_mask(self, tmp_path):
+    def test_vectora_toml_always_masked_even_without_explicit_mask(
+        self, tmp_path
+    ) -> None:
         toml = tmp_path / "vectora.toml"
         toml.write_text("[sandbox]\n")
         # mask=() explícito — mesmo assim vectora.toml deve ser negado; o
@@ -88,7 +90,7 @@ class TestBuildSeatbeltProfile:
         escaped = _sbpl_escape(str(toml))
         assert f'(deny file-read* (literal "{escaped}"))' in profile
 
-    def test_mask_deny_comes_after_workspace_allow(self, tmp_path):
+    def test_mask_deny_comes_after_workspace_allow(self, tmp_path) -> None:
         """SBPL é last-match-wins — o deny do arquivo mascarado precisa
         vir DEPOIS do allow amplo do workspace no texto do profile, senão
         o allow do workspace sobrescreveria o deny."""
@@ -102,7 +104,7 @@ class TestBuildSeatbeltProfile:
         deny_idx = profile.index(f'(deny file-read* (literal "{env_escaped}"))')
         assert deny_idx > allow_idx
 
-    def test_quotes_in_path_are_escaped(self, tmp_path):
+    def test_quotes_in_path_are_escaped(self, tmp_path) -> None:
         # Path fictício (não precisa existir em disco — Windows/NTFS nem
         # aceita `"` num nome de arquivo real) só pra exercitar o escape.
         weird = str(tmp_path / 'weird"name')
@@ -115,7 +117,7 @@ class TestBuildSeatbeltProfile:
 
 
 @pytest.mark.asyncio
-async def test_missing_sandbox_exec_returns_clear_error(tmp_path, monkeypatch):
+async def test_missing_sandbox_exec_returns_clear_error(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(macos_mod.shutil, "which", lambda _name: None)
 
     result = await run_macos_sandboxed(
@@ -127,7 +129,7 @@ async def test_missing_sandbox_exec_returns_clear_error(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_successful_run_returns_output(tmp_path, monkeypatch):
+async def test_successful_run_returns_output(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         macos_mod.shutil,
         "which",
@@ -152,7 +154,7 @@ async def test_successful_run_returns_output(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_permission_denied_returns_clear_error_not_exception(
     tmp_path, monkeypatch
-):
+) -> None:
     monkeypatch.setattr(
         macos_mod.shutil,
         "which",
@@ -176,7 +178,9 @@ async def test_permission_denied_returns_clear_error_not_exception(
 
 
 @pytest.mark.asyncio
-async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch):
+async def test_timeout_kills_process_and_reports_timed_out(
+    tmp_path, monkeypatch
+) -> None:
     monkeypatch.setattr(
         macos_mod.shutil,
         "which",
@@ -184,7 +188,7 @@ async def test_timeout_kills_process_and_reports_timed_out(tmp_path, monkeypatch
     )
     proc = MagicMock()
 
-    async def _hang(*_args, **_kwargs):
+    async def _hang(*_args, **_kwargs) -> None:
         import asyncio
 
         await asyncio.sleep(10)

@@ -64,7 +64,7 @@ async def db(tmp_path, monkeypatch):
     return db_path
 
 
-async def test_post_board_cria_com_slug_derivado(db):
+async def test_post_board_cria_com_slug_derivado(db) -> None:
     board = await post_board(_req(), CreateBoardRequest(name="Board Alfa"))
 
     assert board.name == "Board Alfa"
@@ -80,7 +80,7 @@ async def test_board_rejeita_chamada_sem_usuario(db: str) -> None:
     assert exc_info.value.status_code == 401
 
 
-async def test_get_boards_so_lista_do_proprio_usuario(db):
+async def test_get_boards_so_lista_do_proprio_usuario(db) -> None:
     await post_board(_req(), CreateBoardRequest(name="Meu board"))
     await post_board(_req(_OUTRO_UUID), CreateBoardRequest(name="De outro"))
 
@@ -89,7 +89,7 @@ async def test_get_boards_so_lista_do_proprio_usuario(db):
     assert [b.name for b in boards] == ["Meu board"]
 
 
-async def test_patch_board_atualiza_e_recusa_dono_errado(db):
+async def test_patch_board_atualiza_e_recusa_dono_errado(db) -> None:
     board = await post_board(_req(), CreateBoardRequest(name="Original"))
 
     updated = await patch_board(_req(), board.id, UpdateBoardRequest(name="Renomeado"))
@@ -104,7 +104,7 @@ async def test_patch_board_atualiza_e_recusa_dono_errado(db):
     assert wrong_owner.value.status_code == 404
 
 
-async def test_delete_board_vazio_e_recusa_board_com_tasks(db):
+async def test_delete_board_vazio_e_recusa_board_com_tasks(db) -> None:
     vazio = await post_board(_req(), CreateBoardRequest(name="Vazio"))
     await delete_board_endpoint(_req(), vazio.id)
     assert await get_boards(_req()) == []
@@ -130,7 +130,7 @@ async def test_delete_board_vazio_e_recusa_board_com_tasks(db):
     assert conflito.value.status_code == 409
 
 
-async def test_delete_board_dono_errado_e_404(db):
+async def test_delete_board_dono_errado_e_404(db) -> None:
     board = await post_board(_req(), CreateBoardRequest(name="x"))
 
     with pytest.raises(HTTPException) as wrong_owner:
@@ -138,7 +138,7 @@ async def test_delete_board_dono_errado_e_404(db):
     assert wrong_owner.value.status_code == 404
 
 
-async def test_post_task_com_board_id_associa_e_aparece_no_board_view(db):
+async def test_post_task_com_board_id_associa_e_aparece_no_board_view(db) -> None:
     board = await post_board(_req(), CreateBoardRequest(name="Sprint"))
 
     task = await post_task(
@@ -159,7 +159,7 @@ async def test_post_task_com_board_id_associa_e_aparece_no_board_view(db):
     assert task.id in cartoes
 
 
-async def test_post_task_com_board_id_de_outro_usuario_e_404(db):
+async def test_post_task_com_board_id_de_outro_usuario_e_404(db) -> None:
     """Erro/borda: sem essa checagem, um usuário conseguiria anexar uma
     task sua a um board que não é dele — vazamento de dado entre contas."""
     board_alheio = await post_board(_req(_OUTRO_UUID), CreateBoardRequest(name="x"))
@@ -179,7 +179,7 @@ async def test_post_task_com_board_id_de_outro_usuario_e_404(db):
     assert wrong_owner.value.status_code == 404
 
 
-async def test_get_board_view_agrupa_por_coluna_e_dono_errado_e_404(db):
+async def test_get_board_view_agrupa_por_coluna_e_dono_errado_e_404(db) -> None:
     from backend.scheduling.kanban import set_status
 
     board = await post_board(_req(), CreateBoardRequest(name="Sprint"))
@@ -209,7 +209,7 @@ async def test_get_board_view_agrupa_por_coluna_e_dono_errado_e_404(db):
     assert wrong_owner.value.status_code == 404
 
 
-async def test_board_batch_queries_treatem_ids_como_dados(db, monkeypatch):
+async def test_board_batch_queries_treatem_ids_como_dados(db, monkeypatch) -> None:
     """IDs com sintaxe SQL devem continuar sendo valores, nunca parte da query."""
     from backend.scheduling import background_tasks as bg
     from backend.scheduling import kanban

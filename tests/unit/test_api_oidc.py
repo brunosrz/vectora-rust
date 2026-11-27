@@ -50,7 +50,7 @@ def app_and_db(tmp_path, monkeypatch):
 
     import asyncio
 
-    async def _close():
+    async def _close() -> None:
         if auth_mod._db_conn is not None:
             await auth_mod._db_conn.close()
             auth_mod._db_conn = None
@@ -65,12 +65,12 @@ def client(app_and_db):
 
 
 class TestOidcStatus:
-    def test_desabilitado_sem_config(self, client):
+    def test_desabilitado_sem_config(self, client) -> None:
         r = client.get("/auth/oidc/status")
         assert r.status_code == 200
         assert r.json() == {"enabled": False}
 
-    def test_habilitado_com_config_completa(self, client):
+    def test_habilitado_com_config_completa(self, client) -> None:
         from backend.api.handlers import oidc as oidc_handler
         from backend.rbac.oidc import OIDCConfig
 
@@ -83,11 +83,11 @@ class TestOidcStatus:
 
 
 class TestOidcLogin:
-    def test_sem_config_devolve_404(self, client):
+    def test_sem_config_devolve_404(self, client) -> None:
         r = client.get("/auth/oidc/login", follow_redirects=False)
         assert r.status_code == 404
 
-    def test_idp_fora_do_ar_na_descoberta_vira_502(self, client):
+    def test_idp_fora_do_ar_na_descoberta_vira_502(self, client) -> None:
         from backend.api.handlers import oidc as oidc_handler
         from backend.rbac.oidc import OIDCConfig, OIDCError
 
@@ -104,7 +104,7 @@ class TestOidcLogin:
             r = client.get("/auth/oidc/login", follow_redirects=False)
         assert r.status_code == 502
 
-    def test_feliz_redireciona_pro_idp_com_pkce(self, client):
+    def test_feliz_redireciona_pro_idp_com_pkce(self, client) -> None:
         from backend.api.handlers import oidc as oidc_handler
         from backend.rbac.oidc import OIDCConfig, OIDCDiscovery
 
@@ -132,7 +132,7 @@ class TestOidcLogin:
 
 
 class TestOidcCallback:
-    def test_erro_do_idp_no_query_vira_401(self, client):
+    def test_erro_do_idp_no_query_vira_401(self, client) -> None:
         r = client.get(
             "/auth/oidc/callback",
             params={"error": "access_denied"},
@@ -140,11 +140,11 @@ class TestOidcCallback:
         )
         assert r.status_code == 401
 
-    def test_sem_code_ou_state_vira_400(self, client):
+    def test_sem_code_ou_state_vira_400(self, client) -> None:
         r = client.get("/auth/oidc/callback", follow_redirects=False)
         assert r.status_code == 400
 
-    def test_sem_config_devolve_404(self, client):
+    def test_sem_config_devolve_404(self, client) -> None:
         r = client.get(
             "/auth/oidc/callback",
             params={"code": "abc", "state": "xyz"},
@@ -152,7 +152,7 @@ class TestOidcCallback:
         )
         assert r.status_code == 404
 
-    def test_id_token_sem_claim_email_vira_401(self, client):
+    def test_id_token_sem_claim_email_vira_401(self, client) -> None:
         from backend.api.handlers import oidc as oidc_handler
         from backend.rbac.oidc import OIDCConfig, OIDCDiscovery
 
@@ -181,7 +181,7 @@ class TestOidcCallback:
             )
         assert r.status_code == 401
 
-    def test_feliz_provisiona_usuario_e_grava_cookies(self, client):
+    def test_feliz_provisiona_usuario_e_grava_cookies(self, client) -> None:
         from backend.api.handlers import oidc as oidc_handler
         from backend.rbac.oidc import OIDCConfig, OIDCDiscovery
 

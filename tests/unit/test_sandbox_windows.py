@@ -17,7 +17,7 @@ from backend.sandbox import windows as win
 
 
 class TestBuildSoftEnv:
-    def test_descarta_segredos_mas_mantem_essenciais(self, monkeypatch):
+    def test_descarta_segredos_mas_mantem_essenciais(self, monkeypatch) -> None:
         env = {
             "SYSTEMROOT": "C:\\Windows",
             "PATH": "C:\\bin;C:\\Windows\\System32",
@@ -38,7 +38,7 @@ class TestBuildSoftEnv:
         assert "VECTORA_TOKEN" not in result
         assert "AWS_SECRET_ACCESS_KEY" not in result
 
-    def test_mantem_todas_as_vars_vectora_sandbox(self, monkeypatch):
+    def test_mantem_todas_as_vars_vectora_sandbox(self, monkeypatch) -> None:
         env = {
             "SYSTEMROOT": "C:\\Windows",
             "VECTORA_SANDBOX_SOFT": "1",
@@ -50,14 +50,14 @@ class TestBuildSoftEnv:
         assert result["VECTORA_SANDBOX_SOFT"] == "1"
         assert result["VECTORA_SANDBOX_WORKSPACE_DIR"] == "C:\\ws"
 
-    def test_merge_extra_sobrescreve(self, monkeypatch):
+    def test_merge_extra_sobrescreve(self, monkeypatch) -> None:
         monkeypatch.setattr(win.os, "environ", {})
         result = win.build_soft_env({"VECTORA_SANDBOX_SOFT": "1"})
         assert result["VECTORA_SANDBOX_SOFT"] == "1"
 
 
 class TestAssignJobObject:
-    def test_degrada_pra_none_quando_kernel32_indisponivel(self, monkeypatch):
+    def test_degrada_pra_none_quando_kernel32_indisponivel(self, monkeypatch) -> None:
         class _FakeCtypes:
             @property
             def windll(self):
@@ -66,26 +66,26 @@ class TestAssignJobObject:
         monkeypatch.setattr(win, "ctypes", _FakeCtypes())
         assert win.assign_job_object_kill_on_close(999) is None
 
-    def test_associa_processo_quando_tudo_disponivel(self, monkeypatch):
+    def test_associa_processo_quando_tudo_disponivel(self, monkeypatch) -> None:
         calls: dict[str, object] = {}
         closed_handles: list[object] = []
 
         class _FakeKernel32:
-            def CreateJobObjectW(self, _a, _b):
+            def CreateJobObjectW(self, _a, _b) -> int:
                 calls["create"] = True
                 return 111
 
-            def SetInformationJobObject(self, job, cls, _info, size):
+            def SetInformationJobObject(self, job, cls, _info, size) -> None:
                 calls["set"] = (job, cls, size)
 
-            def OpenProcess(self, access, _inherit, pid):
+            def OpenProcess(self, access, _inherit, pid) -> int:
                 calls["open"] = (access, pid)
                 return 222
 
-            def AssignProcessToJobObject(self, job, hproc):
+            def AssignProcessToJobObject(self, job, hproc) -> None:
                 calls["assign"] = (job, hproc)
 
-            def CloseHandle(self, h):
+            def CloseHandle(self, h) -> None:
                 closed_handles.append(h)
 
         class _FakeWindll:
@@ -109,6 +109,6 @@ class TestAssignJobObject:
         # handle do processo é fechado após a atribuição (não o do job).
         assert closed_handles == [222]
 
-    def test_close_job_handle_noop_com_none(self):
+    def test_close_job_handle_noop_com_none(self) -> None:
         # Nunca levanta com handle None.
         win.close_job_handle(None)

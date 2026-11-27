@@ -50,7 +50,7 @@ async def _insert_session(
 
 class TestListThreadsFiltersEmpty:
     @pytest.mark.asyncio
-    async def test_omits_threads_with_zero_messages(self, mem_db):
+    async def test_omits_threads_with_zero_messages(self, mem_db) -> None:
         now = datetime.now(UTC).isoformat()
         await _insert_session(mem_db, "empty1", 0, now)
         await _insert_session(mem_db, "real1", 2, now)
@@ -61,14 +61,14 @@ class TestListThreadsFiltersEmpty:
         assert ids == ["real1"]
 
     @pytest.mark.asyncio
-    async def test_empty_db_returns_empty_list(self, mem_db):
+    async def test_empty_db_returns_empty_list(self, mem_db) -> None:
         out = await list_threads(ListThreadsRequest(limit=50))
         assert out.threads == []
 
 
 class TestCleanupEmptyThreads:
     @pytest.mark.asyncio
-    async def test_deletes_only_old_empty_threads(self, mem_db):
+    async def test_deletes_only_old_empty_threads(self, mem_db) -> None:
         old = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
         recent = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
         await _insert_session(mem_db, "ghost-old", 0, old)
@@ -86,7 +86,7 @@ class TestCleanupEmptyThreads:
         assert remaining == {"ghost-recent", "real-old"}
 
     @pytest.mark.asyncio
-    async def test_no_empty_threads_deletes_nothing(self, mem_db):
+    async def test_no_empty_threads_deletes_nothing(self, mem_db) -> None:
         now = datetime.now(UTC).isoformat()
         await _insert_session(mem_db, "real1", 1, now)
 
