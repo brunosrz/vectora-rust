@@ -12896,6 +12896,27 @@
         "title": "UpdateFsFileRequest",
         "type": "object"
       },
+      "UpdateLocalWorkspaceRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "title": "UpdateLocalWorkspaceRequest",
+        "type": "object"
+      },
       "UpdateMemoryRequest": {
         "properties": {
           "content": {
@@ -29889,6 +29910,59 @@
           }
         },
         "summary": "Trust Workspace Rest",
+        "tags": [
+          "workspaces-view"
+        ]
+      }
+    },
+    "/workspaces/{workspace_id}": {
+      "patch": {
+        "description": "Edita nome e pasta principal de um projeto local.",
+        "operationId": "update_local_workspace_rest_workspaces__workspace_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocalWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/backend__api__handlers__workspaces__StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Local Workspace Rest",
         "tags": [
           "workspaces-view"
         ]

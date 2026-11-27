@@ -267,17 +267,26 @@ def load_workspace_config(cwd: str | Path) -> WorkspaceConfig | None:
     Retorna ``None`` se o arquivo não existir ou não puder ser interpretado
     (loga um aviso e degrada — config de workspace nunca derruba a sessão).
     """
-    path = Path(cwd) / WORKSPACE_CONFIG_FILENAME
-    if not path.is_file():
+    root_text = os.path.realpath(os.fspath(cwd))
+    base_path = os.path.normcase(root_text)
+    fullpath = os.path.normcase(
+        os.path.realpath(
+            os.path.join(root_text, WORKSPACE_CONFIG_FILENAME)  # noqa: PTH118
+        )
+    )
+    base_prefix = f"{base_path.rstrip(os.sep)}{os.sep}"
+    if not fullpath.startswith(base_prefix):
+        return None
+    if not os.path.isfile(fullpath):  # noqa: PTH113
         return None
     try:
         import tomllib
 
-        raw = tomllib.loads(path.read_text(encoding="utf-8"))
+        raw = tomllib.loads(Path(fullpath).read_text(encoding="utf-8"))
         resolved = _resolve_env_placeholders(raw)
         return WorkspaceConfig.model_validate(resolved)
     except Exception:
-        logger.warning("workspace_config: falha ao ler %s", path, exc_info=True)
+        logger.warning("workspace_config: falha ao ler %s", fullpath, exc_info=True)
         return None
 
 

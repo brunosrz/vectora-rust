@@ -14,6 +14,7 @@ const state = {
       git_remote: null,
       git_current_branch: null,
       git_default_branch: null,
+      transport: "local",
     },
   ],
   active_id: "ws-1",
@@ -25,6 +26,7 @@ const state = {
   hydrate: vi.fn(),
   loadSafeRoots: vi.fn(),
   setActive: vi.fn(),
+  updateProject: vi.fn(),
 };
 
 vi.mock("@/lib/stores/workspaces-store", () => ({
@@ -77,5 +79,16 @@ describe("WorkspaceSelector", () => {
     fireEvent.click(screen.getByText("Projetos"));
 
     expect(screen.getByTestId("trust-dialog")).toHaveTextContent("C:/Projetos");
+  });
+
+  it("permite abrir a edição do projeto local", () => {
+    render(<WorkspaceSelector />);
+    fireEvent.click(screen.getAllByRole("button")[0]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "workspace_edit_title: Vectora" }),
+    );
+
+    expect(screen.getByText("workspace_edit_description")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("C:/Vectora")).toBeInTheDocument();
   });
 });

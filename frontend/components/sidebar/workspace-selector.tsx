@@ -27,6 +27,7 @@ import {
   Monitor,
   Music,
   Plus,
+  Pencil,
   Server,
   Video,
   type LucideIcon,
@@ -36,6 +37,7 @@ import { useWorkspacesStore } from "@/lib/stores/workspaces-store";
 import { useNetworkStatus } from "@/lib/hooks/use-network-status";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { WorkspaceTrustDialog } from "./workspace-trust-dialog";
+import { WorkspaceEditDialog } from "./workspace-edit-dialog";
 import { m } from "@/lib/paraglide/messages";
 
 interface WorkspaceSelectorProps {
@@ -105,6 +107,9 @@ export function WorkspaceSelector({ compact = false }: WorkspaceSelectorProps) {
 
   const [open, setOpen] = useState(false);
   const [trustOpen, setTrustOpen] = useState(false);
+  const [editWorkspace, setEditWorkspace] = useState<
+    (typeof workspaces)[number] | null
+  >(null);
   const [trustInitialPath, setTrustInitialPath] = useState<
     string | undefined
   >();
@@ -192,35 +197,52 @@ export function WorkspaceSelector({ compact = false }: WorkspaceSelectorProps) {
               )}
 
               {workspaces.map((w) => (
-                <button
+                <div
                   key={w.id}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
-                  onClick={() => {
-                    void setActive(w.id);
-                    setOpen(false);
-                  }}
+                  className="group flex items-center pr-1 hover:bg-accent"
                 >
-                  {w.id === active?.id ? (
-                    <Check className="w-4 h-4 shrink-0 text-primary" />
-                  ) : w.transport === "ssh" ? (
-                    <Server className="w-4 h-4 shrink-0 text-sky-500" />
-                  ) : w.transport === "codespace" ? (
-                    <Cloud className="w-4 h-4 shrink-0 text-violet-500" />
-                  ) : (
-                    <WorkspaceFolderIcon
-                      workspace={w}
-                      className="w-4 h-4 shrink-0"
-                    />
+                  <button
+                    className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors"
+                    onClick={() => {
+                      void setActive(w.id);
+                      setOpen(false);
+                    }}
+                  >
+                    {w.id === active?.id ? (
+                      <Check className="w-4 h-4 shrink-0 text-primary" />
+                    ) : w.transport === "ssh" ? (
+                      <Server className="w-4 h-4 shrink-0 text-sky-500" />
+                    ) : w.transport === "codespace" ? (
+                      <Cloud className="w-4 h-4 shrink-0 text-violet-500" />
+                    ) : (
+                      <WorkspaceFolderIcon
+                        workspace={w}
+                        className="w-4 h-4 shrink-0"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-foreground">
+                        {w.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground font-mono">
+                        {w.cwd}
+                      </span>
+                    </span>
+                  </button>
+                  {w.transport === "local" && (
+                    <button
+                      className="rounded p-1.5 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover:opacity-100"
+                      title={m.workspace_edit_title()}
+                      aria-label={`${m.workspace_edit_title()}: ${w.name}`}
+                      onClick={() => {
+                        setEditWorkspace(w);
+                        setOpen(false);
+                      }}
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
                   )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-foreground">
-                      {w.name}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground font-mono">
-                      {w.cwd}
-                    </span>
-                  </span>
-                </button>
+                </div>
               ))}
 
               {safeRoots.map((root) => (
@@ -272,6 +294,14 @@ export function WorkspaceSelector({ compact = false }: WorkspaceSelectorProps) {
           if (!nextOpen) setTrustInitialPath(undefined);
         }}
         initialPath={trustInitialPath}
+      />
+      <WorkspaceEditDialog
+        key={`${editWorkspace?.id ?? "none"}-${editWorkspace !== null}`}
+        open={editWorkspace !== null}
+        workspace={editWorkspace}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setEditWorkspace(null);
+        }}
       />
     </>
   );

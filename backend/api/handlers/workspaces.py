@@ -22,9 +22,10 @@ import contextlib
 import hashlib
 import json
 import logging
+import os
 import re
 from collections.abc import AsyncGenerator, Callable, Mapping
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -104,6 +105,70 @@ class CreateWorkspaceRequest(BaseModel):
     path: str
     trust: bool = False
     git_init: bool = False
+
+
+class UpdateLocalWorkspaceRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    path: str = Field(min_length=1)
+
+
+def _resolve_project_directory(
+    requested_path: str, approved_roots: list[Path], *, privileged: bool
+) -> Path:
+    """Resolve a selected project path only after lexical root authorization.
+
+    The UI sends absolute paths, but a member may select only below an
+    approved safe root. Normalize and compare strings first so a rejected
+    path is never probed on disk; then resolve the candidate under the
+    authorized root and verify again to reject symlink escapes.
+    """
+    expanded = os.path.expanduser(requested_path)  # noqa: PTH111
+    if not os.path.isabs(expanded):  # noqa: PTH117
+        raise HTTPException(
+            status_code=422, detail="Escolha um caminho absoluto para o projeto."
+        )
+    requested = PurePath(expanded)
+    if ".." in requested.parts:
+        raise HTTPException(
+            status_code=403,
+            detail="O caminho escolhido não pode subir acima da pasta selecionada.",
+        )
+    selected_root: Path | None = None
+    for root in approved_roots:
+        try:
+            requested.relative_to(root)
+        except ValueError:
+            continue
+        selected_root = root
+        break
+
+    if selected_root is None and not privileged:
+        raise HTTPException(
+            status_code=403,
+            detail="Caminho fora das pastas seguras configuradas.",
+        )
+    base = selected_root or Path(requested.anchor)
+    relative_path = requested.relative_to(PurePath(base))
+    root_text = os.path.realpath(base)
+    base_path = os.path.normcase(root_text)
+    fullpath = os.path.normcase(
+        os.path.realpath(
+            os.path.join(root_text, os.fspath(relative_path))  # noqa: PTH118
+        )
+    )
+    base_prefix = f"{base_path.rstrip(os.sep)}{os.sep}"
+    if fullpath != base_path and not fullpath.startswith(base_prefix):
+        raise HTTPException(
+            status_code=403,
+            detail="O caminho escolhido aponta para fora das pastas seguras.",
+        )
+    resolved = Path(fullpath)
+    if not os.path.isdir(fullpath):  # noqa: PTH112
+        raise HTTPException(
+            status_code=422,
+            detail="A pasta escolhida não existe ou não está disponível.",
+        )
+    return resolved
 
 
 class MkdirRequest(BaseModel):
@@ -1164,6 +1229,75 @@ async def create_workspace_rest(
     return await create_workspace(request, body)
 
 
+@view_router.patch("/{workspace_id}", response_model=StatusResponse)
+async def update_local_workspace_rest(
+    request: Request, workspace_id: str, body: UpdateLocalWorkspaceRequest
+) -> StatusResponse:
+    """Edita nome e pasta principal de um projeto local."""
+    import asyncio
+
+    from backend.rbac.safe_roots import (
+        SafeRootPersistenceError,
+        get_safe_root_registry,
+    )
+    from backend.workspace.workspace import workspace_registry
+
+    ws = require_workspace_access(workspace_id, request)
+    if ws is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    if ws.transport != "local":
+        raise HTTPException(
+            status_code=400,
+            detail="A edição da pasta principal está disponível para workspaces locais.",
+        )
+    safe_roots = get_safe_root_registry()
+    privileged = _is_privileged(request)
+    try:
+        active_roots = await asyncio.to_thread(safe_roots.all_roots)
+        approved_roots = [
+            Path(root.path).expanduser().resolve() for root in active_roots
+        ]
+        resolved_path = _resolve_project_directory(
+            body.path, approved_roots, privileged=privileged
+        )
+    except SafeRootPersistenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    resolved = str(resolved_path)
+    duplicate = next(
+        (
+            other
+            for other in workspace_registry.list_all()
+            if other.id != workspace_id
+            and other.transport == "local"
+            and str(Path(other.cwd).resolve()) == resolved
+        ),
+        None,
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Essa pasta já é a pasta principal de outro projeto.",
+        )
+    if privileged:
+        try:
+            await asyncio.to_thread(
+                safe_roots.add,
+                str(resolved_path),
+                resolved_path.name,
+                str(_user_id(request)),
+            )
+        except SafeRootPersistenceError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    updated = workspace_registry.update_local_project(
+        workspace_id, name=body.name, cwd=resolved
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Workspace não encontrado.")
+    return StatusResponse(
+        status="ok", message="Projeto atualizado.", workspace=_to_info(updated)
+    )
+
+
 @view_router.post("/set-active", response_model=StatusResponse)
 async def set_active_workspace_rest(
     request: Request, body: SetActiveRequest
@@ -2019,18 +2153,26 @@ async def workspace_tree(
     `path` é relativo ao workspace. Sem path → raiz. Diretórios típicos de
     build/cache são ocultados para enxugar a árvore.
     """
-    remote = await _remote_fs_context(workspace_id, path)
+    normalized_path = path.replace("\\", "/")
+    if (
+        "\x00" in normalized_path
+        or normalized_path.startswith("/")
+        or re.match(r"^[A-Za-z]:", normalized_path)
+        or ".." in normalized_path.split("/")
+    ):
+        return TreeResponse(path=normalized_path, entries=[])
+    remote = await _remote_fs_context(workspace_id, normalized_path)
     if remote is not None:
         ws, transport, remote_path = remote
         try:
             info = await _remote_fs_stat(transport, ws, remote_path)
             if not info.get("is_dir"):
-                return TreeResponse(path=path, entries=[])
+                return TreeResponse(path=normalized_path, entries=[])
             remote_entries = await transport.list_dir(remote_path)
             entries = [
                 TreeEntry(
                     name=item.name,
-                    path=f"{path.rstrip('/')}/{item.name}".lstrip("/"),
+                    path=f"{normalized_path.rstrip('/')}/{item.name}".lstrip("/"),
                     kind="dir" if item.is_dir else "file",
                     size=item.size,
                 )
@@ -2038,22 +2180,38 @@ async def workspace_tree(
                 if not (item.is_dir and item.name in _IGNORED_DIR_NAMES)
             ]
             entries.sort(key=lambda item: (item.kind != "dir", item.name.lower()))
-            return TreeResponse(path=path, entries=entries)
+            return TreeResponse(path=normalized_path, entries=entries)
         except Exception as exc:
             logger.warning("remote workspace_tree failed", exc_info=True)
             raise HTTPException(
                 status_code=503, detail="Workspace remoto indisponível."
             ) from exc
 
-    resolved = _resolve_inside(workspace_id, path)
-    if resolved is None or not resolved.exists() or not resolved.is_dir():
-        return TreeResponse(path=path, entries=[])
+    resolved = _resolve_inside(workspace_id, normalized_path)
+    if resolved is None:
+        return TreeResponse(path=normalized_path, entries=[])
 
     from backend.workspace.workspace import workspace_registry
 
     ws = workspace_registry.get(workspace_id)
     base = Path(ws.cwd) if ws else resolved
-
+    fullpath = os.path.normcase(os.path.realpath(resolved))
+    if ws is not None and ws.transport == "local":
+        root_path = os.path.normcase(os.path.realpath(base))
+        base_path = f"{root_path.rstrip(os.sep)}{os.sep}"
+        if fullpath != root_path and not fullpath.startswith(base_path):
+            return TreeResponse(path=normalized_path, entries=[])
+        resolved = Path(fullpath)
+    if not os.path.exists(fullpath) or not os.path.isdir(fullpath):  # noqa: PTH110, PTH112
+        if ws is not None and not Path(ws.cwd).is_dir():
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "A pasta principal deste workspace não está disponível. "
+                    "Edite o projeto e escolha a pasta atual."
+                ),
+            )
+        raise HTTPException(status_code=404, detail="Pasta não encontrada.")
     entries: list[TreeEntry] = []
     try:
         for item in sorted(

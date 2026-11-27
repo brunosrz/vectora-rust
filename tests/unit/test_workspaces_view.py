@@ -121,6 +121,24 @@ class TestWorkspaceTree:
         assert resp.entries == []
 
     @pytest.mark.asyncio
+    async def test_returns_empty_for_symlink_outside_workspace(self, trusted_ws):
+        from backend.api.handlers.workspaces import workspace_tree
+
+        wsid, root = trusted_ws
+        outside = root.parent / "outside-workspace"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("secret", encoding="utf-8")
+        link = root / "escape"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink is unavailable: {exc}")
+
+        resp = await workspace_tree(workspace_id=wsid, path="escape")
+
+        assert resp.entries == []
+
+    @pytest.mark.asyncio
     async def test_returns_empty_for_unknown_workspace(self, trusted_ws):
         from backend.api.handlers.workspaces import workspace_tree
 
@@ -129,6 +147,34 @@ class TestWorkspaceTree:
         assert trusted_ws[0] == "vws"
         resp = await workspace_tree(workspace_id="nope", path="")
         assert resp.entries == []
+
+    @pytest.mark.asyncio
+    async def test_reports_missing_workspace_root_instead_of_empty_tree(
+        self, tmp_path, monkeypatch
+    ):
+        from fastapi import HTTPException
+
+        from backend.api.handlers.workspaces import workspace_tree
+        from backend.workspace import workspace as ws_mod
+
+        ws = Workspace(
+            id="stale-ws",
+            name="projeto",
+            cwd=str(tmp_path / "removed-mount"),
+            created_at="2024-01-01T00:00:00+00:00",
+            trusted=True,
+        )
+        monkeypatch.setattr(
+            ws_mod.workspace_registry,
+            "get",
+            lambda wid: ws if wid == "stale-ws" else None,
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            await workspace_tree(workspace_id="stale-ws", path="")
+
+        assert exc_info.value.status_code == 410
+        assert "Edite o projeto" in exc_info.value.detail
 
 
 # ---------------------------------------------------------------------------
@@ -1045,6 +1091,114 @@ def _fake_request(user_id: str = "u1"):
     req.state.user = MagicMock()
     req.state.user.id = user_id
     return req
+
+
+class TestLocalWorkspaceUpdate:
+    def test_resolves_project_directory_inside_safe_root(self, tmp_path):
+        from backend.api.handlers import workspaces as handlers
+
+        approved_root = tmp_path / "approved"
+        project = approved_root / "project"
+        project.mkdir(parents=True)
+
+        resolved = handlers._resolve_project_directory(
+            str(project), [approved_root.resolve()], privileged=False
+        )
+
+        assert resolved == project.resolve()
+
+    @pytest.mark.asyncio
+    async def test_rejects_project_path_outside_safe_roots(self, monkeypatch, tmp_path):
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+        from backend.rbac import safe_roots as safe_roots_module
+        from backend.vtypes import Workspace
+        from backend.workspace import workspace as workspace_module
+
+        allowed_root = tmp_path / "allowed"
+        current_path = allowed_root / "current"
+        outside_path = tmp_path / "outside"
+        current_path.mkdir(parents=True)
+        outside_path.mkdir()
+        workspace = Workspace(
+            id="project",
+            name="Project",
+            cwd=str(current_path),
+            created_at="2026-01-01T00:00:00Z",
+            trusted=True,
+            owner_id="u1",
+        )
+        monkeypatch.setattr(
+            workspace_module.workspace_registry,
+            "get",
+            lambda workspace_id: workspace if workspace_id == workspace.id else None,
+        )
+        monkeypatch.setattr(
+            workspace_module.workspace_registry, "list_all", lambda: [workspace]
+        )
+        monkeypatch.setattr(
+            safe_roots_module,
+            "get_safe_root_registry",
+            lambda: SimpleNamespace(
+                all_roots=lambda: [SimpleNamespace(path=str(allowed_root))]
+            ),
+        )
+        request = _fake_request()
+        request.state.user.role = "member"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await handlers.update_local_workspace_rest(
+                request,
+                workspace.id,
+                handlers.UpdateLocalWorkspaceRequest(
+                    name="Project", path=str(outside_path)
+                ),
+            )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.parametrize("relative_path", ["../outside", "../approved-sibling"])
+    def test_rejects_project_path_that_escapes_safe_root(self, tmp_path, relative_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+
+        approved_root = tmp_path / "approved"
+        requested = approved_root / relative_path
+        approved_root.mkdir()
+        requested.resolve().mkdir(parents=True, exist_ok=True)
+
+        with pytest.raises(HTTPException) as exc_info:
+            handlers._resolve_project_directory(
+                str(requested), [approved_root.resolve()], privileged=False
+            )
+
+        assert exc_info.value.status_code == 403
+
+    def test_rejects_project_symlink_outside_safe_roots(self, tmp_path):
+        from fastapi import HTTPException
+
+        from backend.api.handlers import workspaces as handlers
+
+        approved_root = tmp_path / "approved"
+        outside = tmp_path / "outside"
+        approved_root.mkdir()
+        outside.mkdir()
+        link = approved_root / "escape"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            pytest.skip(f"symlink is unavailable: {exc}")
+
+        with pytest.raises(HTTPException) as exc_info:
+            handlers._resolve_project_directory(
+                str(link), [approved_root.resolve()], privileged=False
+            )
+
+        assert exc_info.value.status_code == 403
 
 
 class TestMemorySearchUnified:

@@ -128,6 +128,21 @@ class WorkspaceRegistry:
         self._load()
         resolved = str(Path(cwd).resolve() if cwd else Path.cwd())
         wid = self.derive_id(resolved)
+        # A project keeps its stable id when the user changes its primary
+        # folder. Reuse that record if the folder is opened again later.
+        existing = next(
+            (
+                workspace
+                for workspace in self._workspaces.values()
+                if workspace.transport == "local"
+                and str(Path(workspace.cwd).resolve()) == resolved
+            ),
+            None,
+        )
+        if existing is not None:
+            if Path(existing.cwd).is_dir():
+                self.ensure_local_files(existing)
+            return existing
         if wid not in self._workspaces:
             name = Path(resolved).name or "workspace"
             # Auto-detecção de git
@@ -226,6 +241,44 @@ class WorkspaceRegistry:
         ws.name = new_name
         self._save()
         return True
+
+    def update_local_project(
+        self, workspace_id: str, *, name: str, cwd: str
+    ) -> Workspace | None:
+        """Atualiza nome e pasta principal sem trocar a identidade do projeto.
+
+        A confiança e a aprovação de hooks são revogadas ao trocar de pasta:
+        essas permissões pertencem ao conteúdo do diretório anterior.
+        """
+        self._load()
+        ws = self._workspaces.get(workspace_id)
+        if ws is None or ws.transport != "local":
+            return None
+        if not Path(cwd).is_absolute():
+            raise ValueError("A pasta principal precisa ser um caminho absoluto.")
+        resolved = cwd
+        ws.name = name.strip() or Path(resolved).name or "workspace"
+        if ws.cwd != resolved:
+            ws.cwd = resolved
+            ws.trusted = False
+            ws.trusted_at = None
+            ws.trusted_by = None
+            ws.hooks_approved = False
+            ws.hooks_approved_at = None
+            ws.hooks_approved_by = None
+            ws.hooks_rules_digest = None
+            try:
+                from backend.tools.git import detect_git_info
+
+                git_info = detect_git_info(resolved)
+            except Exception:
+                git_info = {}
+            ws.is_git_repo = bool(git_info.get("is_git_repo", False))
+            ws.git_remote = git_info.get("git_remote")
+            ws.git_current_branch = git_info.get("git_current_branch")
+            ws.git_default_branch = git_info.get("git_default_branch")
+        self._save()
+        return ws
 
     def delete(self, workspace_id: str) -> bool:
         """Remove um workspace do registry. Retorna True se existia."""

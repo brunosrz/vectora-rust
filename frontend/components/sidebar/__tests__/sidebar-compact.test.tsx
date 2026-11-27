@@ -32,6 +32,7 @@ vi.mock("@/lib/paraglide/messages", () => ({
     sidebar_workspace_collapse: () => "Recolher",
     sidebar_workspace_expand: () => "Expandir",
     sidebar_workspace_thread_count: ({ n }: { n: number }) => `${n}`,
+    sidebar_ctx_edit_workspace: () => "Editar workspace",
     sidebar_delete_thread: () => "Excluir conversa",
     sidebar_ctx_rename: () => "Renomear",
     sidebar_ctx_share: () => "Compartilhar…",
@@ -187,9 +188,10 @@ describe("WorkspaceGroup — layout compacto", () => {
         onTogglePin={noop}
       />,
     );
+    const row = container.querySelector("div.mb-1")!;
     const btn = container.querySelector("button")!;
     expect(btn.className).toContain("py-0.5");
-    expect(btn.className).toContain("mb-1");
+    expect(row.className).toContain("mb-1");
     expect(btn.className).not.toContain("py-1 ");
     expect(btn.className).not.toContain("mb-2");
   });

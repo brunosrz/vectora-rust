@@ -69,14 +69,16 @@ def _headers(user_id: str, role: str = "member") -> dict[str, str]:
     return {"X-Test-User-Id": user_id, "X-Test-User-Role": role}
 
 
-def _register_workspace(monkeypatch, workspace_id: str, owner_id: str | None):
+def _register_workspace(monkeypatch, workspace_id: str, owner_id: str | None, tmp_path):
     from backend.vtypes import Workspace
     from backend.workspace import workspace as ws_mod
 
+    workspace_path = tmp_path / workspace_id
+    workspace_path.mkdir()
     ws = Workspace(
         id=workspace_id,
         name=workspace_id,
-        cwd=f"/tmp/{workspace_id}",
+        cwd=str(workspace_path),
         created_at="2024-01-01T00:00:00+00:00",
         trusted=True,
         owner_id=owner_id,
@@ -90,16 +92,18 @@ def _register_workspace(monkeypatch, workspace_id: str, owner_id: str | None):
 
 
 class TestWorkspaceOwnershipGate:
-    def test_dono_acessa_normalmente(self, gate_client, monkeypatch):
-        _register_workspace(monkeypatch, "ws-owned", "owner-1")
+    def test_dono_acessa_normalmente(self, gate_client, monkeypatch, tmp_path):
+        _register_workspace(monkeypatch, "ws-owned", "owner-1", tmp_path)
 
         r = gate_client.get("/workspaces/ws-owned/tree", headers=_headers("owner-1"))
 
         assert r.status_code == 200
         assert "entries" in r.json()
 
-    def test_outro_usuario_recebe_403_sem_handler_rodar(self, gate_client, monkeypatch):
-        _register_workspace(monkeypatch, "ws-alheio", "owner-2")
+    def test_outro_usuario_recebe_403_sem_handler_rodar(
+        self, gate_client, monkeypatch, tmp_path
+    ):
+        _register_workspace(monkeypatch, "ws-alheio", "owner-2", tmp_path)
 
         r = gate_client.get("/workspaces/ws-alheio/tree", headers=_headers("intruso-1"))
 
@@ -108,11 +112,13 @@ class TestWorkspaceOwnershipGate:
         # genérico do gate, não o TreeResponse do handler.
         assert "entries" not in r.json()
 
-    def test_workspace_sem_owner_id_continua_livre(self, gate_client, monkeypatch):
+    def test_workspace_sem_owner_id_continua_livre(
+        self, gate_client, monkeypatch, tmp_path
+    ):
         """Regressão: workspace legado/desktop (sem owner_id) não pode
         passar a exigir dono depois desta migração — mesmo comportamento
         de hoje, qualquer autenticado acessa."""
-        _register_workspace(monkeypatch, "ws-legado", None)
+        _register_workspace(monkeypatch, "ws-legado", None, tmp_path)
 
         r = gate_client.get(
             "/workspaces/ws-legado/tree", headers=_headers("qualquer-1")
@@ -136,11 +142,11 @@ class TestWorkspaceOwnershipGate:
 
         assert r.status_code == 404
 
-    def test_admin_acessa_qualquer_workspace(self, gate_client, monkeypatch):
+    def test_admin_acessa_qualquer_workspace(self, gate_client, monkeypatch, tmp_path):
         """root/admin sempre têm acesso, mesmo sem ser dono — mesmo
         comportamento de `can_access_workspace`/`_is_privileged` já
         vigente antes desta migração."""
-        _register_workspace(monkeypatch, "ws-de-outro", "owner-3")
+        _register_workspace(monkeypatch, "ws-de-outro", "owner-3", tmp_path)
 
         r = gate_client.get(
             "/workspaces/ws-de-outro/tree", headers=_headers("admin-1", role="root")
