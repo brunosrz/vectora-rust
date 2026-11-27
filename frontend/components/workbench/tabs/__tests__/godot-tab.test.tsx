@@ -24,11 +24,26 @@ vi.mock("@/lib/stores/workspaces-store", () => ({
     selector: (state: { getActive: () => unknown }) => unknown,
   ) => selector({ getActive: () => mockWorkspace }),
 }));
+vi.mock("@/components/files/file-manager-dialog", () => ({
+  FileManagerDialog: ({
+    open,
+    onSelect,
+  }: {
+    open: boolean;
+    onSelect: (path: string) => void;
+  }) =>
+    open ? (
+      <button type="button" onClick={() => onSelect("/opt/godot/Godot")}>
+        choose executable
+      </button>
+    ) : null,
+}));
 
 import { GodotTab } from "../godot-tab";
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -74,6 +89,7 @@ describe("GodotTab", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
       project_path: "games/platformer",
       expected_version: "4.6",
+      executable_path: null,
     });
     expect(
       await screen.findByText("godot_workbench_passed"),
@@ -82,6 +98,35 @@ describe("GodotTab", () => {
       screen.getByText("godot_workbench_gameplay_note"),
     ).toBeInTheDocument();
     expect(screen.getByText("Import successful")).toBeInTheDocument();
+  });
+
+  it("selects and sends the Godot executable using Vectora's file manager", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: "passed", message: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<GodotTab />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "godot_workbench_browse_executable" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "choose executable" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "godot_workbench_validate" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      project_path: ".",
+      expected_version: null,
+      executable_path: "/opt/godot/Godot",
+    });
+    expect(localStorage.getItem("godot-executable:ws-1")).toBe(
+      "/opt/godot/Godot",
+    );
   });
 
   it("blocks execution for an untrusted workspace", () => {

@@ -1,8 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Gamepad2, Loader2, Play, TriangleAlert } from "lucide-react";
+import {
+  FolderOpen,
+  Gamepad2,
+  Loader2,
+  Play,
+  TriangleAlert,
+} from "lucide-react";
 
+import { FileManagerDialog } from "@/components/files/file-manager-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { m } from "@/lib/paraglide/messages";
@@ -30,9 +37,27 @@ export function GodotTab() {
   const workspace = useWorkspacesStore((s) => s.getActive());
   const [projectPath, setProjectPath] = useState(".");
   const [expectedVersion, setExpectedVersion] = useState("");
+  const [executablePaths, setExecutablePaths] = useState<
+    Record<string, string>
+  >({});
+  const executablePath = workspace
+    ? (executablePaths[workspace.id] ??
+      (typeof window === "undefined"
+        ? ""
+        : (window.localStorage.getItem(`godot-executable:${workspace.id}`) ??
+          "")))
+    : "";
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GodotValidationResult | null>(null);
+
+  function updateExecutablePath(path: string) {
+    if (workspace) {
+      setExecutablePaths((current) => ({ ...current, [workspace.id]: path }));
+      window.localStorage.setItem(`godot-executable:${workspace.id}`, path);
+    }
+  }
 
   async function validate() {
     if (!workspace) return;
@@ -48,6 +73,7 @@ export function GodotTab() {
           body: JSON.stringify({
             project_path: projectPath.trim() || ".",
             expected_version: expectedVersion.trim() || null,
+            executable_path: executablePath.trim() || null,
           }),
         },
       );
@@ -130,6 +156,39 @@ export function GodotTab() {
           {m.godot_workbench_gameplay_note()}
         </p>
 
+        <div className="space-y-1.5">
+          <label
+            htmlFor="godot-executable-path"
+            className="text-xs font-medium"
+          >
+            {m.godot_workbench_executable_path()}
+          </label>
+          <div className="flex gap-2">
+            <Input
+              id="godot-executable-path"
+              value={executablePath}
+              onChange={(event) => updateExecutablePath(event.target.value)}
+              placeholder={m.godot_workbench_executable_placeholder()}
+              className="h-8 min-w-0 font-mono text-xs"
+              disabled={busy}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 shrink-0 gap-1.5 text-xs"
+              onClick={() => setPickerOpen(true)}
+              disabled={busy}
+            >
+              <FolderOpen className="size-3.5" />
+              {m.godot_workbench_browse_executable()}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {m.godot_workbench_executable_hint()}
+          </p>
+        </div>
+
         {error && (
           <div
             role="alert"
@@ -186,6 +245,12 @@ export function GodotTab() {
           </section>
         )}
       </div>
+      <FileManagerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        selection="file"
+        onSelect={updateExecutablePath}
+      />
     </div>
   );
 }

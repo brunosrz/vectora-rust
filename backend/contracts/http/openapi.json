@@ -4843,6 +4843,18 @@
       "GodotValidationRequest": {
         "description": "Opções limitadas da validação explícita do Godot Workbench.",
         "properties": {
+          "executable_path": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executable Path"
+          },
           "expected_version": {
             "anyOf": [
               {
