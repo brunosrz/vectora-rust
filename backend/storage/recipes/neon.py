@@ -28,6 +28,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, NotRequired, TypedDict, Unpack
 
+from backend.storage.dsn import describe_dsn
+
 if TYPE_CHECKING:
     from backend.settings import Settings
     from backend.vtypes.storage import RecipeHealth
@@ -97,8 +99,8 @@ def configure_settings(settings: Settings, **kwargs: Unpack[_NeonDsnParams]) -> 
     settings.storage_mode = "complete"
     settings.postgres_dsn = build_dsn(**kwargs)
     logger.info(
-        "Neon configurado: storage_mode=complete dsn=%s…",
-        settings.postgres_dsn[:40],
+        "Neon configurado: storage_mode=complete destino=%s",
+        describe_dsn(settings.postgres_dsn),
     )
 
 

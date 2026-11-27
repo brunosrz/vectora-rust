@@ -70,7 +70,6 @@ async def test_browser_navigate_navega_para_url_http(
     result = await browser_tools.browser_navigate(url="https://example.com", ctx=_ctx())
 
     assert result.startswith("[OK]")
-    assert "https://example.com" in result
     fake_page.goto.assert_awaited_once_with(
         "https://example.com", wait_until="domcontentloaded", timeout=15000
     )

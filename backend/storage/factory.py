@@ -29,6 +29,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from backend.storage.dsn import describe_dsn
+
 if TYPE_CHECKING:
     import asyncio
     from collections.abc import Callable
@@ -576,7 +578,9 @@ async def get_pg_pool(dsn: str | None = None) -> asyncpg.Pool:
 
     _pg_pool = await asyncpg.create_pool(normalized, min_size=2, max_size=20)
     await _ensure_postgres_schema(_pg_pool)
-    logger.debug("storage/factory: asyncpg pool criado dsn=%s", normalized[:30] + "…")
+    logger.debug(
+        "storage/factory: asyncpg pool criado destino=%s", describe_dsn(normalized)
+    )
     return _pg_pool
 
 

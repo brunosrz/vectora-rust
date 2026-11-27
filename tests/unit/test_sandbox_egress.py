@@ -105,7 +105,7 @@ def test_destinos_permitidos_somam_registries_e_extras_sem_repetir() -> None:
     hosts = effective_allow_hosts(policy)
 
     assert set(REGISTRY_HOSTS) <= set(hosts)
-    assert "api.exemplo.com" in hosts
+    assert {"api.exemplo.com"} <= set(hosts)
     assert hosts.count("pypi.org") == 1
 
 

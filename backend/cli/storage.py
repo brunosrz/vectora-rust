@@ -8,6 +8,8 @@ import contextlib
 import sys
 from typing import TYPE_CHECKING
 
+from backend.storage.dsn import describe_dsn
+
 if TYPE_CHECKING:
     from rich.console import Console
 
@@ -158,7 +160,7 @@ async def _storage_test(console: Console, dsn: str) -> None:
     """``vectora storage test <DSN>`` — smoke test de conectividade."""
     import time
 
-    console.print(f"Testando [cyan]{dsn[:40]}…[/cyan]")
+    console.print(f"Testando [cyan]{describe_dsn(dsn)}[/cyan]")
     t0 = time.monotonic()
     try:
         if dsn.startswith("postgresql"):
@@ -209,7 +211,7 @@ async def _storage_wizard(console: Console) -> None:
         from backend.storage.recipes.supabase import build_dsn
 
         dsn = build_dsn(host=host, password=password, pooler=True)
-        console.print(f"DSN gerado: [cyan]{dsn[:50]}…[/cyan]")
+        console.print(f"DSN gerado: [cyan]{describe_dsn(dsn)}[/cyan]")
         await _storage_test(console, dsn)
         _save_dsn_to_settings(dsn)
 
@@ -221,7 +223,7 @@ async def _storage_wizard(console: Console) -> None:
         from backend.storage.recipes.neon import build_dsn
 
         dsn = build_dsn(host=host, user=user, password=password, database=database)
-        console.print(f"DSN gerado: [cyan]{dsn[:50]}…[/cyan]")
+        console.print(f"DSN gerado: [cyan]{describe_dsn(dsn)}[/cyan]")
         await _storage_test(console, dsn)
         _save_dsn_to_settings(dsn)
 

@@ -7,6 +7,7 @@ com arquivos reais.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from backend.vtypes.context_graph import ExtractionResult
@@ -503,7 +504,7 @@ class TestStripJsonc:
 
         code = '{ "url": "https://example.com" }'
         result = _strip_jsonc(code)
-        assert "https://example.com" in result
+        assert json.loads(result) == {"url": "https://example.com"}
 
 
 def test_utf16_project_keeps_valid_input_and_rejects_entities(tmp_path) -> None:

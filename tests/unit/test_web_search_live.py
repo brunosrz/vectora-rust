@@ -15,6 +15,7 @@ testa especificamente o caminho COM Tavily configurado.
 from __future__ import annotations
 
 import json
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -86,7 +87,8 @@ async def test_web_search_com_include_domains_real() -> None:
     # Tavily pode devolver menos resultados quando restrito a um domínio —
     # o importante é que nenhum resultado escape do domínio pedido.
     for r in results:
-        assert "github.com" in r.get("url", "")
+        host = urlsplit(r.get("url", "")).hostname or ""
+        assert host == "github.com" or host.endswith(".github.com")
 
 
 @_requires_tavily

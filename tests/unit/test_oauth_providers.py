@@ -13,6 +13,7 @@ Cobre:
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi import FastAPI
@@ -138,7 +139,7 @@ class TestGoogleOAuth:
             r = client.get("/auth/google")
         assert r.status_code == 302
         loc = r.headers["location"]
-        assert "accounts.google.com" in loc
+        assert urlsplit(loc).hostname == "accounts.google.com"
         assert "drive.readonly" in loc
         assert "gmail.readonly" in loc
 
