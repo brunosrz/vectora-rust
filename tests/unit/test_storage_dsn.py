@@ -34,7 +34,7 @@ def test_describe_dsn_ambiguo_nao_devolve_trechos(dsn: str) -> None:
 
 
 @pytest.mark.parametrize("recipe", ["neon", "supabase"])
-def test_receita_registra_destino_sem_senha(
+def test_receita_registra_configuracao_sem_dados_do_dsn(
     recipe: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     settings = MagicMock(spec=SimpleNamespace(storage_mode="", postgres_dsn=""))
@@ -53,6 +53,6 @@ def test_receita_registra_destino_sem_senha(
                 settings, host="db.exemplo.com", password="senha-secreta"
             )
 
-    assert "exemplo.com" in caplog.text
-    assert "//u:" not in caplog.text
+    assert "storage_mode=complete" in caplog.text
     assert "senha-secreta" not in caplog.text
+    assert "exemplo" not in caplog.text
