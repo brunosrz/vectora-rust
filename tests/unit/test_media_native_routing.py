@@ -14,6 +14,7 @@ from backend.llm.media_parts import (
 )
 from backend.services.media_hydration import hydrate_media_blocks
 from backend.vtypes.message import ContentBlock, MessageRole, VMessage, VMessageChunk
+from tests.json_values import dig
 
 PDF = b"%PDF-1.7\nconteudo"
 PDF_URL = "data:application/pdf;base64," + base64.b64encode(PDF).decode()
@@ -97,14 +98,14 @@ class TestProviderPayloads:
         from backend.llm.anthropic.chat_client import _to_anthropic_messages
 
         _system, messages = _to_anthropic_messages([_user(_pdf_block())])
-        document = messages[0]["content"][1]
-        assert document["type"] == "document"
-        assert document["source"] == {
+        document = dig(messages[0], "content", 1)
+        assert dig(document, "type") == "document"
+        assert dig(document, "source") == {
             "type": "base64",
             "media_type": "application/pdf",
             "data": base64.b64encode(PDF).decode(),
         }
-        assert document["title"] == "r.pdf"
+        assert dig(document, "title") == "r.pdf"
 
     def test_gemini_inline_data(self) -> None:
         from backend.llm.google.chat_client import _to_google_user_parts
@@ -147,9 +148,9 @@ class TestHydration:
         latest = _user(_pdf_block(data_url=None))
         reads: list[str] = []
 
-        def reader(asset_id: str, **_kwargs: object) -> tuple[object, bytes]:
+        def reader(asset_id: str, **_kwargs: str) -> tuple[None, bytes]:
             reads.append(asset_id)
-            return object(), PDF
+            return None, PDF
 
         sent = hydrate_media_blocks(
             [old, latest],

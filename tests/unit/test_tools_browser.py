@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -26,39 +26,44 @@ def _ctx(workspace_id: str = "ws1") -> ToolContext:
     return ToolContext(workspace_id=workspace_id)
 
 
-class _FakePage:
-    def __init__(self) -> None:
-        self.url = "about:blank"
-        self.goto = AsyncMock(side_effect=self._goto)
-        self.title = AsyncMock(return_value="Example Domain")
-        self.screenshot = AsyncMock(return_value=b"fake-png-bytes")
-        self.click = AsyncMock()
-        self.fill = AsyncMock()
-        self.inner_text = AsyncMock(return_value="Olá mundo")
-        self.mouse = AsyncMock()
-        self.mouse.wheel = AsyncMock()
-        self.wait_for_selector = AsyncMock()
-        self.drag_and_drop = AsyncMock()
-        self.set_input_files = AsyncMock()
-        self.route = AsyncMock()
-        self.unroute = AsyncMock()
+def _fake_page() -> MagicMock:
+    """Página do Playwright com as chamadas usadas pelas ferramentas."""
+    page = MagicMock()
 
-    async def _goto(self, url: str, **_kwargs: object) -> None:
+    async def _goto(url: str, **_kwargs: str | int) -> None:
         """Update the fake page URL after a navigation call."""
-        self.url = url
+        page.url = url
+
+    page.url = "about:blank"
+    # Sem sessão CDP: a guarda de redirects não é instalada neste fake.
+    page.context = None
+    page.goto = AsyncMock(side_effect=_goto)
+    page.title = AsyncMock(return_value="Example Domain")
+    page.screenshot = AsyncMock(return_value=b"fake-png-bytes")
+    page.click = AsyncMock()
+    page.fill = AsyncMock()
+    page.inner_text = AsyncMock(return_value="Olá mundo")
+    page.mouse = AsyncMock()
+    page.mouse.wheel = AsyncMock()
+    page.wait_for_selector = AsyncMock()
+    page.drag_and_drop = AsyncMock()
+    page.set_input_files = AsyncMock()
+    page.route = AsyncMock()
+    page.unroute = AsyncMock()
+    return page
 
 
 @pytest.fixture
-def fake_page(monkeypatch: pytest.MonkeyPatch) -> _FakePage:
+def fake_page(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     """Provide a fake browser page for navigation tool tests."""
-    page = _FakePage()
+    page = _fake_page()
     monkeypatch.setattr(browser_tools, "get_browser_page", AsyncMock(return_value=page))
     return page
 
 
 @pytest.mark.asyncio
 async def test_browser_navigate_navega_para_url_http(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Navigate to an allowed HTTP URL and return its structured result."""
     """URL http/https é aceita e navega a página persistente do workspace."""
@@ -74,7 +79,7 @@ async def test_browser_navigate_navega_para_url_http(
 
 @pytest.mark.asyncio
 async def test_navigation_guard_aborta_url_bloqueada_e_remove_o_mesmo_handler(
-    fake_page: _FakePage,
+    fake_page: MagicMock,
 ) -> None:
     """Abort blocked navigation and remove the exact registered handler."""
     snapshot = PolicySnapshot(egress_policy=EgressPolicy(allowed_hosts=["example.com"]))
@@ -82,7 +87,7 @@ async def test_navigation_guard_aborta_url_bloqueada_e_remove_o_mesmo_handler(
         fake_page, snapshot
     )
     assert handler is not None
-    route = SimpleNamespace(
+    route = MagicMock(
         request=SimpleNamespace(url="http://127.0.0.1/private"),
         abort=AsyncMock(),
         continue_=AsyncMock(),
@@ -98,14 +103,14 @@ async def test_navigation_guard_aborta_url_bloqueada_e_remove_o_mesmo_handler(
 
 
 @pytest.mark.asyncio
-async def test_navigation_guard_continua_url_permitida(fake_page: _FakePage) -> None:
+async def test_navigation_guard_continua_url_permitida(fake_page: MagicMock) -> None:
     """Allow navigation when the egress policy accepts the destination."""
     snapshot = PolicySnapshot(egress_policy=EgressPolicy(allowed_hosts=["example.com"]))
     handler, blocked = await browser_tools._install_navigation_guard(
         fake_page, snapshot
     )
     assert handler is not None
-    route = SimpleNamespace(
+    route = MagicMock(
         request=SimpleNamespace(url="https://example.com/docs"),
         abort=AsyncMock(),
         continue_=AsyncMock(),
@@ -200,9 +205,13 @@ async def test_browser_navigate_guard_continua_rota_permitida(
 @pytest.mark.asyncio
 async def test_release_navigation_guard_remove_handler() -> None:
     """Fechar explicitamente uma aba revoga a guarda persistente."""
-    page = SimpleNamespace(unroute=AsyncMock())
-    handler = object()
-    browser_tools._navigation_guards[id(page)] = (page, handler, {})
+    page = MagicMock(unroute=AsyncMock())
+    handler = AsyncMock()
+    browser_tools._navigation_guards[id(page)] = (
+        page,
+        handler,
+        {"snapshot": PolicySnapshot(), "blocked": {}},
+    )
 
     await browser_tools.release_navigation_guard(page)
 
@@ -212,7 +221,7 @@ async def test_release_navigation_guard_remove_handler() -> None:
 
 @pytest.mark.asyncio
 async def test_browser_navigate_recusa_esquema_nao_http(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Erro/borda: file:// e outros esquemas não http(s) são recusados antes
     de qualquer tentativa de navegação."""
@@ -225,7 +234,7 @@ async def test_browser_navigate_recusa_esquema_nao_http(
 
 @pytest.mark.asyncio
 async def test_browser_navigate_reusa_snapshot_e_bloqueia_redirect(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """O snapshot do lote governa também o destino final do redirect."""
     snapshot = PolicySnapshot(egress_policy=EgressPolicy(allowed_hosts=["example.com"]))
@@ -252,7 +261,7 @@ async def test_browser_navigate_reusa_snapshot_e_bloqueia_redirect(
 
 @pytest.mark.asyncio
 async def test_browser_navigate_javascript_scheme_recusado(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Erro/borda: `javascript:` (injeção via URL) também é recusado."""
     result = await browser_tools.browser_navigate(url="javascript:alert(1)", ctx=_ctx())
@@ -263,7 +272,7 @@ async def test_browser_navigate_javascript_scheme_recusado(
 
 @pytest.mark.asyncio
 async def test_browser_navigate_falha_de_rede_devolve_erro_claro(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Erro/borda: falha real de navegação (DNS, timeout) vira mensagem de
     erro estruturada, nunca exceção crua."""
@@ -278,7 +287,7 @@ async def test_browser_navigate_falha_de_rede_devolve_erro_claro(
 
 @pytest.mark.asyncio
 async def test_browser_navigate_bloqueia_redirect_para_destino_privado(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Erro/regressão: o destino final também passa pelo perímetro SSRF."""
 
@@ -298,7 +307,7 @@ async def test_browser_navigate_bloqueia_redirect_para_destino_privado(
 
 @pytest.mark.asyncio
 async def test_browser_screenshot_salva_imagem_e_pede_envio_ao_modelo(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage, tmp_path
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock, tmp_path
 ) -> None:
     """Preview ativo → screenshot salvo como asset da sessão; o resultado traz
     a URL para a interface e a referência que leva a imagem ao modelo, sem
@@ -352,7 +361,7 @@ async def test_browser_screenshot_returns_error_when_no_preview_running(
 
 @pytest.mark.asyncio
 async def test_browser_click_success_and_selector_not_found(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Clique bem-sucedido confirma o seletor; seletor inexistente devolve erro claro."""
     monkeypatch.setattr(
@@ -373,7 +382,7 @@ async def test_browser_click_success_and_selector_not_found(
 
 @pytest.mark.asyncio
 async def test_browser_fill_writes_value_and_rejects_missing_field(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     monkeypatch.setattr(
         browser_tools,
@@ -396,7 +405,7 @@ async def test_browser_fill_writes_value_and_rejects_missing_field(
 
 @pytest.mark.asyncio
 async def test_browser_click_e_fill_sem_selector_nem_uid_retornam_erro(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Borda: nem `selector` nem `uid` informados — nunca tenta clicar/
     preencher às cegas."""
@@ -415,7 +424,7 @@ async def test_browser_click_e_fill_sem_selector_nem_uid_retornam_erro(
 
 @pytest.mark.asyncio
 async def test_browser_click_por_uid_clica_no_centro_do_box_model(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """`uid` (de browser_snapshot) resolve via CDP box model e clica no
     centro — não depende de seletor CSS."""
@@ -440,7 +449,7 @@ async def test_browser_click_por_uid_clica_no_centro_do_box_model(
 
 @pytest.mark.asyncio
 async def test_browser_click_por_uid_nao_encontrado_retorna_erro(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Erro/borda: `uid` de um elemento que já saiu do DOM (snapshot
     desatualizado) devolve erro tipado, não exceção."""
@@ -463,7 +472,7 @@ async def test_browser_click_por_uid_nao_encontrado_retorna_erro(
 
 @pytest.mark.asyncio
 async def test_browser_click_por_uid_nao_numerico_retorna_erro(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     """Borda: `uid` que não é o `backendDOMNodeId` numérico esperado."""
     monkeypatch.setattr(
@@ -484,7 +493,7 @@ async def test_browser_click_por_uid_nao_numerico_retorna_erro(
 
 @pytest.mark.asyncio
 async def test_browser_fill_por_uid_preenche_via_cdp(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     monkeypatch.setattr(
         browser_tools,
@@ -504,7 +513,7 @@ async def test_browser_fill_por_uid_preenche_via_cdp(
 
 @pytest.mark.asyncio
 async def test_browser_fill_por_uid_falha_retorna_erro(
-    monkeypatch: pytest.MonkeyPatch, fake_page: _FakePage
+    monkeypatch: pytest.MonkeyPatch, fake_page: MagicMock
 ) -> None:
     monkeypatch.setattr(
         browser_tools,
@@ -525,7 +534,7 @@ async def test_browser_fill_por_uid_falha_retorna_erro(
 @pytest.mark.asyncio
 async def test_browser_read_dom_returns_text_and_empty_on_missing_selector(
     monkeypatch, fake_page
-):
+) -> None:
     monkeypatch.setattr(
         browser_tools,
         "resolve_dev_server_url",
@@ -544,7 +553,7 @@ async def test_browser_read_dom_returns_text_and_empty_on_missing_selector(
 @pytest.mark.asyncio
 async def test_browser_scroll_accepts_down_up_and_rejects_invalid_direction(
     monkeypatch, fake_page
-):
+) -> None:
     monkeypatch.setattr(
         browser_tools,
         "resolve_dev_server_url",
@@ -582,7 +591,9 @@ def _launch_json(names: list[str]):
 
 class TestResolvePreviewName:
     @pytest.mark.asyncio
-    async def test_single_config_auto_resolves_when_name_omitted(self, monkeypatch):
+    async def test_single_config_auto_resolves_when_name_omitted(
+        self, monkeypatch
+    ) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -595,7 +606,9 @@ class TestResolvePreviewName:
         assert err == ""
 
     @pytest.mark.asyncio
-    async def test_multiple_configs_without_name_returns_error(self, monkeypatch):
+    async def test_multiple_configs_without_name_returns_error(
+        self, monkeypatch
+    ) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -610,7 +623,7 @@ class TestResolvePreviewName:
         assert "web" in err and "api" in err
 
     @pytest.mark.asyncio
-    async def test_unknown_name_returns_error(self, monkeypatch):
+    async def test_unknown_name_returns_error(self, monkeypatch) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -623,7 +636,7 @@ class TestResolvePreviewName:
         assert "ghost" in err
 
     @pytest.mark.asyncio
-    async def test_empty_launch_json_returns_clear_error(self, monkeypatch):
+    async def test_empty_launch_json_returns_clear_error(self, monkeypatch) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -638,7 +651,7 @@ class TestResolvePreviewName:
 
 class TestPreviewStartStopRestartTools:
     @pytest.mark.asyncio
-    async def test_preview_start_delegates_to_http_handler(self, monkeypatch):
+    async def test_preview_start_delegates_to_http_handler(self, monkeypatch) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -660,7 +673,7 @@ class TestPreviewStartStopRestartTools:
     @pytest.mark.asyncio
     async def test_preview_start_with_ambiguous_name_returns_error_without_calling_http(
         self, monkeypatch
-    ):
+    ) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -677,7 +690,7 @@ class TestPreviewStartStopRestartTools:
         http_start.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_preview_stop_delegates_to_http_handler(self, monkeypatch):
+    async def test_preview_stop_delegates_to_http_handler(self, monkeypatch) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -697,7 +710,7 @@ class TestPreviewStartStopRestartTools:
         assert "parado" in result
 
     @pytest.mark.asyncio
-    async def test_preview_restart_stops_then_starts(self, monkeypatch):
+    async def test_preview_restart_stops_then_starts(self, monkeypatch) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -725,7 +738,7 @@ class TestPreviewStartStopRestartTools:
 
 class TestPreviewLogsTool:
     @pytest.mark.asyncio
-    async def test_returns_joined_lines_from_buffer(self, monkeypatch):
+    async def test_returns_joined_lines_from_buffer(self, monkeypatch) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -746,7 +759,7 @@ class TestPreviewLogsTool:
     @pytest.mark.asyncio
     async def test_never_started_returns_clear_message_not_empty_string(
         self, monkeypatch
-    ):
+    ) -> None:
         import backend.api.handlers.workspaces as ws_mod
 
         monkeypatch.setattr(
@@ -769,7 +782,7 @@ class TestBrowserWaitFor:
     @pytest.mark.asyncio
     async def test_estado_invalido_retorna_erro_sem_chamar_playwright(
         self, monkeypatch, fake_page
-    ):
+    ) -> None:
         result = await browser_tools.browser_wait_for(
             selector="#x", state="invalido", ctx=_ctx()
         )
@@ -778,7 +791,9 @@ class TestBrowserWaitFor:
         fake_page.wait_for_selector.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_sucesso_confirma_estado_atingido(self, monkeypatch, fake_page):
+    async def test_sucesso_confirma_estado_atingido(
+        self, monkeypatch, fake_page
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -797,7 +812,7 @@ class TestBrowserWaitFor:
     @pytest.mark.asyncio
     async def test_timeout_devolve_erro_tipado_nao_excecao(
         self, monkeypatch, fake_page
-    ):
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -815,7 +830,7 @@ class TestBrowserWaitFor:
 
 class TestBrowserDrag:
     @pytest.mark.asyncio
-    async def test_arrasta_com_sucesso(self, monkeypatch, fake_page):
+    async def test_arrasta_com_sucesso(self, monkeypatch, fake_page) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -832,7 +847,9 @@ class TestBrowserDrag:
         )
 
     @pytest.mark.asyncio
-    async def test_elemento_nao_encontrado_retorna_erro(self, monkeypatch, fake_page):
+    async def test_elemento_nao_encontrado_retorna_erro(
+        self, monkeypatch, fake_page
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -851,7 +868,7 @@ class TestBrowserUploadFile:
     @pytest.mark.asyncio
     async def test_arquivo_inexistente_no_host_retorna_erro_sem_chamar_playwright(
         self, monkeypatch, fake_page, tmp_path
-    ):
+    ) -> None:
         result = await browser_tools.browser_upload_file(
             selector="input[type=file]",
             file_path=str(tmp_path / "nao-existe.png"),
@@ -864,7 +881,7 @@ class TestBrowserUploadFile:
     @pytest.mark.asyncio
     async def test_anexa_arquivo_existente_com_sucesso(
         self, monkeypatch, fake_page, tmp_path
-    ):
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -885,7 +902,7 @@ class TestBrowserUploadFile:
 
 class TestBrowserFillForm:
     @pytest.mark.asyncio
-    async def test_campos_vazios_retorna_erro(self, monkeypatch, fake_page):
+    async def test_campos_vazios_retorna_erro(self, monkeypatch, fake_page) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -901,7 +918,7 @@ class TestBrowserFillForm:
     @pytest.mark.asyncio
     async def test_todos_os_campos_preenchidos_com_sucesso(
         self, monkeypatch, fake_page
-    ):
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -922,7 +939,7 @@ class TestBrowserFillForm:
     @pytest.mark.asyncio
     async def test_falha_parcial_continua_pros_demais_campos_e_reporta_status_partial(
         self, monkeypatch, fake_page
-    ):
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -950,7 +967,7 @@ class TestBrowserFillForm:
     @pytest.mark.asyncio
     async def test_todos_os_campos_falham_reporta_status_error(
         self, monkeypatch, fake_page
-    ):
+    ) -> None:
         monkeypatch.setattr(
             browser_tools,
             "resolve_dev_server_url",
@@ -971,7 +988,7 @@ class TestBrowserFillForm:
 
 async def test_navigation_failure_does_not_reuse_previous_block_reason(
     monkeypatch: pytest.MonkeyPatch,
-    fake_page: _FakePage,
+    fake_page: MagicMock,
 ) -> None:
     """A second navigation failure must not be attributed to an older block."""
     # A numeric public URL keeps this regression independent of DNS.

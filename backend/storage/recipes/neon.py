@@ -26,7 +26,11 @@ Uso:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, NotRequired, TypedDict, Unpack
+
+if TYPE_CHECKING:
+    from backend.settings import Settings
+    from backend.vtypes.storage import RecipeHealth
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +79,17 @@ def build_dsn(
     )
 
 
-def configure_settings(settings: Any, **kwargs: Any) -> None:
+class _NeonDsnParams(TypedDict):
+    """Argumentos repassados a ``build_dsn``."""
+
+    host: str
+    user: str
+    password: str
+    database: NotRequired[str]
+    pooler: NotRequired[bool]
+
+
+def configure_settings(settings: Settings, **kwargs: Unpack[_NeonDsnParams]) -> None:
     """Aplica flags Neon ao objeto settings.
 
     Define ``storage_mode = "complete"`` e ``postgres_dsn`` via ``build_dsn``.
@@ -88,7 +102,7 @@ def configure_settings(settings: Any, **kwargs: Any) -> None:
     )
 
 
-async def healthcheck(dsn: str | None = None) -> dict[str, Any]:
+async def healthcheck(dsn: str | None = None) -> RecipeHealth:
     """Smoke test de conectividade ao banco Neon.
 
     Verifica conexão, versão do Postgres e listagem de tabelas vectora_*.

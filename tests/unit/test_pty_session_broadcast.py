@@ -27,6 +27,18 @@ class _FakeProc:
             raise EOFError
         return self._outputs.pop(0)
 
+    def write(self, _data: bytes | str) -> int | None:
+        raise AssertionError("este fake não recebe escrita")
+
+    def isalive(self) -> bool:
+        return bool(self._outputs)
+
+    def setwinsize(self, _rows: int, _cols: int) -> None:
+        raise AssertionError("este fake não redimensiona")
+
+    def terminate(self, force: bool = False) -> bool | None:
+        raise AssertionError("este fake não é encerrado")
+
 
 def _make_session(outputs: list[bytes]) -> PtySession:
     proc = _FakeProc(outputs)
@@ -134,20 +146,20 @@ async def test_cursor_antigo_indica_truncamento() -> None:
 
 
 def test_write_input_eh_idempotente_e_observa_falha() -> None:
-    class Proc:
+    class Proc(_FakeProc):
         def isalive(self) -> bool:
             return True
 
-        def write(self, _data: bytes) -> None:
+        def write(self, _data: bytes | str) -> int | None:
             return None
 
-    session = PtySession("term-1", "ws-1", "t1", Proc())
+    session = PtySession("term-1", "ws-1", "t1", Proc([]))
     assert session.write_input(b"ok", "req-1")["status"] == "accepted"
     assert session.write_input(b"ok", "req-1")["status"] == "duplicate"
 
     class Broken(Proc):
-        def write(self, _data: bytes) -> None:
+        def write(self, _data: bytes | str) -> int | None:
             raise OSError("closed")
 
-    broken = PtySession("term-2", "ws-1", "t1", Broken())
-    assert broken.write_input(b"x", "req-2")["code"] == "write_failed"
+    broken = PtySession("term-2", "ws-1", "t1", Broken([]))
+    assert broken.write_input(b"x", "req-2").get("code") == "write_failed"

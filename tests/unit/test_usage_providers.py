@@ -37,13 +37,13 @@ def _sem_credenciais(monkeypatch):
 
 class TestAgregador:
     @pytest.mark.asyncio
-    async def test_sem_credencial_nenhuma_lista_vem_vazia(self):
+    async def test_sem_credencial_nenhuma_lista_vem_vazia(self) -> None:
         from backend.api.handlers.usage import collect_provider_usage
 
         assert await collect_provider_usage() == []
 
     @pytest.mark.asyncio
-    async def test_tavily_configurado_aparece_com_o_consumo(self, monkeypatch):
+    async def test_tavily_configurado_aparece_com_o_consumo(self, monkeypatch) -> None:
         from backend.api.handlers.usage import collect_provider_usage
         from backend.settings import settings as _s
 
@@ -67,7 +67,7 @@ class TestAgregador:
         assert tavily["error"] is None
 
     @pytest.mark.asyncio
-    async def test_openrouter_junta_credits_e_key(self, monkeypatch):
+    async def test_openrouter_junta_credits_e_key(self, monkeypatch) -> None:
         """São dois endpoints: `/credits` tem o saldo, `/key` tem os limites
         da chave. Mostrar só um deixa o número sem contexto."""
         from backend.api.handlers.usage import collect_provider_usage
@@ -91,7 +91,9 @@ class TestAgregador:
         assert openrouter["remaining"] == pytest.approx(37.5)
 
     @pytest.mark.asyncio
-    async def test_provider_que_falha_vem_com_erro_e_nao_zerado(self, monkeypatch):
+    async def test_provider_que_falha_vem_com_erro_e_nao_zerado(
+        self, monkeypatch
+    ) -> None:
         """Erro/borda crítico: `used: 0` faria o usuário achar que não gastou
         nada, quando na verdade a consulta falhou."""
         from backend.api.handlers.usage import collect_provider_usage
@@ -110,7 +112,7 @@ class TestAgregador:
         assert tavily["used"] is None, "zerou o consumo em vez de sinalizar a falha"
 
     @pytest.mark.asyncio
-    async def test_falha_de_um_nao_derruba_o_outro(self, monkeypatch):
+    async def test_falha_de_um_nao_derruba_o_outro(self, monkeypatch) -> None:
         from backend.api.handlers.usage import collect_provider_usage
         from backend.settings import settings as _s
 
@@ -141,7 +143,7 @@ class TestAgregador:
 
 class TestCache:
     @pytest.mark.asyncio
-    async def test_consulta_repetida_usa_o_cache(self, monkeypatch):
+    async def test_consulta_repetida_usa_o_cache(self, monkeypatch) -> None:
         """O popover abre a cada mensagem; bater na API do provider toda vez
         é desperdício e convida rate limit."""
         from backend.api.handlers import usage as mod
@@ -164,7 +166,7 @@ class TestCache:
         assert chamadas == 1
 
     @pytest.mark.asyncio
-    async def test_cache_nao_guarda_resultado_com_erro(self, monkeypatch):
+    async def test_cache_nao_guarda_resultado_com_erro(self, monkeypatch) -> None:
         """Erro/borda: cachear a falha prenderia o usuário na mensagem de erro
         por minutos, mesmo depois de a rede voltar."""
         from backend.api.handlers import usage as mod

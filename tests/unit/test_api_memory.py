@@ -209,7 +209,7 @@ class TestMemorySharedStoreWithAgent:
     @pytest.mark.asyncio
     async def test_memory_saved_via_agent_tool_appears_in_api(
         self, client, store, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de memory saved via agent tool appears in api."""
         from backend.tools.context import ToolContext
         from backend.tools.memory import save_memory
@@ -299,7 +299,7 @@ class TestJourney:
 
     def test_usuario_sem_nada_aprendido_retorna_listas_vazias(
         self, client, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de usuario sem nada aprendido retorna listas vazias."""
         monkeypatch.setattr("backend.workspace.skills.list_skills", lambda _u: [])
 
@@ -312,7 +312,7 @@ class TestJourney:
 
     def test_lista_fatos_user_model_e_skills_do_learning_loop(
         self, client, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de lista fatos user model e skills do learning loop."""
         from backend.vtypes.skill import Skill
 

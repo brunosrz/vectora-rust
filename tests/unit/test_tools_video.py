@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -60,7 +61,7 @@ def _database_schema(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_capacidade_video_so_existe_onde_ha_geracao_de_verdade():
+def test_capacidade_video_so_existe_onde_ha_geracao_de_verdade() -> None:
     # Happy: Veo é do Gemini.
     assert provider_supports("google-genai", "video") is True
 
@@ -71,7 +72,7 @@ def test_capacidade_video_so_existe_onde_ha_geracao_de_verdade():
     assert provider_supports("cohere", "video") is False
 
 
-def test_capacidade_video_em_gateway_depende_do_modelo_configurado(monkeypatch):
+def test_capacidade_video_em_gateway_depende_do_modelo_configurado(monkeypatch) -> None:
     from backend.settings import settings
 
     # Erro/borda primeiro: sem modelo escolhido, a capacidade não existe.
@@ -84,7 +85,7 @@ def test_capacidade_video_em_gateway_depende_do_modelo_configurado(monkeypatch):
     assert provider_supports("openrouter", "video") is True
 
 
-def test_analise_de_video_e_mais_restrita_que_visao():
+def test_analise_de_video_e_mais_restrita_que_visao() -> None:
     """Erro/borda que motiva a constante separada: Anthropic e OpenAI leem
     imagem, não vídeo."""
     from backend.settings import VIDEO_INPUT_PROVIDERS, VISION_CAPABLE_PROVIDERS
@@ -101,7 +102,9 @@ def test_analise_de_video_e_mais_restrita_que_visao():
 
 
 @pytest.mark.asyncio
-async def test_generate_video_provider_sem_suporte_avisa_sem_chamar_sdk(monkeypatch):
+async def test_generate_video_provider_sem_suporte_avisa_sem_chamar_sdk(
+    monkeypatch,
+) -> None:
     chamou = {"sdk": False}
 
     async def _nunca(*_a, **_k):
@@ -124,8 +127,8 @@ async def test_generate_video_provider_sem_suporte_avisa_sem_chamar_sdk(monkeypa
 @pytest.mark.asyncio
 async def test_generate_video_grava_mp4_e_prompt_vazio_e_recusado(
     monkeypatch, tmp_path
-):
-    async def _fake(*_a, **_k):
+) -> None:
+    async def _fake(*_a, **_k) -> bytes:
         return b"\x00\x00\x00\x18ftypmp42"
 
     monkeypatch.setattr(media, "_generate_video_bytes", _fake)
@@ -157,11 +160,11 @@ async def test_generate_video_grava_mp4_e_prompt_vazio_e_recusado(
 @pytest.mark.asyncio
 async def test_generate_video_vazio_nao_grava_arquivo_de_zero_byte(
     monkeypatch, tmp_path
-):
+) -> None:
     """Erro/borda: gravar 0 byte criaria um artifact que a UI mostra como
     vídeo e nenhum player consegue abrir."""
 
-    async def _vazio(*_a, **_k):
+    async def _vazio(*_a, **_k) -> bytes:
         return b""
 
     monkeypatch.setattr(media, "_generate_video_bytes", _vazio)
@@ -178,7 +181,7 @@ async def test_generate_video_vazio_nao_grava_arquivo_de_zero_byte(
 
 
 @pytest.mark.asyncio
-async def test_generate_video_timeout_vira_erro_legivel(monkeypatch, tmp_path):
+async def test_generate_video_timeout_vira_erro_legivel(monkeypatch, tmp_path) -> None:
     """O job pode continuar rodando no provider — a mensagem precisa dizer
     isso, senão o usuário regera (e paga) achando que falhou."""
 
@@ -250,13 +253,21 @@ class _ClienteVeoFake:
 
         self.aio = _Aio()
 
+    def as_sdk(self) -> MagicMock:
+        """O fake no lugar do cliente do SDK."""
+        return MagicMock(aio=self.aio)
+
 
 @pytest.mark.asyncio
-async def test_polling_do_veo_devolve_bytes_quando_conclui():
+async def test_polling_do_veo_devolve_bytes_quando_conclui() -> None:
     cliente = _ClienteVeoFake(done_apos=2)
 
     data = await media._gemini_video_bytes(
-        cliente, model="veo", prompt="gato", poll_interval_s=0, timeout_s=30
+        cliente.as_sdk(),
+        model="veo",
+        prompt="gato",
+        poll_interval_s=0,
+        timeout_s=30,
     )
 
     assert data.startswith(b"\x00\x00\x00\x18ftyp")
@@ -264,14 +275,18 @@ async def test_polling_do_veo_devolve_bytes_quando_conclui():
 
 
 @pytest.mark.asyncio
-async def test_polling_do_veo_respeita_o_teto_em_vez_de_girar_pra_sempre():
+async def test_polling_do_veo_respeita_o_teto_em_vez_de_girar_pra_sempre() -> None:
     """Erro/borda: job que nunca conclui. Sem teto o turno trava — o
     sintoma aparece como travamento, não como erro."""
     cliente = _ClienteVeoFake(done_apos=10_000)
 
     with pytest.raises(media.VideoGenerationTimeoutError, match="seguir rodando"):
         await media._gemini_video_bytes(
-            cliente, model="veo", prompt="gato", poll_interval_s=0, timeout_s=0
+            cliente.as_sdk(),
+            model="veo",
+            prompt="gato",
+            poll_interval_s=0,
+            timeout_s=0,
         )
 
 
@@ -281,7 +296,9 @@ async def test_polling_do_veo_respeita_o_teto_em_vez_de_girar_pra_sempre():
 
 
 @pytest.mark.asyncio
-async def test_analyze_video_provider_sem_entrada_de_video_avisa(monkeypatch, tmp_path):
+async def test_analyze_video_provider_sem_entrada_de_video_avisa(
+    monkeypatch, tmp_path
+) -> None:
     """Anthropic passa em `VISION_CAPABLE_PROVIDERS` — este teste é o que
     impede a análise de vídeo de herdar aquela lista por engano."""
     chamou = {"sdk": False}
@@ -309,12 +326,12 @@ async def test_analyze_video_provider_sem_entrada_de_video_avisa(monkeypatch, tm
 @pytest.mark.asyncio
 async def test_analyze_video_responde_e_arquivo_inexistente_e_recusado(
     monkeypatch, tmp_path
-):
+) -> None:
     from backend.settings import settings
 
     monkeypatch.setattr(settings, "vectora_home", tmp_path)
 
-    async def _fake(_provider, _model, path, question):
+    async def _fake(_provider, _model, path, question) -> str:
         return f"vi {Path(path).name} e você perguntou: {question}"
 
     monkeypatch.setattr(media, "_analyze_video_text", _fake)
@@ -343,7 +360,9 @@ async def test_analyze_video_responde_e_arquivo_inexistente_e_recusado(
 
 
 @pytest.mark.asyncio
-async def test_analyze_video_falha_do_sdk_vira_erro_tipado(monkeypatch, tmp_path):
+async def test_analyze_video_falha_do_sdk_vira_erro_tipado(
+    monkeypatch, tmp_path
+) -> None:
     """Tool nunca propaga exceção — vira observação pro LLM."""
     from backend.settings import settings
 

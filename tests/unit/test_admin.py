@@ -12,39 +12,41 @@ from typing import Any
 
 import pytest
 
+from backend.vtypes.contracts import JsonValue
+
 
 class TestAdminHandlerExists:
     """src/api/handlers/admin.py deve existir com os endpoints esperados."""
 
-    def test_module_exists(self):
+    def test_module_exists(self) -> None:
         import backend.api.handlers.admin as mod
 
         assert mod is not None
 
-    def test_router_exists(self):
+    def test_router_exists(self) -> None:
         from backend.api.handlers.admin import router
 
         assert router is not None
 
-    def test_list_users_route_registered(self):
+    def test_list_users_route_registered(self) -> None:
         from backend.api.handlers.admin import router
 
         paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("users" in p for p in paths)
 
-    def test_system_info_route_registered(self):
+    def test_system_info_route_registered(self) -> None:
         from backend.api.handlers.admin import router
 
         paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("system" in p for p in paths)
 
-    def test_config_route_registered(self):
+    def test_config_route_registered(self) -> None:
         from backend.api.handlers.admin import router
 
         paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("config" in p for p in paths)
 
-    def test_tools_override_route_registered(self):
+    def test_tools_override_route_registered(self) -> None:
         from backend.api.handlers.admin import router
 
         paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
@@ -54,12 +56,12 @@ class TestAdminHandlerExists:
 class TestAdminRequiresAdminRole:
     """Endpoints admin devem checar permissão de role."""
 
-    def test_require_admin_decorator_exists(self):
+    def test_require_admin_decorator_exists(self) -> None:
         from backend.api.handlers.admin import require_admin
 
         assert callable(require_admin)
 
-    def test_require_admin_raises_for_member(self):
+    def test_require_admin_raises_for_member(self) -> None:
         """member não tem acesso a endpoints admin."""
         from unittest.mock import AsyncMock, MagicMock
 
@@ -73,7 +75,7 @@ class TestAdminRequiresAdminRole:
         with pytest.raises(HTTPException):
             require_admin(mock_user)
 
-    def test_require_admin_passes_for_root(self):
+    def test_require_admin_passes_for_root(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.handlers.admin import require_admin
@@ -85,7 +87,7 @@ class TestAdminRequiresAdminRole:
         result = require_admin(mock_user)
         assert result is None or result == mock_user
 
-    def test_require_admin_passes_for_admin(self):
+    def test_require_admin_passes_for_admin(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.handlers.admin import require_admin
@@ -100,7 +102,7 @@ class TestAdminRequiresAdminRole:
 class TestAdminSystemInfo:
     """Estrutura do sistema info."""
 
-    def test_system_info_fields_exist(self):
+    def test_system_info_fields_exist(self) -> None:
         from backend.api.handlers.admin import _build_system_info
 
         info = _build_system_info()
@@ -109,7 +111,7 @@ class TestAdminSystemInfo:
         assert "python_version" in info
         assert "platform" in info
 
-    def test_build_version_falls_back_to_version_without_env(self, monkeypatch):
+    def test_build_version_falls_back_to_version_without_env(self, monkeypatch) -> None:
         """Sem VECTORA_BUILD_VERSION (dev local, sem build oficial), cai pra semver puro."""
         from backend.api.handlers.admin import _build_system_info
 
@@ -117,7 +119,7 @@ class TestAdminSystemInfo:
         info = _build_system_info()
         assert info["build_version"] == info["version"]
 
-    def test_build_version_reads_env_when_set(self, monkeypatch):
+    def test_build_version_reads_env_when_set(self, monkeypatch) -> None:
         """Com VECTORA_BUILD_VERSION setado (pipeline de release), usa o valor com hash."""
         from backend.api.handlers.admin import _build_system_info
 
@@ -129,7 +131,7 @@ class TestAdminSystemInfo:
 class TestApiKeysMaskKey:
     """_mask_key oculta segredos mantendo prefixo e sufixo."""
 
-    def test_mask_key_long(self):
+    def test_mask_key_long(self) -> None:
         from backend.api.handlers.admin import _mask_key
 
         masked = _mask_key("AIzaSyDEADBEEF12345XYZ")
@@ -137,13 +139,13 @@ class TestApiKeysMaskKey:
         assert masked.endswith("5XYZ")
         assert "•" in masked
 
-    def test_mask_key_short(self):
+    def test_mask_key_short(self) -> None:
         from backend.api.handlers.admin import _mask_key
 
         masked = _mask_key("abc")
         assert masked == "•••"
 
-    def test_mask_key_empty(self):
+    def test_mask_key_empty(self) -> None:
         from backend.api.handlers.admin import _mask_key
 
         assert _mask_key("") == ""
@@ -153,7 +155,7 @@ class TestApiKeysEndpoints:
     """GET/PATCH/POST /admin/api-keys — contratos básicos."""
 
     @pytest.mark.asyncio
-    async def test_get_api_keys_structure(self):
+    async def test_get_api_keys_structure(self) -> None:
         import os
         from unittest.mock import MagicMock, patch
 
@@ -181,7 +183,7 @@ class TestApiKeysEndpoints:
         assert "AIzaSy" in result["google"]["masked"]
 
     @pytest.mark.asyncio
-    async def test_get_api_keys_returns_masked_not_raw(self):
+    async def test_get_api_keys_returns_masked_not_raw(self) -> None:
         import os
         from unittest.mock import MagicMock, patch
 
@@ -197,7 +199,7 @@ class TestApiKeysEndpoints:
         assert result["google"]["masked"] != raw
 
     @pytest.mark.asyncio
-    async def test_test_api_key_empty_returns_error(self):
+    async def test_test_api_key_empty_returns_error(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.handlers.admin import TestApiKeyBody, test_api_key
@@ -211,7 +213,7 @@ class TestApiKeysEndpoints:
         assert "vazia" in result["error"].lower() or result["error"]
 
     @pytest.mark.asyncio
-    async def test_test_api_key_unknown_provider(self):
+    async def test_test_api_key_unknown_provider(self) -> None:
         from unittest.mock import MagicMock
 
         from backend.api.handlers.admin import TestApiKeyBody, test_api_key
@@ -224,7 +226,7 @@ class TestApiKeysEndpoints:
         assert result["ok"] is False
 
     @pytest.mark.asyncio
-    async def test_patch_api_keys_calls_upsert(self):
+    async def test_patch_api_keys_calls_upsert(self) -> None:
         from unittest.mock import MagicMock, patch
 
         from backend.api.handlers.admin import PatchApiKeysBody, patch_api_keys
@@ -246,7 +248,7 @@ class TestApiKeysEndpoints:
         assert mock_upsert.called
 
     @pytest.mark.asyncio
-    async def test_get_api_keys_le_dos_fields_do_registry(self, monkeypatch):
+    async def test_get_api_keys_le_dos_fields_do_registry(self, monkeypatch) -> None:
         """A leitura passa pelos fields do registry (EnvAdapter), não por
         os.environ direto — mesma fonte usada por CLI/outros handlers."""
         from unittest.mock import MagicMock
@@ -259,11 +261,11 @@ class TestApiKeysEndpoints:
             def __init__(self, env_var: str) -> None:
                 self.env_var = env_var
 
-            def get(self, key: str) -> object:
+            def get(self, key: str) -> JsonValue:
                 captured.append(self.env_var)
                 return "AIzaSyFAKE123"
 
-            def set(self, key: str, value: object) -> None:
+            def set(self, key: str, value: JsonValue) -> None:
                 pass
 
         adapters: dict[str, _FakeAdapter] = {
@@ -301,7 +303,7 @@ class TestCreateInvite:
     """Convites da instância local respeitam o papel, não o tier Pro."""
 
     @pytest.mark.asyncio
-    async def test_admin_free_pode_convidar_membro_local(self, monkeypatch):
+    async def test_admin_free_pode_convidar_membro_local(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock, MagicMock
 
         from backend.api.handlers.admin import CreateInviteBody, create_invite
@@ -324,7 +326,7 @@ class TestCreateInvite:
         )
 
     @pytest.mark.asyncio
-    async def test_membro_sem_papel_admin_nao_pode_convidar(self, monkeypatch):
+    async def test_membro_sem_papel_admin_nao_pode_convidar(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock, MagicMock
 
         from backend.api.handlers.admin import CreateInviteBody, create_invite
@@ -358,7 +360,9 @@ class TestInviteLinkAndTypedResponses:
         return request
 
     @pytest.mark.asyncio
-    async def test_link_usa_o_endereco_de_onde_o_app_e_servido(self, monkeypatch):
+    async def test_link_usa_o_endereco_de_onde_o_app_e_servido(
+        self, monkeypatch
+    ) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers.admin import CreateInviteBody, create_invite
@@ -376,7 +380,7 @@ class TestInviteLinkAndTypedResponses:
     @pytest.mark.asyncio
     async def test_frontend_url_definida_vence_o_endereco_da_requisicao(
         self, monkeypatch
-    ):
+    ) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers.admin import CreateInviteBody, create_invite
@@ -391,7 +395,7 @@ class TestInviteLinkAndTypedResponses:
 
         assert result.url == "http://localhost:3000/auth/signup?invite=tok"
 
-    def test_validade_fora_de_1_a_720_horas_e_recusada(self):
+    def test_validade_fora_de_1_a_720_horas_e_recusada(self) -> None:
         from pydantic import ValidationError
 
         from backend.api.handlers.admin import CreateInviteBody
@@ -402,7 +406,7 @@ class TestInviteLinkAndTypedResponses:
         assert CreateInviteBody(ttl_hours=720).ttl_hours == 720
 
     @pytest.mark.asyncio
-    async def test_papel_invalido_responde_400_sem_criar(self, monkeypatch):
+    async def test_papel_invalido_responde_400_sem_criar(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers.admin import CreateInviteBody, create_invite
@@ -418,7 +422,7 @@ class TestInviteLinkAndTypedResponses:
         create_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_lista_devolve_convites_tipados_e_o_total(self, monkeypatch):
+    async def test_lista_devolve_convites_tipados_e_o_total(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers.admin import list_invites
@@ -441,7 +445,7 @@ class TestInviteLinkAndTypedResponses:
         assert result.invites[0].email is None
 
     @pytest.mark.asyncio
-    async def test_so_admin_lista_e_revoga(self, monkeypatch):
+    async def test_so_admin_lista_e_revoga(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock, MagicMock
 
         from backend.api.handlers.admin import list_invites, revoke_invite
@@ -464,7 +468,7 @@ class TestInviteLinkAndTypedResponses:
     @pytest.mark.asyncio
     async def test_revogar_devolve_o_hash_e_convite_inexistente_e_404(
         self, monkeypatch
-    ):
+    ) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers.admin import revoke_invite
@@ -490,7 +494,7 @@ class TestToggleToolGlobal:
     """
 
     @pytest.fixture(autouse=True)
-    def iso_dir(self, tmp_path, monkeypatch):
+    def iso_dir(self, tmp_path, monkeypatch) -> None:
         from backend.rbac import tool_policy
 
         monkeypatch.setattr(tool_policy, "_policy_dir", lambda: tmp_path / "tools")
@@ -504,7 +508,7 @@ class TestToggleToolGlobal:
         return request
 
     @pytest.mark.asyncio
-    async def test_list_tools_all_enabled_by_default(self):
+    async def test_list_tools_all_enabled_by_default(self) -> None:
         from backend.api.handlers.admin import list_tools_admin
 
         result = await list_tools_admin(self._admin_request())
@@ -512,7 +516,7 @@ class TestToggleToolGlobal:
         assert all(t["enabled"] for t in result["tools"])
 
     @pytest.mark.asyncio
-    async def test_toggle_off_persists_and_reflects_in_list(self):
+    async def test_toggle_off_persists_and_reflects_in_list(self) -> None:
         from backend.api.handlers.admin import (
             ToolToggleBody,
             list_tools_admin,
@@ -532,7 +536,7 @@ class TestToggleToolGlobal:
         assert entry["enabled"] is False
 
     @pytest.mark.asyncio
-    async def test_toggle_persists_via_tool_policy_global_scope(self):
+    async def test_toggle_persists_via_tool_policy_global_scope(self) -> None:
         """A persistência real é tool_policy — não um dict/atributo local do handler."""
         from backend.api.handlers.admin import ToolToggleBody, toggle_tool
         from backend.nodes.tools import ALL_TOOLS
@@ -545,7 +549,7 @@ class TestToggleToolGlobal:
         assert tool_policy.is_allowed("qualquer-usuario", target) is False
 
     @pytest.mark.asyncio
-    async def test_toggle_back_on_reenables(self):
+    async def test_toggle_back_on_reenables(self) -> None:
         from backend.api.handlers.admin import ToolToggleBody, toggle_tool
         from backend.nodes.tools import ALL_TOOLS
         from backend.rbac import tool_policy
@@ -557,7 +561,7 @@ class TestToggleToolGlobal:
         assert tool_policy.is_allowed("qualquer-usuario", target) is True
 
     @pytest.mark.asyncio
-    async def test_toggle_unknown_tool_404(self):
+    async def test_toggle_unknown_tool_404(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.admin import ToolToggleBody, toggle_tool
@@ -571,7 +575,7 @@ class TestToggleToolGlobal:
         assert exc.value.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_toggle_requires_admin_role(self):
+    async def test_toggle_requires_admin_role(self) -> None:
         from unittest.mock import MagicMock
 
         from fastapi import HTTPException
@@ -592,14 +596,14 @@ class TestTimezoneEndpoint:
     mas só dava pra configurar por API interna; sem estes endpoints a UI não
     tem como expor o campo."""
 
-    def test_rotas_registradas(self):
+    def test_rotas_registradas(self) -> None:
         from backend.api.handlers.admin import router
 
         paths = [r.path for r in router.routes]  # type: ignore[attr-defined]  # ty: ignore[missing-attribute]
         assert any("timezone" in p for p in paths)
 
     @pytest.mark.asyncio
-    async def test_salva_timezone_valido_e_rejeita_invalido(self, monkeypatch):
+    async def test_salva_timezone_valido_e_rejeita_invalido(self, monkeypatch) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers import admin
@@ -644,7 +648,7 @@ class TestTimezoneEndpoint:
         assert gravados[-1] == ""
 
     @pytest.mark.asyncio
-    async def test_get_devolve_lista_de_zonas_para_o_seletor(self, monkeypatch):
+    async def test_get_devolve_lista_de_zonas_para_o_seletor(self, monkeypatch) -> None:
         from backend.api.handlers import admin
 
         monkeypatch.setattr(admin, "require_admin", lambda _u: None)
@@ -696,7 +700,7 @@ class TestServiceTokenEndpoints:
 
         return _Req()
 
-    async def test_root_cria_lista_e_revoga_token(self):
+    async def test_root_cria_lista_e_revoga_token(self) -> None:
         from backend.api.handlers import admin
 
         criado = await admin.create_service_token_endpoint(
@@ -716,7 +720,7 @@ class TestServiceTokenEndpoints:
         )
         assert revogado_de_novo == {"revoked": False}
 
-    async def test_role_nao_root_e_negada_com_403(self):
+    async def test_role_nao_root_e_negada_com_403(self) -> None:
         """Erro/borda: admin (não-root) não pode criar/listar/revogar
         tokens de serviço — mesmo peso de criar um usuário novo."""
         from fastapi import HTTPException
@@ -750,7 +754,7 @@ class TestResolveAgent:
         return request
 
     @pytest.mark.asyncio
-    async def test_admin_resolve_devolve_tools_prompt_e_subagentes(self):
+    async def test_admin_resolve_devolve_tools_prompt_e_subagentes(self) -> None:
         from backend.api.handlers.admin import resolve_agent
 
         result = await resolve_agent(self._req(), user_id="alice", chat_mode=True)
@@ -768,7 +772,7 @@ class TestResolveAgent:
         assert result["subagents"] == []
 
     @pytest.mark.asyncio
-    async def test_sem_workspace_e_user_id_usa_defaults(self):
+    async def test_sem_workspace_e_user_id_usa_defaults(self) -> None:
         from backend.api.handlers.admin import resolve_agent
 
         result = await resolve_agent(self._req())
@@ -778,7 +782,7 @@ class TestResolveAgent:
         assert len(result["tools"]) > 0
 
     @pytest.mark.asyncio
-    async def test_usuario_nao_admin_recebe_403(self):
+    async def test_usuario_nao_admin_recebe_403(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.admin import resolve_agent
@@ -799,7 +803,7 @@ class TestTracerAdministration:
         return request
 
     @pytest.mark.asyncio
-    async def test_list_traces_excludes_freeform_metadata(self, monkeypatch):
+    async def test_list_traces_excludes_freeform_metadata(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers import admin
@@ -839,7 +843,7 @@ class TestTracerAdministration:
         get_recent.assert_awaited_once_with(n=20)
 
     @pytest.mark.asyncio
-    async def test_member_cannot_list_or_clear_traces(self, monkeypatch):
+    async def test_member_cannot_list_or_clear_traces(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock
 
         from fastapi import HTTPException
@@ -862,7 +866,7 @@ class TestTracerAdministration:
         clear_all.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_clear_traces_requires_confirmation(self):
+    async def test_clear_traces_requires_confirmation(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers import admin
@@ -873,7 +877,7 @@ class TestTracerAdministration:
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
-    async def test_clear_traces_can_be_scoped_to_session(self, monkeypatch):
+    async def test_clear_traces_can_be_scoped_to_session(self, monkeypatch) -> None:
         from unittest.mock import AsyncMock
 
         from backend.api.handlers import admin
@@ -897,7 +901,7 @@ class TestToolAccessByRole:
     """RBAC de tools: GET/PUT /admin/tool-access."""
 
     @pytest.fixture(autouse=True)
-    def iso_dir(self, tmp_path, monkeypatch):
+    def iso_dir(self, tmp_path, monkeypatch) -> None:
         from backend.rbac import tool_policy
 
         monkeypatch.setattr(tool_policy, "_policy_dir", lambda: tmp_path / "tools")
@@ -911,7 +915,7 @@ class TestToolAccessByRole:
         return request
 
     @pytest.mark.asyncio
-    async def test_lista_todas_as_tools_liberadas_para_todos_os_roles(self):
+    async def test_lista_todas_as_tools_liberadas_para_todos_os_roles(self) -> None:
         from backend.api.handlers.admin import get_tool_access
 
         result = await get_tool_access(self._request())
@@ -921,7 +925,7 @@ class TestToolAccessByRole:
         assert all(t["roles"] == ["member", "viewer"] for t in result["tools"])
 
     @pytest.mark.asyncio
-    async def test_put_restringe_e_a_leitura_reflete(self):
+    async def test_put_restringe_e_a_leitura_reflete(self) -> None:
         from backend.api.handlers.admin import (
             ToolAccessBody,
             get_tool_access,
@@ -942,7 +946,7 @@ class TestToolAccessByRole:
         assert entry["roles"] == ["member"]
 
     @pytest.mark.asyncio
-    async def test_apenas_admin_pode_ler_e_gravar(self):
+    async def test_apenas_admin_pode_ler_e_gravar(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.admin import (
@@ -959,7 +963,7 @@ class TestToolAccessByRole:
         assert write_error.value.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_rejeita_tool_e_role_desconhecidos(self):
+    async def test_rejeita_tool_e_role_desconhecidos(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers.admin import ToolAccessBody, put_tool_access

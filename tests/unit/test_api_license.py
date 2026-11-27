@@ -20,7 +20,7 @@ from backend.services import license as lic
 
 
 @pytest.fixture(autouse=True)
-def _isolado(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def _isolado(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Isola cache/config e env vars do serviço de licença."""
     monkeypatch.setattr(lic, "CACHE_PATH", tmp_path / "license_cache.json")
     monkeypatch.setattr(lic, "CONFIG_PATH", tmp_path / "config.toml")

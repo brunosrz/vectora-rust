@@ -61,7 +61,9 @@ async def _upsert_rows(pool: AsyncConnectionPool, workspace_id: str, n: int) -> 
 
 
 @pytest.mark.asyncio
-async def test_two_concurrent_sessions_write_same_db_without_locking_errors(tmp_path):
+async def test_two_concurrent_sessions_write_same_db_without_locking_errors(
+    tmp_path,
+) -> None:
     """2 'workspaces' (pools separados) gravando no mesmo banco."""
     db_path = str(tmp_path / "shared.db")
 
@@ -104,7 +106,9 @@ async def test_two_concurrent_sessions_write_same_db_without_locking_errors(tmp_
 
 
 @pytest.mark.asyncio
-async def test_hardened_connection_has_busy_timeout_and_wal_under_contention(tmp_path):
+async def test_hardened_connection_has_busy_timeout_and_wal_under_contention(
+    tmp_path,
+) -> None:
     """Confirma os PRAGMAs de fato aplicados em cada pool concorrente — não só
     inferidos por ausência de "database is locked" no teste acima."""
     db_path = str(tmp_path / "shared.db")
@@ -128,7 +132,7 @@ async def test_hardened_connection_has_busy_timeout_and_wal_under_contention(tmp
 
 
 @pytest.mark.asyncio
-async def test_three_concurrent_sessions_same_workspace_no_exception(tmp_path):
+async def test_three_concurrent_sessions_same_workspace_no_exception(tmp_path) -> None:
     """Edge — 3 pools concorrentes fazendo upsert nas MESMAS linhas (pior caso
     de contenção: mesma chave primária disputada pelos 3, não só o mesmo
     arquivo)."""

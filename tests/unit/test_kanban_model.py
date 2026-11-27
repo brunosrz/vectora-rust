@@ -105,7 +105,7 @@ async def _cria(conn, task_id: str, status: str = "todo") -> str:
 
 class TestClaimAtomico:
     @pytest.mark.asyncio
-    async def test_claim_em_task_ready_sucede(self, db):
+    async def test_claim_em_task_ready_sucede(self, db) -> None:
         from backend.scheduling.kanban import claim_task
 
         await _cria(db, "t1", status="ready")
@@ -113,7 +113,7 @@ class TestClaimAtomico:
         assert await claim_task("t1", "run-a") is True
 
     @pytest.mark.asyncio
-    async def test_segundo_claim_falha_sem_lancar(self, db):
+    async def test_segundo_claim_falha_sem_lancar(self, db) -> None:
         """Erro/borda: dois workers na mesma task. O segundo recebe `False`
         e segue pra outra — sem CAS os dois rodariam a mesma tarefa."""
         from backend.scheduling.kanban import claim_task
@@ -124,7 +124,7 @@ class TestClaimAtomico:
         assert await claim_task("t1", "run-b") is False
 
     @pytest.mark.asyncio
-    async def test_task_fora_de_ready_nao_e_reclamavel(self, db):
+    async def test_task_fora_de_ready_nao_e_reclamavel(self, db) -> None:
         """Erro/borda: só `ready` entra em execução. Reclamar de `blocked`
         rodaria uma tarefa que está esperando ação humana."""
         from backend.scheduling.kanban import claim_task
@@ -134,7 +134,7 @@ class TestClaimAtomico:
         assert await claim_task("t1", "run-a") is False
 
     @pytest.mark.asyncio
-    async def test_claim_muda_status_pra_running(self, db):
+    async def test_claim_muda_status_pra_running(self, db) -> None:
         from backend.scheduling.kanban import claim_task, get_task_status
 
         await _cria(db, "t1", status="ready")
@@ -145,7 +145,7 @@ class TestClaimAtomico:
 
 class TestClaimExpirado:
     @pytest.mark.asyncio
-    async def test_claim_expirado_e_liberado_e_fica_reclamavel(self, db):
+    async def test_claim_expirado_e_liberado_e_fica_reclamavel(self, db) -> None:
         """Worker que morreu sem liberar: o TTL é o que evita o card ficar
         preso em `running` para sempre."""
         from backend.scheduling.kanban import (
@@ -160,7 +160,7 @@ class TestClaimExpirado:
         assert await claim_task("t1", "run-nova") is True
 
     @pytest.mark.asyncio
-    async def test_claim_vivo_nao_e_liberado(self, db):
+    async def test_claim_vivo_nao_e_liberado(self, db) -> None:
         """Erro/borda: liberar claim vivo faria dois workers na mesma task —
         exatamente o que o CAS existe pra impedir."""
         from backend.scheduling.kanban import claim_task, release_stale_claims
@@ -181,7 +181,9 @@ class TestHeartbeatClaim:
     chama isto de verdade agora."""
 
     @pytest.mark.asyncio
-    async def test_heartbeat_estende_o_ttl_e_evita_a_liberacao_prematura(self, db):
+    async def test_heartbeat_estende_o_ttl_e_evita_a_liberacao_prematura(
+        self, db
+    ) -> None:
         """Reproduz o bug: sem heartbeat, um claim de TTL curto que ainda
         está genuinamente em uso seria liberado — com heartbeat estendendo
         antes do vencimento original, `release_stale_claims()` não libera
@@ -202,7 +204,7 @@ class TestHeartbeatClaim:
         assert await release_stale_claims() == 0
 
     @pytest.mark.asyncio
-    async def test_heartbeat_de_dono_errado_nao_estende_nem_atrapalha(self, db):
+    async def test_heartbeat_de_dono_errado_nao_estende_nem_atrapalha(self, db) -> None:
         """Erro/borda: um heartbeat de um `run_id` que não é o dono do claim
         (worker zumbi, race de cancelamento) não pode estender o claim de
         outro — senão um worker morto manteria vivo o claim de um vivo."""
@@ -225,7 +227,9 @@ class TestReviewFuncional:
     decorativa."""
 
     @pytest.mark.asyncio
-    async def test_manual_transition_aceita_review_para_ready_reprovar(self, db):
+    async def test_manual_transition_aceita_review_para_ready_reprovar(
+        self, db
+    ) -> None:
         from backend.scheduling.kanban import get_task_status, manual_transition
 
         await _cria(db, "t1", status="review")
@@ -234,7 +238,7 @@ class TestReviewFuncional:
         assert (await get_task_status("t1"))["status"] == "ready"
 
     @pytest.mark.asyncio
-    async def test_manual_transition_recusa_review_para_done_direto(self, db):
+    async def test_manual_transition_recusa_review_para_done_direto(self, db) -> None:
         """Erro/borda: aprovar não pode passar pela transição genérica —
         só o endpoint dedicado (`approve_review`) registra quem aprovou."""
         from backend.scheduling.kanban import manual_transition
@@ -245,7 +249,9 @@ class TestReviewFuncional:
             await manual_transition("t1", "done")
 
     @pytest.mark.asyncio
-    async def test_manual_transition_aceita_done_para_review_reabertura(self, db):
+    async def test_manual_transition_aceita_done_para_review_reabertura(
+        self, db
+    ) -> None:
         from backend.scheduling.kanban import get_task_status, manual_transition
 
         await _cria(db, "t1", status="done")
@@ -254,7 +260,9 @@ class TestReviewFuncional:
         assert (await get_task_status("t1"))["status"] == "review"
 
     @pytest.mark.asyncio
-    async def test_approve_review_move_para_done_e_registra_comentario(self, db):
+    async def test_approve_review_move_para_done_e_registra_comentario(
+        self, db
+    ) -> None:
         from backend.scheduling.kanban import (
             approve_review,
             get_task_status,
@@ -270,7 +278,7 @@ class TestReviewFuncional:
         assert comentarios[0]["user_id"] == "user-1"
 
     @pytest.mark.asyncio
-    async def test_approve_review_recusa_task_fora_de_review(self, db):
+    async def test_approve_review_recusa_task_fora_de_review(self, db) -> None:
         """Erro/borda: aprovar uma task que não está em review (já
         aprovada, ou nunca chegou lá) não pode silenciosamente mover
         status nenhum."""
@@ -284,7 +292,7 @@ class TestReviewFuncional:
 
 class TestBloqueioTipado:
     @pytest.mark.asyncio
-    async def test_dependencia_fica_em_todo_e_nao_em_blocked(self, db):
+    async def test_dependencia_fica_em_todo_e_nao_em_blocked(self, db) -> None:
         """Do Hermes: bloqueio por dependência **não** vai pra coluna
         `blocked` — some do radar humano. Fica em `todo` até a promoção
         automática, porque não há nada que a pessoa possa fazer."""
@@ -298,7 +306,7 @@ class TestBloqueioTipado:
         assert estado["block_kind"] == "dependency"
 
     @pytest.mark.asyncio
-    async def test_needs_input_vai_pra_blocked(self, db):
+    async def test_needs_input_vai_pra_blocked(self, db) -> None:
         """Os outros tipos esperam ação humana — precisam aparecer."""
         from backend.scheduling.kanban import block_task, get_task_status
 
@@ -310,7 +318,7 @@ class TestBloqueioTipado:
         assert estado["block_reason"] == "falta a chave da API"
 
     @pytest.mark.asyncio
-    async def test_tipo_de_bloqueio_invalido_e_recusado(self, db):
+    async def test_tipo_de_bloqueio_invalido_e_recusado(self, db) -> None:
         """Erro/borda: tipo fora da taxonomia viraria coluna fantasma na UI."""
         from backend.scheduling.kanban import block_task
 
@@ -320,7 +328,7 @@ class TestBloqueioTipado:
             await block_task("t1", "inventado", "?")
 
     @pytest.mark.asyncio
-    async def test_unblock_devolve_pra_ready_e_limpa_o_motivo(self, db):
+    async def test_unblock_devolve_pra_ready_e_limpa_o_motivo(self, db) -> None:
         from backend.scheduling.kanban import block_task, get_task_status, unblock_task
 
         await _cria(db, "t1", status="ready")
@@ -335,7 +343,7 @@ class TestBloqueioTipado:
 
 class TestDependencias:
     @pytest.mark.asyncio
-    async def test_pai_concluido_promove_o_filho_pra_ready(self, db):
+    async def test_pai_concluido_promove_o_filho_pra_ready(self, db) -> None:
         from backend.scheduling.kanban import (
             add_dependency,
             get_task_status,
@@ -350,7 +358,7 @@ class TestDependencias:
         assert (await get_task_status("filho"))["status"] == "ready"
 
     @pytest.mark.asyncio
-    async def test_pai_pendente_nao_promove(self, db):
+    async def test_pai_pendente_nao_promove(self, db) -> None:
         """Erro/borda: promover cedo faz o filho rodar sem o resultado do
         pai — a dependência existe justamente por isso."""
         from backend.scheduling.kanban import (
@@ -367,7 +375,7 @@ class TestDependencias:
         assert (await get_task_status("filho"))["status"] == "todo"
 
     @pytest.mark.asyncio
-    async def test_filho_com_dois_pais_espera_os_dois(self, db):
+    async def test_filho_com_dois_pais_espera_os_dois(self, db) -> None:
         """Erro/borda: promover com um pai pronto ignoraria o outro."""
         from backend.scheduling.kanban import (
             add_dependency,
@@ -385,7 +393,7 @@ class TestDependencias:
         assert (await get_task_status("filho"))["status"] == "todo"
 
     @pytest.mark.asyncio
-    async def test_dependencia_circular_e_recusada(self, db):
+    async def test_dependencia_circular_e_recusada(self, db) -> None:
         """Erro/borda: ciclo trava os dois cards para sempre em `todo`,
         e ninguém entenderia o porquê."""
         from backend.scheduling.kanban import add_dependency
@@ -398,7 +406,7 @@ class TestDependencias:
             await add_dependency("b", "a")
 
     @pytest.mark.asyncio
-    async def test_task_dependente_de_si_mesma_e_recusada(self, db):
+    async def test_task_dependente_de_si_mesma_e_recusada(self, db) -> None:
         from backend.scheduling.kanban import add_dependency
 
         await _cria(db, "a")
@@ -407,7 +415,7 @@ class TestDependencias:
             await add_dependency("a", "a")
 
     @pytest.mark.asyncio
-    async def test_remove_dependency_apaga_o_vinculo(self, db):
+    async def test_remove_dependency_apaga_o_vinculo(self, db) -> None:
         """Links HTTP: `add_dependency` só era chamado
         internamente pela tool `kanban_decompose`, sem endpoint pra editar
         dependências no drawer."""
@@ -425,7 +433,9 @@ class TestDependencias:
         assert await get_dependencies("filho") == []
 
     @pytest.mark.asyncio
-    async def test_remove_dependency_inexistente_devolve_false_sem_lancar(self, db):
+    async def test_remove_dependency_inexistente_devolve_false_sem_lancar(
+        self, db
+    ) -> None:
         """Erro/borda: remover um vínculo que nunca existiu (ou já foi
         removido) não pode lançar — o caller HTTP decide o que fazer com
         `False`, não é um estado excepcional aqui."""
@@ -443,7 +453,7 @@ class TestProgressRollup:
     terminaram."""
 
     @pytest.mark.asyncio
-    async def test_task_sem_subtask_devolve_none_nao_zero_zero(self, db):
+    async def test_task_sem_subtask_devolve_none_nao_zero_zero(self, db) -> None:
         """`None` (não `{0,0}`) é a distinção que muda o que o card
         desenha — {0,0} renderizaria uma barra vazia em toda task folha."""
         from backend.scheduling.kanban import get_progress
@@ -453,7 +463,7 @@ class TestProgressRollup:
         assert await get_progress("solo") is None
 
     @pytest.mark.asyncio
-    async def test_progress_conta_subtasks_done_sobre_o_total(self, db):
+    async def test_progress_conta_subtasks_done_sobre_o_total(self, db) -> None:
         from backend.scheduling.kanban import add_dependency, get_progress
 
         await _cria(db, "pai", status="todo")
@@ -467,7 +477,7 @@ class TestProgressRollup:
         assert await get_progress("pai") == {"done": 1, "total": 3}
 
     @pytest.mark.asyncio
-    async def test_subtask_arquivada_conta_como_done(self, db):
+    async def test_subtask_arquivada_conta_como_done(self, db) -> None:
         """Erro/borda: uma subtask arquivada (não `done`) ainda representa
         trabalho concluído — travado em teste pra não regredir por
         acidente se alguém achar que só `done` deveria contar."""
@@ -482,7 +492,7 @@ class TestProgressRollup:
 
 class TestStatusValidos:
     @pytest.mark.asyncio
-    async def test_status_fora_da_taxonomia_e_recusado(self, db):
+    async def test_status_fora_da_taxonomia_e_recusado(self, db) -> None:
         from backend.scheduling.kanban import set_status
 
         await _cria(db, "t1")
@@ -491,7 +501,7 @@ class TestStatusValidos:
             await set_status("t1", "em-analise")
 
     @pytest.mark.asyncio
-    async def test_todos_os_status_da_taxonomia_sao_aceitos(self, db):
+    async def test_todos_os_status_da_taxonomia_sao_aceitos(self, db) -> None:
         from backend.scheduling.kanban import KANBAN_STATUSES, set_status
 
         await _cria(db, "t1")
@@ -505,7 +515,7 @@ class TestEscalonamentoDeBloqueio:
     do Hermes."""
 
     @pytest.mark.asyncio
-    async def test_bloqueios_abaixo_do_limite_ficam_em_blocked(self, db):
+    async def test_bloqueios_abaixo_do_limite_ficam_em_blocked(self, db) -> None:
         from backend.scheduling.kanban import (
             BLOCK_RECURRENCE_LIMIT,
             block_task,
@@ -520,7 +530,7 @@ class TestEscalonamentoDeBloqueio:
         assert estado["status"] == "blocked"
 
     @pytest.mark.asyncio
-    async def test_bloqueio_atinge_o_limite_escala_pra_triage(self, db):
+    async def test_bloqueio_atinge_o_limite_escala_pra_triage(self, db) -> None:
         from backend.scheduling.kanban import (
             BLOCK_RECURRENCE_LIMIT,
             block_task,
@@ -533,10 +543,10 @@ class TestEscalonamentoDeBloqueio:
 
         estado = await get_task_status("t1")
         assert estado["status"] == "triage"
-        assert "revisão manual" in estado["block_reason"]
+        assert "revisão manual" in str(estado["block_reason"])
 
     @pytest.mark.asyncio
-    async def test_dependency_nunca_conta_pro_escalonamento(self, db):
+    async def test_dependency_nunca_conta_pro_escalonamento(self, db) -> None:
         """Erro/borda: dependência é resolvida pela máquina, não é uma
         falha real da task — não pode empurrar o card pra triage."""
         from backend.scheduling.kanban import (
@@ -553,7 +563,7 @@ class TestEscalonamentoDeBloqueio:
         assert estado["status"] == "todo"
 
     @pytest.mark.asyncio
-    async def test_sucesso_zera_o_contador_de_bloqueio(self, db):
+    async def test_sucesso_zera_o_contador_de_bloqueio(self, db) -> None:
         """O contador não acumula pra sempre — sair de `blocked` com
         sucesso (via `set_status` pra `ready`/`done`) reseta a régua."""
         from backend.scheduling.kanban import (
@@ -573,7 +583,7 @@ class TestEscalonamentoDeBloqueio:
         assert estado["status"] == "blocked"
 
     @pytest.mark.asyncio
-    async def test_unblock_tambem_zera_o_contador(self, db):
+    async def test_unblock_tambem_zera_o_contador(self, db) -> None:
         from backend.scheduling.kanban import block_task, unblock_task
 
         await _cria(db, "t1", status="ready")
@@ -593,7 +603,7 @@ class TestTransicaoManual:
     atômico do scheduler e `done` só a run terminando de verdade decide."""
 
     @pytest.mark.asyncio
-    async def test_todo_para_ready_e_permitida(self, db):
+    async def test_todo_para_ready_e_permitida(self, db) -> None:
         from backend.scheduling.kanban import get_task_status, manual_transition
 
         await _cria(db, "t1", status="todo")
@@ -602,7 +612,9 @@ class TestTransicaoManual:
         assert (await get_task_status("t1"))["status"] == "ready"
 
     @pytest.mark.asyncio
-    async def test_blocked_para_ready_passa_por_unblock_e_limpa_o_motivo(self, db):
+    async def test_blocked_para_ready_passa_por_unblock_e_limpa_o_motivo(
+        self, db
+    ) -> None:
         """`blocked→ready` reaproveita `unblock_task` — não é um `set_status`
         cru, senão o card voltaria pra `ready` com o motivo do bloqueio preso."""
         from backend.scheduling.kanban import (
@@ -621,7 +633,7 @@ class TestTransicaoManual:
         assert estado["block_reason"] is None
 
     @pytest.mark.asyncio
-    async def test_ready_para_running_e_recusada(self, db):
+    async def test_ready_para_running_e_recusada(self, db) -> None:
         """Erro/borda: `running` só é alcançável pelo claim atômico
         (`claim_task`) — arrastar um card pra lá nunca pode ter efeito."""
         from backend.scheduling.kanban import get_task_status, manual_transition
@@ -634,7 +646,7 @@ class TestTransicaoManual:
         assert (await get_task_status("t1"))["status"] == "ready"
 
     @pytest.mark.asyncio
-    async def test_ready_para_done_e_recusada(self, db):
+    async def test_ready_para_done_e_recusada(self, db) -> None:
         """Erro/borda: só a run terminando de verdade decide `done`."""
         from backend.scheduling.kanban import get_task_status, manual_transition
 
@@ -652,7 +664,9 @@ class TestEventoSSE:
     polling agressivo por push nesse canal."""
 
     @pytest.mark.asyncio
-    async def test_set_status_emite_evento_com_task_id_e_status(self, db, monkeypatch):
+    async def test_set_status_emite_evento_com_task_id_e_status(
+        self, db, monkeypatch
+    ) -> None:
         from backend.api.handlers import webhooks
         from backend.scheduling.kanban import set_status
 
@@ -672,7 +686,9 @@ class TestEventoSSE:
         assert chamadas[0]["data"]["status"] == "running"
 
     @pytest.mark.asyncio
-    async def test_block_task_emite_status_e_block_kind_reason(self, db, monkeypatch):
+    async def test_block_task_emite_status_e_block_kind_reason(
+        self, db, monkeypatch
+    ) -> None:
         from backend.api.handlers import webhooks
         from backend.scheduling.kanban import block_task
 
@@ -698,7 +714,7 @@ class TestEventoSSE:
         }
 
     @pytest.mark.asyncio
-    async def test_evento_leva_o_board_id_real_da_task(self, db, monkeypatch):
+    async def test_evento_leva_o_board_id_real_da_task(self, db, monkeypatch) -> None:
         """Um board reconciliando por SSE precisa saber
         se o evento é dele; sem `board_id` no payload, cairia sempre no
         fallback de refetch completo (perde o ponto de usar SSE)."""
@@ -723,7 +739,7 @@ class TestEventoSSE:
     @pytest.mark.asyncio
     async def test_unblock_task_emite_status_ready_sem_block_kind(
         self, db, monkeypatch
-    ):
+    ) -> None:
         from backend.api.handlers import webhooks
         from backend.scheduling.kanban import block_task, unblock_task
 
@@ -746,7 +762,7 @@ class TestEventoSSE:
     @pytest.mark.asyncio
     async def test_falha_ao_emitir_evento_nao_impede_a_transicao_de_status(
         self, db, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: a camada de notificação é acessória (CLAUDE.md
         regra 11 — tools/funções defensivas). Se `_emit_sse_event` explodir
         (fila cheia, KV fora do ar), o status já commitado no banco precisa
@@ -775,7 +791,7 @@ class TestDelegacaoSincronaForaDoBoard:
     """
 
     @pytest.mark.asyncio
-    async def test_task_sincrona_nao_grava_link_nem_muda_status(self, db):
+    async def test_task_sincrona_nao_grava_link_nem_muda_status(self, db) -> None:
         from backend.scheduling.kanban import get_task_status
 
         await _cria(db, "t1", status="todo")
@@ -788,7 +804,7 @@ class TestDelegacaoSincronaForaDoBoard:
         assert (await get_task_status("t1"))["status"] == "todo"
 
     @pytest.mark.asyncio
-    async def test_o_board_so_conhece_kinds_de_background(self, db):
+    async def test_o_board_so_conhece_kinds_de_background(self, db) -> None:
         """Erro/borda: se um dia `task()` passar a gravar aqui, este teste
         acusa — o board é de tarefas em segundo plano."""
         async with db.execute(
@@ -803,7 +819,9 @@ class TestDelegacaoSincronaForaDoBoard:
 
 class TestComentarios:
     @pytest.mark.asyncio
-    async def test_comentario_aparece_na_listagem_e_corpo_vazio_e_recusado(self, db):
+    async def test_comentario_aparece_na_listagem_e_corpo_vazio_e_recusado(
+        self, db
+    ) -> None:
         from backend.scheduling.kanban import add_comment, list_comments
 
         await _cria(db, "t1")
@@ -821,7 +839,7 @@ class TestComentarios:
             await add_comment("t1", "u1", "   ")
 
     @pytest.mark.asyncio
-    async def test_comentarios_de_tasks_diferentes_nao_se_misturam(self, db):
+    async def test_comentarios_de_tasks_diferentes_nao_se_misturam(self, db) -> None:
         from backend.scheduling.kanban import add_comment, list_comments
 
         await _cria(db, "t1")
@@ -835,7 +853,9 @@ class TestComentarios:
 
 class TestTimelineDeEventos:
     @pytest.mark.asyncio
-    async def test_transicoes_reais_gravam_a_timeline_em_ordem_cronologica(self, db):
+    async def test_transicoes_reais_gravam_a_timeline_em_ordem_cronologica(
+        self, db
+    ) -> None:
         from backend.scheduling.kanban import (
             block_task,
             list_events,
@@ -856,7 +876,7 @@ class TestTimelineDeEventos:
         assert eventos[1]["block_reason"] == "falta chave"
 
     @pytest.mark.asyncio
-    async def test_task_sem_transicao_nenhuma_devolve_lista_vazia(self, db):
+    async def test_task_sem_transicao_nenhuma_devolve_lista_vazia(self, db) -> None:
         """Edge: task recém-criada, nenhuma transição ainda aconteceu — lista
         vazia, não erro."""
         from backend.scheduling.kanban import list_events

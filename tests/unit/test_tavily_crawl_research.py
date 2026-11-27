@@ -16,6 +16,7 @@ import pytest
 
 from backend.tools.tavily.client import TavilyClient, TavilyResponseError
 from backend.tools.tavily.research import ResearchTimeoutError, run_research
+from tests.json_values import as_list, as_object
 
 
 def _client(handler) -> TavilyClient:
@@ -27,7 +28,7 @@ def _client(handler) -> TavilyClient:
 
 class TestCrawlEMap:
     @pytest.mark.asyncio
-    async def test_crawl_devolve_as_paginas_varridas(self):
+    async def test_crawl_devolve_as_paginas_varridas(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -42,10 +43,11 @@ class TestCrawlEMap:
         async with _client(handler) as c:
             saida = await c.crawl("https://docs.test", max_depth=2)
 
-        assert saida["results"][0]["url"] == "https://docs.test/a"
+        first = as_object(as_list(saida["results"])[0])
+        assert first["url"] == "https://docs.test/a"
 
     @pytest.mark.asyncio
-    async def test_parametros_de_crawl_vao_no_payload(self):
+    async def test_parametros_de_crawl_vao_no_payload(self) -> None:
         capturado: dict = {}
 
         def handler(req: httpx.Request) -> httpx.Response:
@@ -67,7 +69,7 @@ class TestCrawlEMap:
         assert capturado["exclude_paths"] == ["/blog/.*"]
 
     @pytest.mark.asyncio
-    async def test_map_devolve_a_estrutura_de_links(self):
+    async def test_map_devolve_a_estrutura_de_links(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200, json={"base_url": "https://x.test", "results": ["/a", "/b"]}
@@ -80,7 +82,7 @@ class TestCrawlEMap:
 
 
 class TestCrawlEMapExigemAprovacao:
-    def test_estao_em_require_approval(self):
+    def test_estao_em_require_approval(self) -> None:
         """Varrer um site inteiro gasta créditos por página e bate no alvo —
         é caro o suficiente pra pedir confirmação."""
         from backend.engine.hitl import REQUIRE_APPROVAL
@@ -88,7 +90,7 @@ class TestCrawlEMapExigemAprovacao:
         assert "web_crawl" in REQUIRE_APPROVAL
         assert "web_map" in REQUIRE_APPROVAL
 
-    def test_busca_simples_continua_sem_hitl(self):
+    def test_busca_simples_continua_sem_hitl(self) -> None:
         """Erro/borda: HITL em `web_search`/`fetch_url` seria fricção sem
         ganho — são baratas e o agente as usa o tempo todo."""
         from backend.engine.hitl import REQUIRE_APPROVAL
@@ -119,16 +121,16 @@ class TestResearchAssincrono:
         return handler
 
     @pytest.mark.asyncio
-    async def test_201_seguido_de_polling_ate_completed(self):
+    async def test_201_seguido_de_polling_ate_completed(self) -> None:
         async with _client(self._handler(["pending", "running"])) as c:
             saida = await run_research(
                 c, "qual o estado da arte?", poll_interval_s=0, timeout_s=30
             )
 
-        assert saida["output"]["answer"] == "a resposta"
+        assert as_object(saida["output"])["answer"] == "a resposta"
 
     @pytest.mark.asyncio
-    async def test_resposta_sem_request_id_falha_na_largada(self):
+    async def test_resposta_sem_request_id_falha_na_largada(self) -> None:
         """Erro/borda: sem id não há como acompanhar — o job rodaria e
         cobraria sem ninguém buscar o resultado."""
 
@@ -140,7 +142,7 @@ class TestResearchAssincrono:
                 await run_research(c, "q", poll_interval_s=0, timeout_s=30)
 
     @pytest.mark.asyncio
-    async def test_estado_failed_vira_erro_e_nao_continua_consultando(self):
+    async def test_estado_failed_vira_erro_e_nao_continua_consultando(self) -> None:
         def handler(req: httpx.Request) -> httpx.Response:
             if req.method == "POST":
                 return httpx.Response(
@@ -153,7 +155,7 @@ class TestResearchAssincrono:
                 await run_research(c, "q", poll_interval_s=0, timeout_s=30)
 
     @pytest.mark.asyncio
-    async def test_polling_que_nunca_conclui_respeita_o_teto(self):
+    async def test_polling_que_nunca_conclui_respeita_o_teto(self) -> None:
         """Erro/borda crítico: mesma trava do vídeo do OpenRouter e do
         incidente do NATS — loop de espera sem corte gira para sempre."""
         consultas = 0
@@ -174,7 +176,7 @@ class TestResearchAssincrono:
         assert consultas > 0, "desistiu antes de consultar uma vez"
 
     @pytest.mark.asyncio
-    async def test_completed_sem_saida_vira_erro(self):
+    async def test_completed_sem_saida_vira_erro(self) -> None:
         """Erro/borda: concluir sem entregar a pesquisa é falha disfarçada
         de sucesso."""
         async with _client(self._handler([], com_resultado=False)) as c:

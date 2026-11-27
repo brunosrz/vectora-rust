@@ -21,7 +21,7 @@ class TestConsumeRemainder:
     de forma unitária sem precisar do loop inteiro de stream_engine_events.
     """
 
-    async def _consume_remainder(self, pending_task, iterator):
+    async def _consume_remainder(self, pending_task, iterator) -> None:
         """Réplica da função interna de native_stream.py para teste isolado."""
         try:
             with contextlib.suppress(Exception):
@@ -32,7 +32,7 @@ class TestConsumeRemainder:
             pass
 
     @pytest.mark.asyncio
-    async def test_consume_remainder_drena_iterador_completo(self):
+    async def test_consume_remainder_drena_iterador_completo(self) -> None:
         """Deve consumir todos os eventos do iterador após desconexão."""
         collected = []
 
@@ -49,7 +49,7 @@ class TestConsumeRemainder:
         assert collected == [0, 1, 2, 3, 4]
 
     @pytest.mark.asyncio
-    async def test_consume_remainder_suprime_excecao_do_iterador(self):
+    async def test_consume_remainder_suprime_excecao_do_iterador(self) -> None:
         """Erros durante consumo do background não devem propagar."""
 
         async def error_iterator():
@@ -63,7 +63,7 @@ class TestConsumeRemainder:
         await self._consume_remainder(pending, error_iterator())
 
     @pytest.mark.asyncio
-    async def test_consume_remainder_suprime_excecao_do_pending_task(self):
+    async def test_consume_remainder_suprime_excecao_do_pending_task(self) -> None:
         """Erro na pending_task pendente não deve propagar."""
 
         async def failing_task():
@@ -82,7 +82,7 @@ class TestConsumeRemainder:
         assert collected == [0, 1, 2]
 
     @pytest.mark.asyncio
-    async def test_background_task_continua_apos_cancel_principal(self):
+    async def test_background_task_continua_apos_cancel_principal(self) -> None:
         """
         Simula o cenário real: task lançada em background deve continuar
         executando mesmo que o loop principal seja "abandonado".
@@ -95,7 +95,7 @@ class TestConsumeRemainder:
                 events_consumed.append(i)
                 yield i
 
-        async def fake_pending():
+        async def fake_pending() -> None:
             pass
 
         pending = asyncio.create_task(fake_pending())
@@ -108,7 +108,7 @@ class TestConsumeRemainder:
         assert events_consumed == [0, 1, 2]
 
     @pytest.mark.asyncio
-    async def test_background_nao_bloqueia_chamador(self):
+    async def test_background_nao_bloqueia_chamador(self) -> None:
         """
         create_task não deve bloquear — o código após continua imediatamente.
         """
@@ -119,7 +119,7 @@ class TestConsumeRemainder:
             flag.append("done")
             yield 1
 
-        async def fake_pending():
+        async def fake_pending() -> None:
             pass
 
         pending = asyncio.create_task(fake_pending())

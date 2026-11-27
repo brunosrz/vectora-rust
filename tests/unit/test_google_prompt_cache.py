@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from backend.llm.google import prompt_cache as pc
+from backend.vtypes.contracts import JsonObject
+from tests.json_values import dig
 
 
 class _Client:
@@ -48,13 +50,13 @@ async def test_large_prefix_becomes_cached_content_and_is_reused() -> None:
     assert body1["cachedContent"] == body2["cachedContent"] == "cachedContents/1"
     assert "systemInstruction" not in body1
     assert "tools" not in body1
-    assert body1["contents"][0]["parts"][0]["text"] == "oi"
+    assert dig(body1, "contents", 0, "parts", 0, "text") == "oi"
 
 
 @pytest.mark.asyncio
 async def test_small_prefix_does_not_use_cache() -> None:
     client = _Client()
-    payload = {
+    payload: JsonObject = {
         "systemInstruction": {"parts": [{"text": "curto"}]},
         "contents": [],
     }

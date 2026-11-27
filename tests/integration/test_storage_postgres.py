@@ -26,7 +26,7 @@ class TestPostgresMigrationRunner:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_upgrade_applies_schema_and_returns_true(self, pg_conn):
+    async def test_upgrade_applies_schema_and_returns_true(self, pg_conn) -> None:
         """upgrade() aplica o schema.sql inteiro e retorna True na 1ª chamada."""
         from backend.storage.migrations.postgres_runner import PostgresMigrationRunner
 
@@ -36,7 +36,7 @@ class TestPostgresMigrationRunner:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_upgrade_idempotent(self, pg_conn):
+    async def test_upgrade_idempotent(self, pg_conn) -> None:
         """Segunda chamada a upgrade() é no-op (checksum já bate) — retorna False."""
         from backend.storage.migrations.postgres_runner import PostgresMigrationRunner
 
@@ -47,7 +47,7 @@ class TestPostgresMigrationRunner:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_schema_migrations_table_created(self, pg_conn):
+    async def test_schema_migrations_table_created(self, pg_conn) -> None:
         """Tabela de controle schema_migrations é criada automaticamente."""
         from backend.storage.migrations.postgres_runner import PostgresMigrationRunner
 
@@ -62,7 +62,7 @@ class TestPostgresMigrationRunner:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_status_reflects_applied_state(self, pg_conn):
+    async def test_status_reflects_applied_state(self, pg_conn) -> None:
         """status() retorna um único MigrationStatus refletindo o banco."""
         from backend.storage.migrations.postgres_runner import (
             MigrationStatus,
@@ -163,7 +163,7 @@ class TestMediaQuotaPostgres:
     @pytest.mark.storage
     async def test_reapply_after_content_change_updates_checksum(
         self, pg_conn, tmp_path
-    ):
+    ) -> None:
         """Editar o schema.sql muda o checksum: upgrade() reaplica e status() reflete."""
         from backend.storage.migrations.postgres_runner import PostgresMigrationRunner
 
@@ -198,7 +198,7 @@ class TestMediaQuotaPostgres:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_upgrade_from_old_versioned_control_table(self, pg_conn):
+    async def test_upgrade_from_old_versioned_control_table(self, pg_conn) -> None:
         """Banco que já rodou o sistema de migrations antigo (versionado) tem
         schema_migrations no formato (version, name, applied_at, checksum) —
         sem coluna `id`. apply() não pode quebrar com "column id does not
@@ -231,14 +231,14 @@ class TestPostgresPool:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_pool_executes_select(self, pg_pool):
+    async def test_pool_executes_select(self, pg_pool) -> None:
         async with pg_pool.acquire() as conn:
             result = await conn.fetchval("SELECT 1")
         assert result == 1
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_pool_multiple_connections(self, pg_pool):
+    async def test_pool_multiple_connections(self, pg_pool) -> None:
         """Múltiplas aquisições sequenciais funcionam sem deadlock."""
         for _ in range(3):
             async with pg_pool.acquire() as conn:
@@ -247,7 +247,9 @@ class TestPostgresPool:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_get_pg_pool_factory(self, _storage_stack_ok, pg_dsn, monkeypatch):
+    async def test_get_pg_pool_factory(
+        self, _storage_stack_ok, pg_dsn, monkeypatch
+    ) -> None:
         """get_pg_pool() cria pool e garante schema via migration runner."""
         if not _storage_stack_ok:
             pytest.skip("Docker indisponível — Postgres não iniciado")
@@ -287,7 +289,7 @@ class TestPostgresPool:
 
     @pytest.mark.asyncio
     @pytest.mark.storage
-    async def test_get_pg_pool_raises_without_dsn(self, monkeypatch):
+    async def test_get_pg_pool_raises_without_dsn(self, monkeypatch) -> None:
         """get_pg_pool() exige DSN, sem depender do plano da conta."""
         import backend.settings as _s
         import backend.storage.factory as _fac

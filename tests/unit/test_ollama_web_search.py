@@ -26,13 +26,13 @@ def _client(handler) -> httpx.AsyncClient:
 
 
 class TestDisponibilidade:
-    def test_sem_api_key_a_capacidade_nao_esta_disponivel(self, monkeypatch):
+    def test_sem_api_key_a_capacidade_nao_esta_disponivel(self, monkeypatch) -> None:
         from backend.settings import settings as _s
 
         monkeypatch.setattr(_s, "ollama_api_key", "", raising=False)
         assert web_search_available() is False
 
-    def test_com_api_key_fica_disponivel(self, monkeypatch):
+    def test_com_api_key_fica_disponivel(self, monkeypatch) -> None:
         from backend.settings import settings as _s
 
         monkeypatch.setattr(_s, "ollama_api_key", "oll-test", raising=False)
@@ -41,7 +41,7 @@ class TestDisponibilidade:
 
 class TestWebSearch:
     @pytest.mark.asyncio
-    async def test_resultados_viram_lista_normalizada(self):
+    async def test_resultados_viram_lista_normalizada(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -69,7 +69,7 @@ class TestWebSearch:
         ]
 
     @pytest.mark.asyncio
-    async def test_bate_na_cloud_e_nao_no_servidor_local(self):
+    async def test_bate_na_cloud_e_nao_no_servidor_local(self) -> None:
         """Erro/borda que motiva o teste: apontar pro `OLLAMA_BASE_URL` local
         devolve 404 — estes endpoints só existem em ollama.com."""
         visto: dict[str, str] = {}
@@ -86,7 +86,7 @@ class TestWebSearch:
         assert visto["auth"] == "Bearer oll-test"
 
     @pytest.mark.asyncio
-    async def test_max_results_acima_de_10_e_rejeitado_antes_da_chamada(self):
+    async def test_max_results_acima_de_10_e_rejeitado_antes_da_chamada(self) -> None:
         """Erro/borda: o limite documentado é 10. Cortar aqui evita gastar
         uma chamada pra receber 400."""
         chamou = False
@@ -103,7 +103,7 @@ class TestWebSearch:
         assert not chamou
 
     @pytest.mark.asyncio
-    async def test_sem_api_key_erro_explica_que_e_cloud(self):
+    async def test_sem_api_key_erro_explica_que_e_cloud(self) -> None:
         """Erro/borda: a mensagem tem que dizer que é recurso de nuvem, senão
         o usuário com Ollama local ligado não entende a recusa."""
 
@@ -114,7 +114,7 @@ class TestWebSearch:
             await ollama_web_search("q", api_key="", http_client=_client(handler))
 
     @pytest.mark.asyncio
-    async def test_results_ausente_devolve_lista_vazia_sem_lancar(self):
+    async def test_results_ausente_devolve_lista_vazia_sem_lancar(self) -> None:
         """Busca sem resultado é resposta válida, não falha — a tool degrada
         (CLAUDE.md regra 11)."""
 
@@ -129,7 +129,7 @@ class TestWebSearch:
         )
 
     @pytest.mark.asyncio
-    async def test_401_vira_erro_de_credencial(self):
+    async def test_401_vira_erro_de_credencial(self) -> None:
         def handler(_req):
             return httpx.Response(401, json={"error": "invalid key"})
 
@@ -141,7 +141,7 @@ class TestWebSearch:
 
 class TestWebFetch:
     @pytest.mark.asyncio
-    async def test_devolve_titulo_conteudo_e_links(self):
+    async def test_devolve_titulo_conteudo_e_links(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -161,7 +161,7 @@ class TestWebFetch:
         assert pagina["links"] == ["https://a.test"]
 
     @pytest.mark.asyncio
-    async def test_url_vazia_nem_chama_a_api(self):
+    async def test_url_vazia_nem_chama_a_api(self) -> None:
         chamou = False
 
         def handler(_req):
@@ -174,7 +174,7 @@ class TestWebFetch:
         assert not chamou
 
     @pytest.mark.asyncio
-    async def test_pagina_sem_conteudo_devolve_campos_vazios_sem_lancar(self):
+    async def test_pagina_sem_conteudo_devolve_campos_vazios_sem_lancar(self) -> None:
         """Erro/borda: página que o extrator não entendeu devolve estrutura
         vazia — o agente decide o que fazer, a tool não derruba o turno."""
 

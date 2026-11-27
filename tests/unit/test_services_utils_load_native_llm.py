@@ -23,7 +23,7 @@ from backend.workspace.runtime_settings import runtime_settings
 
 
 @pytest.fixture(autouse=True)
-def _isolated_runtime_settings(monkeypatch):
+def _isolated_runtime_settings(monkeypatch) -> None:
     """Nunca deixa este teste ler/escrever o `checkpoints.db` real do
     usuário — cada teste começa com provider/modelo genuinamente vazios."""
     monkeypatch.setattr(runtime_settings, "_data", {})
@@ -39,7 +39,7 @@ def _mock_load_chat_client():
     )
 
 
-def test_sem_provider_nem_modelo_configurado_levanta_erro_claro():
+def test_sem_provider_nem_modelo_configurado_levanta_erro_claro() -> None:
     """Nada foi configurado ainda (fresh install) — nunca inventa
     google-genai/gemini como default silencioso, levanta erro."""
     with _mock_load_chat_client():
@@ -47,7 +47,7 @@ def test_sem_provider_nem_modelo_configurado_levanta_erro_claro():
             load_native_llm()
 
 
-def test_provider_configurado_sem_modelo_levanta_erro_claro():
+def test_provider_configurado_sem_modelo_levanta_erro_claro() -> None:
     """Erro/borda: usuário escolheu um provider mas nunca um modelo
     (ex.: wizard interrompido) — não cai num modelo de outro provider
     nem num hardcoded de fábrica, erro específico do provider ativo."""
@@ -57,7 +57,7 @@ def test_provider_configurado_sem_modelo_levanta_erro_claro():
             load_native_llm()
 
 
-def test_provider_e_modelo_configurados_resolve_normalmente():
+def test_provider_e_modelo_configurados_resolve_normalmente() -> None:
     """Caminho feliz: com provider+modelo explicitamente configurados via
     `set_active_model`, resolve pro model_id certo — sem qualquer
     dependência de default hardcoded."""
@@ -67,7 +67,7 @@ def test_provider_e_modelo_configurados_resolve_normalmente():
     mock_load.assert_called_once_with("openai:gpt-5.2")
 
 
-def test_env_var_sobrepoe_active_model(monkeypatch):
+def test_env_var_sobrepoe_active_model(monkeypatch) -> None:
     """`GOOGLE_MODEL` no ambiente continua tendo prioridade sobre
     `runtime_settings.active_model` — comportamento preexistente mantido."""
     runtime_settings.set_active_model("google-genai", "gemini-3.6-flash")
@@ -77,7 +77,7 @@ def test_env_var_sobrepoe_active_model(monkeypatch):
     mock_load.assert_called_once_with("google_genai:gemini-3.6-pro")
 
 
-def test_model_id_explicito_nunca_depende_de_runtime_settings():
+def test_model_id_explicito_nunca_depende_de_runtime_settings() -> None:
     """Passar `model_id` explícito (troca de modelo por request) resolve
     sozinho, sem tocar `runtime_settings` — nada configurado ali e ainda
     assim funciona."""

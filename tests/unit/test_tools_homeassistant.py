@@ -19,6 +19,7 @@ import httpx
 import pytest
 
 from backend.tools import homeassistant as ha
+from tests.json_values import as_object
 
 _RealAsyncClient = httpx.AsyncClient
 
@@ -42,7 +43,7 @@ def _mocked_client(handler):
 
 
 @pytest.fixture(autouse=True)
-def _credenciais(monkeypatch):
+def _credenciais(monkeypatch) -> None:
     from backend.settings import settings
 
     monkeypatch.setattr(settings, "home_assistant_url", "http://ha.local:8123")
@@ -57,7 +58,7 @@ _ESTADOS = [
 
 class TestCredenciais:
     @pytest.mark.asyncio
-    async def test_sem_credencial_avisa_e_nao_faz_chamada(self, monkeypatch):
+    async def test_sem_credencial_avisa_e_nao_faz_chamada(self, monkeypatch) -> None:
         """Erro/borda: sem URL/token o certo é dizer o que configurar. Tentar
         a chamada daria `ConnectError` cru, que não ensina nada."""
         from backend.settings import settings
@@ -74,7 +75,7 @@ class TestCredenciais:
         assert "HOME_ASSISTANT_TOKEN" in saida["error"]
 
     @pytest.mark.asyncio
-    async def test_token_rejeitado_diz_que_e_o_token(self):
+    async def test_token_rejeitado_diz_que_e_o_token(self) -> None:
         """Erro/borda: 401 do HA é token inválido/expirado — a mensagem
         precisa distinguir isso de instância fora do ar."""
 
@@ -90,7 +91,7 @@ class TestCredenciais:
 
 class TestListEntities:
     @pytest.mark.asyncio
-    async def test_lista_e_filtra_por_dominio(self):
+    async def test_lista_e_filtra_por_dominio(self) -> None:
         def _handler(req):
             assert req.url.path == "/api/states"
             assert req.headers["Authorization"] == "Bearer tok"
@@ -104,7 +105,7 @@ class TestListEntities:
             assert [e["entity_id"] for e in so_luz["entities"]] == ["light.sala"]
 
     @pytest.mark.asyncio
-    async def test_dominio_sem_nenhuma_entidade_devolve_lista_vazia(self):
+    async def test_dominio_sem_nenhuma_entidade_devolve_lista_vazia(self) -> None:
         """Erro/borda: lista vazia não é erro — é "não tem lâmpada". Mas o
         aviso precisa vir junto, senão o LLM conclui que a casa não tem luz
         quando na verdade o filtro estava errado."""
@@ -121,7 +122,7 @@ class TestListEntities:
 
 class TestGetState:
     @pytest.mark.asyncio
-    async def test_estado_de_entidade_existente(self):
+    async def test_estado_de_entidade_existente(self) -> None:
         def _handler(req):
             assert req.url.path == "/api/states/light.sala"
             return httpx.Response(200, json=_ESTADOS[0])
@@ -132,7 +133,7 @@ class TestGetState:
         assert saida["state"] == "on"
 
     @pytest.mark.asyncio
-    async def test_entidade_inexistente_nomeia_a_entidade(self):
+    async def test_entidade_inexistente_nomeia_a_entidade(self) -> None:
         """Erro/borda: 404 genérico faria o LLM achar que o HA caiu."""
 
         def _handler(_req):
@@ -146,7 +147,7 @@ class TestGetState:
 
 class TestListServices:
     @pytest.mark.asyncio
-    async def test_servicos_do_dominio_pedido(self):
+    async def test_servicos_do_dominio_pedido(self) -> None:
         def _handler(_req):
             return httpx.Response(
                 200,
@@ -162,7 +163,7 @@ class TestListServices:
         assert sorted(saida["services"]) == ["turn_off", "turn_on"]
 
     @pytest.mark.asyncio
-    async def test_corpo_fora_do_formato_vira_erro_tipado(self):
+    async def test_corpo_fora_do_formato_vira_erro_tipado(self) -> None:
         """Erro/borda: HA atrás de proxy devolvendo HTML. Sem tratamento o
         `.json()` estoura com JSONDecodeError cru dentro do grafo."""
 
@@ -177,7 +178,7 @@ class TestListServices:
 
 class TestCallService:
     @pytest.mark.asyncio
-    async def test_chama_servico_e_devolve_o_que_mudou(self):
+    async def test_chama_servico_e_devolve_o_que_mudou(self) -> None:
         def _handler(req):
             assert req.url.path == "/api/services/light/turn_on"
             assert json.loads(req.content) == {
@@ -199,7 +200,7 @@ class TestCallService:
         assert saida["changed"][0]["entity_id"] == "light.sala"
 
     @pytest.mark.asyncio
-    async def test_servico_inexistente_nao_finge_sucesso(self):
+    async def test_servico_inexistente_nao_finge_sucesso(self) -> None:
         """Erro/borda: o HA responde 400 pra serviço desconhecido. Devolver
         `ok` faria o agente afirmar que apagou a luz sem ter apagado."""
 
@@ -221,7 +222,7 @@ class TestCallService:
 
 
 class TestAprovacaoHumana:
-    def test_so_a_tool_de_acao_exige_aprovacao(self):
+    def test_so_a_tool_de_acao_exige_aprovacao(self) -> None:
         """Invariante de produto: agir na casa pausa; ler não.
 
         `ha_call_service` destranca porta e desliga alarme — não há "desfazer"
@@ -233,7 +234,7 @@ class TestAprovacaoHumana:
         for leitura in ("ha_list_entities", "ha_get_state", "ha_list_services"):
             assert leitura not in REQUIRE_APPROVAL
 
-    def test_as_quatro_tools_chegam_no_agente(self):
+    def test_as_quatro_tools_chegam_no_agente(self) -> None:
         from backend.nodes.tools import ALL_TOOLS
 
         nomes = {t.name for t in ALL_TOOLS}
@@ -244,7 +245,7 @@ class TestAprovacaoHumana:
             "ha_call_service",
         } <= nomes
 
-    def test_schema_das_quatro_tools_nunca_expoe_parametro_sem_tipo(self):
+    def test_schema_das_quatro_tools_nunca_expoe_parametro_sem_tipo(self) -> None:
         """Regressão: `http_client` (parâmetro de injeção de teste) vazou
         pro schema OpenAI-function exposto ao LLM/providers — um parâmetro
         `Any` sem `type` resolvido quebra o Cohere v2, que exige `type`
@@ -262,9 +263,10 @@ class TestAprovacaoHumana:
 
         for tool in tools:
             schema = tool.openai_schema()["function"]
-            properties = schema.get("parameters", {}).get("properties", {})
+            properties = as_object(schema["parameters"].get("properties", {}))
             assert "http_client" not in properties
-            for pname, pdef in properties.items():
+            for pname, raw_definition in properties.items():
+                pdef = as_object(raw_definition)
                 has_type = "type" in pdef and pdef["type"] is not None
                 has_any_of = "anyOf" in pdef
                 assert has_type or has_any_of, (
@@ -273,7 +275,7 @@ class TestAprovacaoHumana:
 
 
 class TestCatalogoDeIntegracao:
-    def test_home_assistant_aparece_com_os_dois_campos(self):
+    def test_home_assistant_aparece_com_os_dois_campos(self) -> None:
         """Sem `extra_vars` a UI pediria só o token e a URL ficaria sem onde
         ser preenchida — a integração nasceria inutilizável."""
         from backend.api.handlers.oauth import INTEGRATIONS_REGISTRY
@@ -284,7 +286,7 @@ class TestCatalogoDeIntegracao:
         assert entrada["env_var"] == "HOME_ASSISTANT_TOKEN"
         assert "HOME_ASSISTANT_URL" in entrada["extra_vars"]
 
-    def test_credencial_salva_pela_ui_chega_no_processo(self):
+    def test_credencial_salva_pela_ui_chega_no_processo(self) -> None:
         """Erro/borda do bug do Connect: gravar só no banco por-usuário deixa
         `os.environ` sem a credencial e a tool segue "não configurada"."""
         from backend.services.env_keys import RUNTIME_ENV_KEYS

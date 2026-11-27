@@ -10,6 +10,7 @@ import pytest
 from backend.persistence.native.agent_run import AgentRun
 from backend.scheduling import dag_runner
 from backend.scheduling.dag import DAGStage, DAGStore
+from backend.vtypes.contracts import JsonObject
 
 
 @pytest.mark.asyncio
@@ -97,7 +98,7 @@ async def test_cancel_stops_a_claimed_stage_before_its_worker_starts(
         return await aiosqlite.connect(db_path)
 
     monkeypatch.setattr("backend.scheduling.background_tasks._get_db", connect_db)
-    config = {
+    config: JsonObject = {
         "dag_execution_id": execution.execution_id,
         "dag_stage_id": claim[0],
         "dag_claim_token": claim[1],
@@ -109,6 +110,8 @@ async def test_cancel_stops_a_claimed_stage_before_its_worker_starts(
     await store.setup()
     plan = await store.get_plan(plan_id)
     assert plan is not None
-    assert plan["execution"]["status"] == "cancelled"
-    assert plan["execution"]["stages"][0]["status"] == "cancelled"
+    execution_view = plan["execution"]
+    assert execution_view is not None
+    assert execution_view["status"] == "cancelled"
+    assert execution_view.get("stages", [])[0]["status"] == "cancelled"
     await db.close()

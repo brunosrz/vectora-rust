@@ -28,7 +28,7 @@ class TestStoragePool:
     """Pool SQLite AsyncConnectionPool (F1)."""
 
     @pytest.mark.asyncio
-    async def test_pool_lite_pragma_wal(self, tmp_path):
+    async def test_pool_lite_pragma_wal(self, tmp_path) -> None:
         """Pool abre com WAL + busy_timeout=30000 e retorna conexão funcional.
 
         busy_timeout explícito (não só inferido por ausência de "database is
@@ -55,7 +55,7 @@ class TestStoragePool:
             await pool.close()
 
     @pytest.mark.asyncio
-    async def test_pool_multiple_connections(self, tmp_path):
+    async def test_pool_multiple_connections(self, tmp_path) -> None:
         """Pool libera conexões de volta ao pool após uso."""
         from backend.storage.sqlite.pool import AsyncConnectionPool
 
@@ -77,7 +77,7 @@ class TestGetStore:
     """get_store retorna VectoraStore (nativo, aiosqlite) no modo lite."""
 
     @pytest.mark.asyncio
-    async def test_lite_store_setup(self, tmp_path, monkeypatch):
+    async def test_lite_store_setup(self, tmp_path, monkeypatch) -> None:
         import backend.settings as _settings_mod
         from backend.storage.factory import get_store
 
@@ -90,7 +90,7 @@ class TestGetStore:
         assert store is not None
 
     @pytest.mark.asyncio
-    async def test_store_singleton(self, tmp_path, monkeypatch):
+    async def test_store_singleton(self, tmp_path, monkeypatch) -> None:
         """Duas chamadas consecutivas retornam o mesmo objeto."""
         import backend.settings as _settings_mod
         from backend.storage.factory import get_store

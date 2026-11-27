@@ -41,7 +41,7 @@ def clean_registry():
 
 
 class TestCollectionRegistry:
-    def test_registra_e_recupera(self, clean_registry):
+    def test_registra_e_recupera(self, clean_registry) -> None:
         from backend.config.collections import collection_field
 
         collection_field(
@@ -55,7 +55,7 @@ class TestCollectionRegistry:
         assert field.category == "provider_routing"
         assert isinstance(field, CollectionSettingField)
 
-    def test_chave_duplicada_levanta_erro(self, clean_registry):
+    def test_chave_duplicada_levanta_erro(self, clean_registry) -> None:
         from backend.config.collections import collection_field
 
         collection_field(
@@ -72,7 +72,7 @@ class TestCollectionRegistry:
                 adapter=RegisteredModelsTableAdapter("ollama_registered_models"),
             )
 
-    def test_lista_por_categoria(self, clean_registry):
+    def test_lista_por_categoria(self, clean_registry) -> None:
         from backend.config.collections import collection_field
 
         collection_field(
@@ -103,7 +103,7 @@ class TestCollectionRegistry:
 
 class TestRegisteredModelsTableAdapter:
     @pytest.mark.asyncio
-    async def test_add_list_remove(self, tmp_path, monkeypatch):
+    async def test_add_list_remove(self, tmp_path, monkeypatch) -> None:
         # Usa DB isolado em tmp_path via monkeypatch do resolutor de DB.
         import sqlite3
 
@@ -129,11 +129,11 @@ class TestRegisteredModelsTableAdapter:
         assert len(items) == 1
         assert items[0]["tag"] == "llama3:8b"
 
-        await adapter.remove(model["id"])
+        await adapter.remove(str(model["id"]))
         assert await adapter.list_items() == []
 
     @pytest.mark.asyncio
-    async def test_add_tag_duplicada_levanta_erro(self, tmp_path, monkeypatch):
+    async def test_add_tag_duplicada_levanta_erro(self, tmp_path, monkeypatch) -> None:
         import aiosqlite
 
         db_path = tmp_path / "provider.db"
@@ -165,7 +165,7 @@ class TestUserRowAdapter:
     """
 
     @pytest.mark.asyncio
-    async def test_get_set_delete_por_usuario(self, monkeypatch):
+    async def test_get_set_delete_por_usuario(self, monkeypatch) -> None:
         import backend.rbac.auth as auth_svc
         from backend.config.adapters import UserRowAdapter
 
@@ -194,7 +194,7 @@ class TestUserRowAdapter:
         assert await adapter.get("u1") is None
 
     @pytest.mark.asyncio
-    async def test_user_local_delega_ao_rbac_auth(self, monkeypatch):
+    async def test_user_local_delega_ao_rbac_auth(self, monkeypatch) -> None:
         import backend.rbac.auth as auth_svc
         from backend.config.adapters import UserRowAdapter
 

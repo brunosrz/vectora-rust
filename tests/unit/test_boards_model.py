@@ -48,7 +48,7 @@ async def db(tmp_path, monkeypatch):
 
 class TestCreateBoard:
     @pytest.mark.asyncio
-    async def test_cria_com_slug_derivado_do_nome(self, db):
+    async def test_cria_com_slug_derivado_do_nome(self, db) -> None:
         from backend.scheduling.boards import create_board
 
         board = await create_board("u1", "Projeto Alpha")
@@ -60,7 +60,7 @@ class TestCreateBoard:
         assert board.archived_at is None
 
     @pytest.mark.asyncio
-    async def test_nome_vazio_e_recusado(self, db):
+    async def test_nome_vazio_e_recusado(self, db) -> None:
         """Erro/borda: nome vazio (ou só espaço) não vira board sem
         identidade legível no switcher."""
         from backend.scheduling.boards import create_board
@@ -69,7 +69,7 @@ class TestCreateBoard:
             await create_board("u1", "   ")
 
     @pytest.mark.asyncio
-    async def test_slug_colidindo_ganha_sufixo_numerico(self, db):
+    async def test_slug_colidindo_ganha_sufixo_numerico(self, db) -> None:
         """Erro/borda: dois boards do MESMO usuário com nomes que geram o
         mesmo slug — UNIQUE(user_id, slug) do schema quebraria num INSERT
         cru; create_board precisa desambiguar antes."""
@@ -82,7 +82,7 @@ class TestCreateBoard:
         assert b.slug == "alfa-2"
 
     @pytest.mark.asyncio
-    async def test_mesmo_slug_permitido_entre_usuarios_diferentes(self, db):
+    async def test_mesmo_slug_permitido_entre_usuarios_diferentes(self, db) -> None:
         """Erro/borda: UNIQUE é por (user_id, slug), não global — dois
         usuários podem ter um board "Default" cada, sem colisão."""
         from backend.scheduling.boards import create_board
@@ -95,7 +95,7 @@ class TestCreateBoard:
 
 class TestListAndGetBoard:
     @pytest.mark.asyncio
-    async def test_list_boards_so_do_usuario_e_em_ordem_de_criacao(self, db):
+    async def test_list_boards_so_do_usuario_e_em_ordem_de_criacao(self, db) -> None:
         from backend.scheduling.boards import create_board, list_boards
 
         await create_board("u1", "Primeiro")
@@ -107,7 +107,7 @@ class TestListAndGetBoard:
         assert [b.name for b in boards] == ["Primeiro", "Segundo"]
 
     @pytest.mark.asyncio
-    async def test_get_board_inexistente_devolve_none(self, db):
+    async def test_get_board_inexistente_devolve_none(self, db) -> None:
         from backend.scheduling.boards import get_board
 
         assert await get_board("nao-existe") is None
@@ -115,7 +115,7 @@ class TestListAndGetBoard:
 
 class TestUpdateBoard:
     @pytest.mark.asyncio
-    async def test_atualiza_nome_e_workspace(self, db):
+    async def test_atualiza_nome_e_workspace(self, db) -> None:
         from backend.scheduling.boards import create_board, update_board
 
         board = await create_board("u1", "Original")
@@ -126,7 +126,7 @@ class TestUpdateBoard:
         assert updated.workspace_id == "ws1"
 
     @pytest.mark.asyncio
-    async def test_nome_vazio_no_update_tambem_e_recusado(self, db):
+    async def test_nome_vazio_no_update_tambem_e_recusado(self, db) -> None:
         from backend.scheduling.boards import create_board, update_board
 
         board = await create_board("u1", "Original")
@@ -135,7 +135,9 @@ class TestUpdateBoard:
             await update_board(board.id, name="   ")
 
     @pytest.mark.asyncio
-    async def test_update_de_board_inexistente_devolve_none_sem_lancar(self, db):
+    async def test_update_de_board_inexistente_devolve_none_sem_lancar(
+        self, db
+    ) -> None:
         from backend.scheduling.boards import update_board
 
         assert await update_board("nao-existe", name="x") is None
@@ -143,7 +145,7 @@ class TestUpdateBoard:
 
 class TestDeleteBoard:
     @pytest.mark.asyncio
-    async def test_apaga_board_vazio(self, db):
+    async def test_apaga_board_vazio(self, db) -> None:
         from backend.scheduling.boards import create_board, delete_board, get_board
 
         board = await create_board("u1", "Vazio")
@@ -152,7 +154,7 @@ class TestDeleteBoard:
         assert await get_board(board.id) is None
 
     @pytest.mark.asyncio
-    async def test_recusa_apagar_board_com_tasks(self, db):
+    async def test_recusa_apagar_board_com_tasks(self, db) -> None:
         """Erro/borda: mover cards silenciosamente ou apagá-los junto é
         irreversível por acidente — o board com tasks precisa de 409, não
         de um DELETE que também leva as tasks embora."""
@@ -179,7 +181,7 @@ class TestDeleteBoard:
             await delete_board(board.id)
 
     @pytest.mark.asyncio
-    async def test_delete_de_board_inexistente_devolve_false(self, db):
+    async def test_delete_de_board_inexistente_devolve_false(self, db) -> None:
         from backend.scheduling.boards import delete_board
 
         assert await delete_board("nao-existe") is False
@@ -187,7 +189,7 @@ class TestDeleteBoard:
 
 class TestDefaultBoard:
     @pytest.mark.asyncio
-    async def test_cria_o_default_na_primeira_chamada_e_reusa_depois(self, db):
+    async def test_cria_o_default_na_primeira_chamada_e_reusa_depois(self, db) -> None:
         from backend.scheduling.boards import get_or_create_default_board
 
         primeiro = await get_or_create_default_board("u1")
@@ -197,7 +199,7 @@ class TestDefaultBoard:
         assert primeiro.slug == "default"
 
     @pytest.mark.asyncio
-    async def test_default_e_por_usuario(self, db):
+    async def test_default_e_por_usuario(self, db) -> None:
         from backend.scheduling.boards import get_or_create_default_board
 
         a = await get_or_create_default_board("u1")

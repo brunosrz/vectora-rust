@@ -686,7 +686,7 @@ class TestStreamChatBlocksImageForNonVisionProvider:
     de chamar o provider, com um ErrorEvent(code='MODEL_NO_VISION')."""
 
     @pytest.fixture(autouse=True)
-    def _isolated_vectora_home(self, tmp_path, monkeypatch):
+    def _isolated_vectora_home(self, tmp_path, monkeypatch) -> None:
         """`stream_chat` com anexo de imagem grava em `settings.vectora_home`
         (`_persist_image_attachment`) — nunca aponta pro `~/.vectora` real
         do ambiente rodando o teste."""

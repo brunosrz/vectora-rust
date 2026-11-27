@@ -45,7 +45,7 @@ def registry(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_derive_id_is_deterministic(tmp_path: Path):
+def test_derive_id_is_deterministic(tmp_path: Path) -> None:
     """Mesmo caminho sempre gera mesmo ID."""
     cwd = str(tmp_path)
     id1 = WorkspaceRegistry.derive_id(cwd)
@@ -53,20 +53,20 @@ def test_derive_id_is_deterministic(tmp_path: Path):
     assert id1 == id2
 
 
-def test_derive_id_length():
+def test_derive_id_length() -> None:
     """ID tem exatamente 8 caracteres."""
     wid = WorkspaceRegistry.derive_id("/some/path")
     assert len(wid) == 8
 
 
-def test_derive_id_different_paths():
+def test_derive_id_different_paths() -> None:
     """Caminhos diferentes geram IDs diferentes."""
     id1 = WorkspaceRegistry.derive_id("/project/a")
     id2 = WorkspaceRegistry.derive_id("/project/b")
     assert id1 != id2
 
 
-def test_derive_id_normalizes_path():
+def test_derive_id_normalizes_path() -> None:
     """Paths equivalentes mas escritos diferente geram mesmo ID."""
     id1 = WorkspaceRegistry.derive_id("/project/a")
     id2 = WorkspaceRegistry.derive_id(str(Path("/project/a").resolve()))
@@ -78,7 +78,7 @@ def test_derive_id_normalizes_path():
 # ---------------------------------------------------------------------------
 
 
-def test_get_or_create_creates_new(registry):
+def test_get_or_create_creates_new(registry) -> None:
     """Cria workspace novo para diretório desconhecido."""
     reg, _ = registry
     ws = reg.get_or_create("/new/project")
@@ -87,7 +87,7 @@ def test_get_or_create_creates_new(registry):
     assert "/new/project" in ws.cwd or "new" in ws.cwd  # normalizado
 
 
-def test_get_or_create_returns_existing(registry):
+def test_get_or_create_returns_existing(registry) -> None:
     """Retorna workspace existente na segunda chamada."""
     reg, _ = registry
     ws1 = reg.get_or_create("/my/project")
@@ -97,7 +97,7 @@ def test_get_or_create_returns_existing(registry):
 
 def test_update_local_project_changes_primary_folder_and_revokes_trust(
     registry, tmp_path: Path
-):
+) -> None:
     reg, _ = registry
     original = tmp_path / "original"
     replacement = tmp_path / "replacement"
@@ -118,7 +118,7 @@ def test_update_local_project_changes_primary_folder_and_revokes_trust(
     assert reg.get_or_create(str(replacement)).id == ws.id
 
 
-def test_get_or_create_persists(registry, tmp_path: Path):
+def test_get_or_create_persists(registry, tmp_path: Path) -> None:
     """Workspace persiste em workspaces.json."""
     reg, json_file = registry
     reg.get_or_create(str(tmp_path))
@@ -132,7 +132,7 @@ def test_get_or_create_persists(registry, tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_create_remote_ssh_registers_workspace(registry):
+def test_create_remote_ssh_registers_workspace(registry) -> None:
     """transport="ssh" cria workspace com placeholder local e persiste."""
     reg, json_file = registry
     ws = reg.create_remote(
@@ -147,7 +147,7 @@ def test_create_remote_ssh_registers_workspace(registry):
     assert json_file.exists()
 
 
-def test_create_remote_same_host_returns_existing(registry):
+def test_create_remote_same_host_returns_existing(registry) -> None:
     """Chamar create_remote duas vezes com o mesmo host é idempotente."""
     reg, _ = registry
     ws1 = reg.create_remote(name="a", transport="ssh", remote_host="10.0.0.5")
@@ -155,7 +155,7 @@ def test_create_remote_same_host_returns_existing(registry):
     assert ws1.id == ws2.id
 
 
-def test_create_remote_rejects_invalid_transport(registry):
+def test_create_remote_rejects_invalid_transport(registry) -> None:
     """transport fora de {"ssh", "codespace"} levanta ValueError — a
     validação em runtime é a última linha de defesa quando quem chama
     contorna a checagem estática do type checker."""
@@ -169,13 +169,13 @@ def test_create_remote_rejects_invalid_transport(registry):
 # ---------------------------------------------------------------------------
 
 
-def test_get_returns_none_for_unknown(registry):
+def test_get_returns_none_for_unknown(registry) -> None:
     """Retorna None para workspace_id desconhecido."""
     reg, _ = registry
     assert reg.get("ffffffff") is None
 
 
-def test_get_after_create(registry):
+def test_get_after_create(registry) -> None:
     """Retorna workspace após criação."""
     reg, _ = registry
     ws = reg.get_or_create("/some/dir")
@@ -186,7 +186,7 @@ def test_get_after_create(registry):
 
 def test_get_does_not_clobber_in_memory_entry_with_stale_disk_data(
     registry, tmp_path: Path
-):
+) -> None:
     """Uma entrada já presente em `_workspaces` (registrada antes do
     primeiro `_load()`) não pode ser sobrescrita pelo `workspaces.json` em
     disco quando os dois têm o mesmo id — o disco só preenche o que ainda
@@ -230,13 +230,13 @@ def test_get_does_not_clobber_in_memory_entry_with_stale_disk_data(
 # ---------------------------------------------------------------------------
 
 
-def test_list_all_empty(registry):
+def test_list_all_empty(registry) -> None:
     """Retorna lista vazia se não houver workspaces."""
     reg, _ = registry
     assert reg.list_all() == []
 
 
-def test_list_all_multiple(registry, tmp_path: Path):
+def test_list_all_multiple(registry, tmp_path: Path) -> None:
     """Retorna todos os workspaces registrados."""
     reg, _ = registry
     reg.get_or_create(str(tmp_path / "a"))
@@ -250,7 +250,7 @@ def test_list_all_multiple(registry, tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_rename_existing(registry):
+def test_rename_existing(registry) -> None:
     """Renomeia workspace existente."""
     reg, _ = registry
     ws = reg.get_or_create("/project")
@@ -259,7 +259,7 @@ def test_rename_existing(registry):
     assert reg.get(ws.id).name == "meu-projeto"
 
 
-def test_rename_nonexistent(registry):
+def test_rename_nonexistent(registry) -> None:
     """Retorna False para workspace inexistente."""
     reg, _ = registry
     assert reg.rename("00000000", "novo") is False
@@ -270,7 +270,7 @@ def test_rename_nonexistent(registry):
 # ---------------------------------------------------------------------------
 
 
-def test_delete_existing(registry):
+def test_delete_existing(registry) -> None:
     """Remove workspace do registry."""
     reg, _ = registry
     ws = reg.get_or_create("/to-delete")
@@ -278,7 +278,7 @@ def test_delete_existing(registry):
     assert reg.get(ws.id) is None
 
 
-def test_delete_nonexistent(registry):
+def test_delete_nonexistent(registry) -> None:
     """Retorna False para workspace inexistente."""
     reg, _ = registry
     assert reg.delete("00000000") is False
@@ -289,7 +289,7 @@ def test_delete_nonexistent(registry):
 # ---------------------------------------------------------------------------
 
 
-def test_bump_version_increments(registry):
+def test_bump_version_increments(registry) -> None:
     """Incrementa manifest_version a cada chamada."""
     reg, _ = registry
     ws = reg.get_or_create("/project")
@@ -300,7 +300,7 @@ def test_bump_version_increments(registry):
     assert v2 == 2
 
 
-def test_bump_version_unknown(registry):
+def test_bump_version_unknown(registry) -> None:
     """Retorna 0 para workspace inexistente."""
     reg, _ = registry
     assert reg.bump_version("xxxxxxxx") == 0
@@ -311,7 +311,7 @@ def test_bump_version_unknown(registry):
 # ---------------------------------------------------------------------------
 
 
-def test_workspace_manifest_path():
+def test_workspace_manifest_path() -> None:
     """manifest_path() retorna caminho esperado."""
     ws = Workspace(id="abc12345", name="test", cwd="/test", created_at="")
     path = ws.manifest_path()
@@ -319,7 +319,7 @@ def test_workspace_manifest_path():
     assert path.name == "MANIFEST.md"
 
 
-def test_workspace_bucket_manifest_path():
+def test_workspace_bucket_manifest_path() -> None:
     """bucket_manifest_path() retorna caminho esperado."""
     ws = Workspace(id="abc12345", name="test", cwd="/test", created_at="")
     path = ws.bucket_manifest_path("code")
@@ -332,7 +332,7 @@ def test_workspace_bucket_manifest_path():
 # ---------------------------------------------------------------------------
 
 
-def test_persistence_roundtrip(registry, tmp_path: Path):
+def test_persistence_roundtrip(registry, tmp_path: Path) -> None:
     """Workspace sobrevive a recriação do registry (deserialização)."""
     reg, json_file = registry
     ws = reg.get_or_create(str(tmp_path))

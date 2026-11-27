@@ -14,12 +14,14 @@ from backend.services import registry_client
 
 
 @pytest.fixture(autouse=True)
-def _isolated_cache(tmp_path, monkeypatch):
+def _isolated_cache(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(registry_client, "CACHE_DIR", tmp_path / "registry_cache")
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_success_writes_cache_and_returns_entries(monkeypatch):
+async def test_fetch_catalog_success_writes_cache_and_returns_entries(
+    monkeypatch,
+) -> None:
     async def _fake_get(self, url, **kwargs):
         return httpx.Response(
             200,
@@ -39,7 +41,9 @@ async def test_fetch_catalog_success_writes_cache_and_returns_entries(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_network_error_falls_back_to_existing_cache(monkeypatch):
+async def test_fetch_catalog_network_error_falls_back_to_existing_cache(
+    monkeypatch,
+) -> None:
     registry_client._write_cache(
         "mcp", [{"id": "cached-entry", "catalog_source": "official"}]
     )
@@ -57,7 +61,7 @@ async def test_fetch_catalog_network_error_falls_back_to_existing_cache(monkeypa
 @pytest.mark.asyncio
 async def test_fetch_catalog_no_network_no_cache_returns_empty_list_not_exception(
     monkeypatch,
-):
+) -> None:
     async def _fake_get(self, url, **kwargs):
         raise httpx.ConnectError("offline")
 
@@ -71,7 +75,7 @@ async def test_fetch_catalog_no_network_no_cache_returns_empty_list_not_exceptio
 @pytest.mark.asyncio
 async def test_fetch_catalog_cache_within_offline_ttl_but_past_online_ttl_is_served(
     monkeypatch,
-):
+) -> None:
     # Dentro do TTL de 48h (offline) mas fora do TTL de 6h (online) — ainda
     # é servido: "stale mas utilizável" é o contrato de fallback gracioso.
     stale_but_usable = {
@@ -96,7 +100,7 @@ async def test_fetch_catalog_cache_within_offline_ttl_but_past_online_ttl_is_ser
 @pytest.mark.asyncio
 async def test_fetch_catalog_cache_expired_beyond_offline_ttl_is_not_used(
     monkeypatch,
-):
+) -> None:
     # Erro/borda: cache além de 48h não é mais confiável — deve degradar pra
     # lista vazia em vez de servir dado potencialmente muito desatualizado.
     expired = {
@@ -116,7 +120,7 @@ async def test_fetch_catalog_cache_expired_beyond_offline_ttl_is_not_used(
     assert entries == []
 
 
-def test_clear_registry_cache_removes_all_kinds():
+def test_clear_registry_cache_removes_all_kinds() -> None:
     registry_client._write_cache("mcp", [{"id": "a"}])
     registry_client._write_cache("skills", [{"id": "b"}])
     registry_client._write_cache("mcp_official", [{"id": "c"}])
@@ -175,7 +179,7 @@ def _remote_only_server(name: str) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_fetch_official_mcp_registry_maps_npm_stdio_servers(monkeypatch):
+async def test_fetch_official_mcp_registry_maps_npm_stdio_servers(monkeypatch) -> None:
     page = _official_page(
         [_npm_stdio_server("com.example/foo", "foo-mcp-server", ["FOO_API_KEY"])]
     )
@@ -196,7 +200,9 @@ async def test_fetch_official_mcp_registry_maps_npm_stdio_servers(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_official_mcp_registry_skips_remote_only_servers(monkeypatch):
+async def test_fetch_official_mcp_registry_skips_remote_only_servers(
+    monkeypatch,
+) -> None:
     # Erro/borda: servers sem pacote npm/stdio (só `remotes`) não são
     # instaláveis pelo fluxo atual — devem ser filtrados, não quebrar.
     page = _official_page(
@@ -217,7 +223,7 @@ async def test_fetch_official_mcp_registry_skips_remote_only_servers(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_fetch_official_mcp_registry_paginates_via_cursor(monkeypatch):
+async def test_fetch_official_mcp_registry_paginates_via_cursor(monkeypatch) -> None:
     page1 = _official_page(
         [_npm_stdio_server("com.example/a", "a-mcp")], next_cursor="com.example/a"
     )
@@ -243,7 +249,7 @@ async def test_fetch_official_mcp_registry_paginates_via_cursor(monkeypatch):
 @pytest.mark.asyncio
 async def test_fetch_official_mcp_registry_network_error_falls_back_to_cache(
     monkeypatch,
-):
+) -> None:
     registry_client._write_cache("mcp_official", [{"id": "cached"}])
 
     async def _fake_get(self, url, params=None, **kwargs):
@@ -259,7 +265,7 @@ async def test_fetch_official_mcp_registry_network_error_falls_back_to_cache(
 @pytest.mark.asyncio
 async def test_fetch_official_mcp_registry_expired_cache_returns_empty_list(
     monkeypatch,
-):
+) -> None:
     expired = {
         "entries": [{"id": "cached-too-old"}],
         "fetched_at": (datetime.now(UTC) - timedelta(hours=200)).isoformat(),
@@ -284,7 +290,7 @@ async def test_fetch_official_mcp_registry_expired_cache_returns_empty_list(
 @pytest.mark.asyncio
 async def test_fetch_official_mcp_registry_duplicate_id_across_pages_not_duplicated(
     monkeypatch,
-):
+) -> None:
     # Duplicado: o mesmo id aparecendo em duas páginas (ou pacotes distintos
     # do mesmo server) não deve virar entrada repetida — dict por id dedupe.
     page1 = _official_page(
@@ -313,7 +319,7 @@ async def test_fetch_official_mcp_registry_duplicate_id_across_pages_not_duplica
 @pytest.mark.asyncio
 async def test_fetch_official_mcp_registry_no_network_no_cache_returns_empty(
     monkeypatch,
-):
+) -> None:
     async def _fake_get(self, url, params=None, **kwargs):
         raise httpx.ConnectError("offline")
 
@@ -325,7 +331,9 @@ async def test_fetch_official_mcp_registry_no_network_no_cache_returns_empty(
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_corrupted_cache_file_is_ignored_not_raised(monkeypatch):
+async def test_fetch_catalog_corrupted_cache_file_is_ignored_not_raised(
+    monkeypatch,
+) -> None:
     # Erro/borda: cache local corrompido (JSON inválido) não deve quebrar o
     # fluxo — é tratado como "sem cache" e a falha de rede vira lista vazia.
     registry_client._cache_path("mcp").parent.mkdir(parents=True, exist_ok=True)
@@ -342,7 +350,9 @@ async def test_fetch_catalog_corrupted_cache_file_is_ignored_not_raised(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_empty_entries_from_remote_overwrites_cache(monkeypatch):
+async def test_fetch_catalog_empty_entries_from_remote_overwrites_cache(
+    monkeypatch,
+) -> None:
     # Cache expirado (fora do TTL online) — precisa tocar rede, não é servido
     # pelo fast path cache-first.
     stale = {
@@ -372,7 +382,7 @@ async def test_fetch_catalog_empty_entries_from_remote_overwrites_cache(monkeypa
 @pytest.mark.asyncio
 async def test_fetch_catalog_fresh_cache_is_served_without_touching_network(
     monkeypatch,
-):
+) -> None:
     registry_client._write_cache(
         "mcp", [{"id": "fresh-cached", "catalog_source": "official"}]
     )
@@ -398,7 +408,7 @@ async def test_fetch_catalog_fresh_cache_is_served_without_touching_network(
 @pytest.mark.asyncio
 async def test_fetch_official_mcp_registry_fresh_cache_is_served_without_network(
     monkeypatch,
-):
+) -> None:
     registry_client._write_cache("mcp_official", [{"id": "fresh-cached"}])
     called = False
 
@@ -418,7 +428,7 @@ async def test_fetch_official_mcp_registry_fresh_cache_is_served_without_network
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_http_error_status_falls_back_to_cache(monkeypatch):
+async def test_fetch_catalog_http_error_status_falls_back_to_cache(monkeypatch) -> None:
     registry_client._write_cache(
         "mcp", [{"id": "cached-entry", "catalog_source": "official"}]
     )
@@ -436,7 +446,9 @@ async def test_fetch_catalog_http_error_status_falls_back_to_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_pro_required_does_not_serve_cached_entries(monkeypatch):
+async def test_fetch_catalog_pro_required_does_not_serve_cached_entries(
+    monkeypatch,
+) -> None:
     stale_cache = {
         "entries": [{"id": "cached-entry", "catalog_source": "official"}],
         "fetched_at": (datetime.now(UTC) - timedelta(hours=20)).isoformat(),
@@ -456,7 +468,7 @@ async def test_fetch_catalog_pro_required_does_not_serve_cached_entries(monkeypa
     assert await registry_client.fetch_catalog("mcp") == []
 
 
-def test_clear_registry_cache_when_nothing_cached_does_not_raise():
+def test_clear_registry_cache_when_nothing_cached_does_not_raise() -> None:
     # Erro/borda: limpar cache sem nenhum arquivo existente é no-op seguro.
     registry_client.clear_registry_cache()
 
@@ -464,7 +476,7 @@ def test_clear_registry_cache_when_nothing_cached_does_not_raise():
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_descarta_cache_mcp_legado_e_atualiza(monkeypatch):
+async def test_fetch_catalog_descarta_cache_mcp_legado_e_atualiza(monkeypatch) -> None:
     legacy = {
         "entries": [{"id": "old", "name": "Old"}],
         "fetched_at": datetime.now(UTC).isoformat(),
@@ -498,7 +510,7 @@ async def test_fetch_catalog_descarta_cache_mcp_legado_e_atualiza(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_le_a_library_e_normaliza_as_entradas(monkeypatch):
+async def test_fetch_catalog_le_a_library_e_normaliza_as_entradas(monkeypatch) -> None:
     """A Library responde com `slug`, `origin` e `rank`; o app usa `id`,
     `catalog_source` e `stars_count`."""
     calls: list[str] = []
@@ -541,7 +553,9 @@ async def test_fetch_catalog_le_a_library_e_normaliza_as_entradas(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_fetch_catalog_status_usa_a_rota_de_status_da_library(monkeypatch):
+async def test_fetch_catalog_status_usa_a_rota_de_status_da_library(
+    monkeypatch,
+) -> None:
     calls: list[str] = []
 
     async def _fake_get(self, url, **kwargs):

@@ -39,6 +39,7 @@ from backend.api.handlers.provider_routing import (
     llamacpp_runtime_status,
     remove_llamacpp_runtime,
 )
+from tests.json_values import as_list, as_object
 
 if TYPE_CHECKING:
     from backend.settings import Settings
@@ -66,7 +67,9 @@ def decision_model_settings() -> Settings:
 
 
 @pytest.mark.asyncio
-async def test_decision_model_readiness_reports_missing_remote_credential(monkeypatch):
+async def test_decision_model_readiness_reports_missing_remote_credential(
+    monkeypatch,
+) -> None:
     from backend.api.handlers import provider_routing
 
     monkeypatch.setattr(
@@ -93,7 +96,7 @@ async def test_decision_model_readiness_reports_missing_remote_credential(monkey
 async def test_decision_model_readiness_uses_remote_credentials_from_environment(
     monkeypatch,
     decision_model_settings,
-):
+) -> None:
     from backend.api.handlers import provider_routing
 
     config = decision_model_settings.model_copy(
@@ -139,7 +142,7 @@ async def test_decision_model_readiness_uses_remote_credentials_from_environment
 @pytest.mark.asyncio
 async def test_decision_model_readiness_probes_user_selected_provider(
     monkeypatch, decision_model_settings
-):
+) -> None:
     from backend.api.handlers import provider_routing
 
     config = decision_model_settings
@@ -261,7 +264,7 @@ def app(tmp_path_factory):
 
     import asyncio
 
-    async def _close():
+    async def _close() -> None:
         """Executa a operação  close."""
         if threads_mod._db_conn is not None:
             await threads_mod._db_conn.close()
@@ -280,7 +283,9 @@ def client(app):
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_ollama_config_api_persists_validated_endpoint(client, monkeypatch, tmp_path):
+def test_ollama_config_api_persists_validated_endpoint(
+    client, monkeypatch, tmp_path
+) -> None:
     from backend.api.handlers import provider_routing
     from backend.settings import settings
 
@@ -312,14 +317,14 @@ def test_ollama_config_api_persists_validated_endpoint(client, monkeypatch, tmp_
     "base_url",
     ["", "file:///tmp/ollama", "https://user:pass@example.com", "http://host/path?q=x"],
 )
-def test_ollama_config_api_rejects_invalid_endpoint(client, base_url):
+def test_ollama_config_api_rejects_invalid_endpoint(client, base_url) -> None:
     response = client.post(
         "/provider-routing/ollama/config", json={"base_url": base_url}
     )
     assert response.status_code == 400
 
 
-def test_ollama_test_endpoint_reports_model_catalog(client, monkeypatch):
+def test_ollama_test_endpoint_reports_model_catalog(client, monkeypatch) -> None:
     from backend.api.handlers import provider_routing
 
     async def fake_test(base_url=None, api_key=None):
@@ -425,7 +430,7 @@ def clean_llamacpp_config():
 class TestOllamaDiscovery:
     def test_ollama_release_tag_persists_and_allows_explicit_override(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de ollama release tag persists and allows explicit override."""
         from backend.api.handlers import provider_routing
 
@@ -443,7 +448,7 @@ class TestOllamaDiscovery:
         with pytest.raises(ValueError, match="inválida"):
             provider_routing._ollama_release_tag(tools_dir)
 
-    def test_trusted_cli_rejects_relative_path_from_path(self, monkeypatch):
+    def test_trusted_cli_rejects_relative_path_from_path(self, monkeypatch) -> None:
         """Verifica o comportamento de trusted cli rejects relative path from path."""
         from backend.api.handlers import provider_routing
 
@@ -453,7 +458,7 @@ class TestOllamaDiscovery:
 
     def test_trusted_cli_accepts_existing_absolute_executable(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de trusted cli accepts existing absolute executable."""
         from backend.api.handlers import provider_routing
 
@@ -463,7 +468,7 @@ class TestOllamaDiscovery:
 
         assert provider_routing._trusted_cli_executable("winget") == executable
 
-    def test_host_unreachable_returns_reachable_false_not_500(self, client):
+    def test_host_unreachable_returns_reachable_false_not_500(self, client) -> None:
         # Mocka a falha de conexão explicitamente — não depende da ausência
         # de um Ollama real rodando na máquina de dev (ver memória
         # test-hermeticity-ambient-binary.md: contar com a ausência de um
@@ -484,7 +489,7 @@ class TestOllamaDiscovery:
         assert body["models"] == []
 
     @pytest.mark.asyncio
-    async def test_install_ollama_applies_global_deadline(self, monkeypatch):
+    async def test_install_ollama_applies_global_deadline(self, monkeypatch) -> None:
         """Verifica o comportamento de install ollama applies global deadline."""
         from backend.api.handlers import provider_routing
 
@@ -494,7 +499,7 @@ class TestOllamaDiscovery:
             0.001,
         )
 
-        async def never_finishes(_):
+        async def never_finishes(_) -> None:
             """Executa a operação never finishes."""
             await asyncio.sleep(60)
 
@@ -508,7 +513,9 @@ class TestOllamaDiscovery:
         assert "prazo total" in str(error.value.detail)
 
     @pytest.mark.asyncio
-    async def test_ollama_cleanup_kills_and_waits_with_own_deadline(self, monkeypatch):
+    async def test_ollama_cleanup_kills_and_waits_with_own_deadline(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de ollama cleanup kills and waits with own deadline."""
         from backend.api.handlers import provider_routing
 
@@ -524,7 +531,9 @@ class TestOllamaDiscovery:
         process.wait.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_ollama_cleanup_returns_when_both_waits_hang(self, monkeypatch):
+    async def test_ollama_cleanup_returns_when_both_waits_hang(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de ollama cleanup returns when both waits hang."""
         from backend.api.handlers import provider_routing
 
@@ -532,7 +541,7 @@ class TestOllamaDiscovery:
         process = MagicMock()
         process.kill = MagicMock()
 
-        async def hangs():
+        async def hangs() -> None:
             """Executa a operação hangs."""
             await asyncio.sleep(60)
 
@@ -543,7 +552,9 @@ class TestOllamaDiscovery:
         process.wait.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_ollama_shutdown_stops_only_managed_process(self, monkeypatch):
+    async def test_ollama_shutdown_stops_only_managed_process(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de ollama shutdown stops only managed process."""
         from backend.api.handlers import provider_routing
 
@@ -558,7 +569,9 @@ class TestOllamaDiscovery:
         process.kill.assert_called_once_with()
 
     @pytest.mark.asyncio
-    async def test_install_ollama_serializes_concurrent_requests(self, monkeypatch):
+    async def test_install_ollama_serializes_concurrent_requests(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de install ollama serializes concurrent requests."""
         from backend.api.handlers import provider_routing
 
@@ -566,7 +579,7 @@ class TestOllamaDiscovery:
         active = 0
         maximum = 0
 
-        async def serialized(_):
+        async def serialized(_) -> str:
             """Executa a operação serialized."""
             nonlocal active, maximum
             active += 1
@@ -587,7 +600,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_install_reports_ready_phase_after_readiness(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """O wizard só publica ``ready`` depois de confirmar o endpoint."""
         from backend.api.handlers import provider_routing
 
@@ -609,7 +622,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_missing_linux_runtime_uses_managed_release(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         from backend.api.handlers import provider_routing
 
         executable = tmp_path / "ollama"
@@ -633,7 +646,9 @@ class TestOllamaDiscovery:
         assert result.state == "running"
 
     @pytest.mark.asyncio
-    async def test_ollama_install_cancelled_phase_is_observable(self, monkeypatch):
+    async def test_ollama_install_cancelled_phase_is_observable(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de ollama install cancelled phase is observable."""
         from backend.api.handlers import provider_routing
 
@@ -647,7 +662,9 @@ class TestOllamaDiscovery:
         assert provider_routing._ollama_install_phase == "cancelled"
 
     @pytest.mark.asyncio
-    async def test_ollama_unexpected_failure_leaves_failed_phase(self, monkeypatch):
+    async def test_ollama_unexpected_failure_leaves_failed_phase(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de ollama unexpected failure leaves failed phase."""
         from backend.api.handlers import provider_routing
 
@@ -661,7 +678,9 @@ class TestOllamaDiscovery:
         assert provider_routing._ollama_install_phase == "failed"
 
     @pytest.mark.asyncio
-    async def test_ollama_status_exposes_failed_phase_as_error(self, monkeypatch):
+    async def test_ollama_status_exposes_failed_phase_as_error(
+        self, monkeypatch
+    ) -> None:
         """Verifica o comportamento de ollama status exposes failed phase as error."""
         from backend.api.handlers import provider_routing
 
@@ -681,7 +700,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_resume_rejects_mismatched_content_range(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de ollama resume rejects mismatched content range."""
         from backend.api.handlers import provider_routing
         from backend.settings import settings
@@ -707,7 +726,7 @@ class TestOllamaDiscovery:
             status_code = 206
             headers = {"content-range": "bytes 0-3/4"}
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 """Executa a operação raise for status."""
                 return
 
@@ -729,7 +748,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -742,7 +761,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -767,7 +786,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_download_rejects_digest_mismatch_and_cleans_partial(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """A valid-size installer must still match the publisher digest."""
         from backend.api.handlers import provider_routing
         from backend.settings import settings
@@ -781,7 +800,7 @@ class TestOllamaDiscovery:
             status_code = 200
             headers: dict[str, str] = {}
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 """Executa a operação raise for status."""
                 return
 
@@ -803,7 +822,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -816,7 +835,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -841,7 +860,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_download_preserves_partial_on_transport_error(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """A transient HTTP stream failure must remain resumable."""
         from backend.api.handlers import provider_routing
         from backend.settings import settings
@@ -854,7 +873,7 @@ class TestOllamaDiscovery:
             status_code = 200
             headers: dict[str, str] = {}
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 """Executa a operação raise for status."""
                 return
 
@@ -876,7 +895,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -890,7 +909,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -915,7 +934,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_download_rejects_resume_when_server_ignores_range(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """A resumed download must never append a full 200 response."""
         from backend.api.handlers import provider_routing
         from backend.settings import settings
@@ -942,7 +961,7 @@ class TestOllamaDiscovery:
             status_code = 200
             headers: dict[str, str] = {}
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 """Executa a operação raise for status."""
                 return
 
@@ -964,7 +983,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -973,7 +992,7 @@ class TestOllamaDiscovery:
                 yield b"full-response"
 
         class Client:
-            def __init__(self):
+            def __init__(self) -> None:
                 """Inicializa o estado da instância."""
                 self.headers = None
 
@@ -981,7 +1000,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -1013,7 +1032,7 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_ollama_download_reads_digest_manifest_when_asset_omits_digest(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de ollama download reads digest manifest when asset omits digest."""
         from backend.api.handlers import provider_routing
         from backend.settings import settings
@@ -1029,12 +1048,12 @@ class TestOllamaDiscovery:
             status_code = 200
             headers: dict[str, str] = {}
 
-            def __init__(self, payload=None, text=""):
+            def __init__(self, payload=None, text="") -> None:
                 """Inicializa o estado da instância."""
                 self._payload = payload
                 self.text = text
 
-            def raise_for_status(self):
+            def raise_for_status(self) -> None:
                 """Executa a operação raise for status."""
                 return
 
@@ -1046,7 +1065,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -1059,7 +1078,7 @@ class TestOllamaDiscovery:
                 """Implementa a operação especial __aenter__."""
                 return self
 
-            async def __aexit__(self, *_):
+            async def __aexit__(self, *_) -> bool:
                 """Implementa a operação especial __aexit__."""
                 return False
 
@@ -1116,7 +1135,7 @@ class TestOllamaDiscovery:
         ).exists()
         object.__setattr__(settings, "vectora_home", original_home)
 
-    def test_host_reachable_returns_models(self, client):
+    def test_host_reachable_returns_models(self, client) -> None:
         """Verifica o comportamento de host reachable returns models."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -1144,14 +1163,14 @@ class TestOllamaDiscovery:
     @pytest.mark.asyncio
     async def test_terminate_ollama_process_bounds_log_task_within_budget(
         self, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de terminate ollama process bounds log task within budget."""
         from backend.api.handlers import provider_routing
 
         started_event = asyncio.Event()
 
         # Cria uma task de log que inicia cooperativamente e depois resiste ao cancelamento
-        async def slow_logger():
+        async def slow_logger() -> None:
             """Executa a operação slow logger."""
             started_event.set()
             try:
@@ -1204,7 +1223,7 @@ class TestOllamaRegisteredModels:
         assert response.status_code == 401
         monkeypatch.setenv("VECTORA_AUTH_REQUIRED", "false")
 
-    def test_register_list_and_delete(self, client):
+    def test_register_list_and_delete(self, client) -> None:
         """Verifica o comportamento de register list and delete."""
         create = client.post(
             "/provider-routing/ollama/registered", json={"tag": "qwen3:8b"}
@@ -1222,12 +1241,12 @@ class TestOllamaRegisteredModels:
         listing_after = client.get("/provider-routing/ollama/registered")
         assert all(m["id"] != model_id for m in listing_after.json())
 
-    def test_register_empty_tag_returns_400(self, client):
+    def test_register_empty_tag_returns_400(self, client) -> None:
         """Verifica o comportamento de register empty tag returns 400."""
         resp = client.post("/provider-routing/ollama/registered", json={"tag": "   "})
         assert resp.status_code == 400
 
-    def test_register_duplicate_tag_returns_409(self, client):
+    def test_register_duplicate_tag_returns_409(self, client) -> None:
         """Verifica o comportamento de register duplicate tag returns 409."""
         client.post("/provider-routing/ollama/registered", json={"tag": "dup-model"})
         resp = client.post(
@@ -1237,7 +1256,7 @@ class TestOllamaRegisteredModels:
 
 
 class TestLlamaCppAndHuggingFace:
-    def test_confirmation_evidence_is_canonical_and_parameter_bound(self):
+    def test_confirmation_evidence_is_canonical_and_parameter_bound(self) -> None:
         """Verifica o comportamento de confirmation evidence is canonical and parameter bound."""
         serialized, evidence = _confirmation_evidence_sha256(
             "a" * 64,
@@ -1271,7 +1290,7 @@ class TestLlamaCppAndHuggingFace:
         assert response.json()["configured"] is False
         assert response.json()["base_url"] == "http://127.0.0.1:18080/v1"
 
-    def test_llamacpp_connection_test_reports_empty_catalog(self, client):
+    def test_llamacpp_connection_test_reports_empty_catalog(self, client) -> None:
         """Verifica o comportamento de llamacpp connection test reports empty catalog."""
         response = MagicMock()
         response.status_code = 200
@@ -1286,7 +1305,7 @@ class TestLlamaCppAndHuggingFace:
         assert result.status_code == 200
         assert result.json() == {"status": "empty", "models": [], "detail": None}
 
-    def test_llamacpp_discovery_uses_openai_models_endpoint(self, client):
+    def test_llamacpp_discovery_uses_openai_models_endpoint(self, client) -> None:
         """Verifica o comportamento de llamacpp discovery uses openai models endpoint."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -1310,7 +1329,7 @@ class TestLlamaCppAndHuggingFace:
         assert mock_ctx.get.await_args is not None
         assert mock_ctx.get.await_args.args[0].endswith("/v1/models")
 
-    def test_huggingface_catalog_is_shared_by_runtimes(self, client):
+    def test_huggingface_catalog_is_shared_by_runtimes(self, client) -> None:
         """Verifica o comportamento de huggingface catalog is shared by runtimes."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -1339,17 +1358,17 @@ class TestLlamaCppAndHuggingFace:
         assert mock_ctx.get.await_count == 3
         assert "filter" not in (mock_ctx.get.await_args_list[2].kwargs["params"])
 
-    def test_huggingface_catalog_rejects_unknown_runtime(self, client):
+    def test_huggingface_catalog_rejects_unknown_runtime(self, client) -> None:
         """Verifica o comportamento de huggingface catalog rejects unknown runtime."""
         response = client.get("/provider-routing/huggingface/models?provider=unknown")
         assert response.status_code == 400
 
-    def test_huggingface_metadata_rejects_invalid_repo(self, client):
+    def test_huggingface_metadata_rejects_invalid_repo(self, client) -> None:
         """Verifica o comportamento de huggingface metadata rejects invalid repo."""
         response = client.get("/provider-routing/huggingface/models/not-a-repo")
         assert response.status_code == 400
 
-    def test_huggingface_metadata_exposes_compatibility_fields(self, client):
+    def test_huggingface_metadata_exposes_compatibility_fields(self, client) -> None:
         """Verifica o comportamento de huggingface metadata exposes compatibility fields."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -1381,7 +1400,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_file_metadata_requests_revision_and_published_digest(
         self,
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface file metadata requests revision and published digest."""
         from backend.api.handlers.provider_routing import _huggingface_file_metadata
 
@@ -1415,7 +1434,7 @@ class TestLlamaCppAndHuggingFace:
             "blobs": "true",
         }
 
-    def test_local_executor_requires_desktop_bridge_token(self, monkeypatch):
+    def test_local_executor_requires_desktop_bridge_token(self, monkeypatch) -> None:
         """Verifica o comportamento de local executor requires desktop bridge token."""
         from fastapi import HTTPException
 
@@ -1427,7 +1446,7 @@ class TestLlamaCppAndHuggingFace:
             _require_desktop_bridge(None)
         assert error.value.status_code == 403
 
-    def test_huggingface_download_rejects_path_traversal(self, client):
+    def test_huggingface_download_rejects_path_traversal(self, client) -> None:
         """Verifica o comportamento de huggingface download rejects path traversal."""
         response = client.post(
             "/provider-routing/huggingface/download",
@@ -1440,7 +1459,7 @@ class TestLlamaCppAndHuggingFace:
     )
     def test_huggingface_download_rejects_absolute_or_ambiguous_paths(
         self, client, filename
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface download rejects absolute or ambiguous paths."""
         response = client.post(
             "/provider-routing/huggingface/download",
@@ -1448,7 +1467,7 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
-    def test_huggingface_download_cancel_rejects_path_traversal(self, client):
+    def test_huggingface_download_cancel_rejects_path_traversal(self, client) -> None:
         """Verifica o comportamento de huggingface download cancel rejects path traversal."""
         response = client.delete(
             "/provider-routing/huggingface/download",
@@ -1459,7 +1478,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_cancel_waits_for_download_lock_before_removing_partial(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface cancel waits for download lock before removing partial."""
         from backend.api.handlers import provider_routing as provider_mod
         from backend.api.handlers.provider_routing import cancel_huggingface_download
@@ -1497,7 +1516,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_download_rejects_duplicate_active_transfer(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface download rejects duplicate active transfer."""
         from fastapi import HTTPException
         from starlette.requests import Request
@@ -1537,7 +1556,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_install_writes_manifest_for_selected_files(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface install writes manifest for selected files."""
         from backend.api.handlers.provider_routing import (
             HuggingFaceInstallRequest,
@@ -1595,7 +1614,7 @@ class TestLlamaCppAndHuggingFace:
         assert manifest["quantization"] == "Q4_K_M"
         assert manifest["context_length"] == 8192
         assert manifest["compatibility"] == "provável"
-        assert [item["role"] for item in manifest["files"]] == [
+        assert [as_object(item)["role"] for item in as_list(manifest["files"])] == [
             "model",
             "mmproj",
         ]
@@ -1732,7 +1751,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_install_rejects_file_without_source_metadata(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface install rejects file without source metadata."""
         from fastapi import HTTPException
 
@@ -1760,7 +1779,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_start_uses_active_managed_runtime(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de huggingface start uses active managed runtime."""
         from backend.api.handlers.provider_routing import (
             HuggingFaceStartRequest,
@@ -1801,7 +1820,7 @@ class TestLlamaCppAndHuggingFace:
         started: dict[str, object] = {}
         stop = AsyncMock()
 
-        async def fake_start(executable_arg, model_arg, **options):
+        async def fake_start(executable_arg, model_arg, **options) -> None:
             """Executa a operação fake start."""
             started.update(
                 executable=str(executable_arg),
@@ -1840,7 +1859,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_start_restores_configuration_when_confirmation_fails(
         self, app, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """A falha de confirmação não deixa um endpoint falso como gerenciado."""
         from backend.api.handlers.provider_routing import (
             HuggingFaceStartRequest,
@@ -1906,7 +1925,7 @@ class TestLlamaCppAndHuggingFace:
     @pytest.mark.asyncio
     async def test_huggingface_start_removes_new_env_when_confirmation_fails(
         self, app, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Falha sem .env prévio não deixa um arquivo vazio persistente."""
         from backend.api.handlers.provider_routing import (
             HuggingFaceStartRequest,
@@ -1958,7 +1977,7 @@ class TestLlamaCppAndHuggingFace:
         assert stop.await_count == 1
         assert not (tmp_path / ".env").exists()
 
-    def test_llamacpp_install_rejects_non_official_url(self, client):
+    def test_llamacpp_install_rejects_non_official_url(self, client) -> None:
         """Verifica o comportamento de llamacpp install rejects non official url."""
         response = client.post(
             "/provider-routing/llamacpp/install",
@@ -1966,7 +1985,7 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
-    def test_llamacpp_install_rejects_invalid_checksum(self, client):
+    def test_llamacpp_install_rejects_invalid_checksum(self, client) -> None:
         """Verifica o comportamento de llamacpp install rejects invalid checksum."""
         response = client.post(
             "/provider-routing/llamacpp/install",
@@ -1977,7 +1996,7 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
-    def test_llamacpp_install_requires_checksum(self, client):
+    def test_llamacpp_install_requires_checksum(self, client) -> None:
         response = client.post(
             "/provider-routing/llamacpp/install",
             json={
@@ -1986,7 +2005,7 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
-    def test_llamacpp_runtime_test_rejects_unknown_binary(self, client):
+    def test_llamacpp_runtime_test_rejects_unknown_binary(self, client) -> None:
         """Verifica o comportamento de llamacpp runtime test rejects unknown binary."""
         response = client.post(
             "/provider-routing/llamacpp/runtime/test",
@@ -1994,7 +2013,7 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
-    def test_llamacpp_model_confirmation_rejects_unmanaged_path(self, client):
+    def test_llamacpp_model_confirmation_rejects_unmanaged_path(self, client) -> None:
         """Verifica o comportamento de llamacpp model confirmation rejects unmanaged path."""
         response = client.post(
             "/provider-routing/llamacpp/models/confirm",
@@ -2006,7 +2025,7 @@ class TestLlamaCppAndHuggingFace:
         )
         assert response.status_code == 400
 
-    def test_llamacpp_archive_extraction_rejects_traversal(self, tmp_path):
+    def test_llamacpp_archive_extraction_rejects_traversal(self, tmp_path) -> None:
         """Verifica o comportamento de llamacpp archive extraction rejects traversal."""
         archive = tmp_path / "runtime.zip"
         with zipfile.ZipFile(archive, "w") as bundle:
@@ -2014,7 +2033,7 @@ class TestLlamaCppAndHuggingFace:
         with pytest.raises(ValueError):
             _extract_llamacpp_archive(archive, tmp_path / "runtime")
 
-    def test_llamacpp_archive_extraction_returns_files(self, tmp_path):
+    def test_llamacpp_archive_extraction_returns_files(self, tmp_path) -> None:
         """Verifica o comportamento de llamacpp archive extraction returns files."""
         archive = tmp_path / "runtime.zip"
         destination = tmp_path / "runtime"
@@ -2035,12 +2054,14 @@ class TestLlamaCppAndHuggingFace:
             ("FreeBSD", "x86_64", None),
         ],
     )
-    def test_ollama_asset_matches_supported_platforms(self, system, machine, expected):
+    def test_ollama_asset_matches_supported_platforms(
+        self, system, machine, expected
+    ) -> None:
         from backend.api.handlers.provider_routing import _ollama_asset_name
 
         assert _ollama_asset_name(system, machine) == expected
 
-    def test_ollama_archive_extraction_rejects_path_traversal(self, tmp_path):
+    def test_ollama_archive_extraction_rejects_path_traversal(self, tmp_path) -> None:
         from backend.api.handlers.provider_routing import _extract_ollama_archive
 
         archive = tmp_path / "ollama.tgz"
@@ -2051,7 +2072,7 @@ class TestLlamaCppAndHuggingFace:
         with pytest.raises(ValueError, match="fora do diretório"):
             _extract_ollama_archive(archive, tmp_path / "runtime")
 
-    def test_ollama_archive_extraction_handles_zstandard(self, tmp_path):
+    def test_ollama_archive_extraction_handles_zstandard(self, tmp_path) -> None:
         import io
 
         import zstandard
@@ -2087,14 +2108,16 @@ class TestLlamaCppAndHuggingFace:
     )
     def test_llamacpp_recommends_only_supported_cpu_asset(
         self, name, system, machine, expected
-    ):
+    ) -> None:
         from backend.api.handlers.provider_routing import _llamacpp_asset_recommended
 
         assert _llamacpp_asset_recommended(name, system, machine) is expected
 
 
 class TestOpenRouterKey:
-    def test_status_not_configured_by_default(self, client, clean_openrouter_key):
+    def test_status_not_configured_by_default(
+        self, client, clean_openrouter_key
+    ) -> None:
         """Verifica o comportamento de status not configured by default."""
         os.environ.pop("OPENROUTER_API_KEY", None)
         resp = client.get("/provider-routing/openrouter/status")
@@ -2103,7 +2126,7 @@ class TestOpenRouterKey:
 
     def test_set_key_valid_persists_and_masks(
         self, client, clean_openrouter_key, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de set key valid persists and masks."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -2135,7 +2158,7 @@ class TestOpenRouterKey:
 
     def test_set_key_rejected_by_openrouter_returns_400(
         self, client, clean_openrouter_key, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de set key rejected by openrouter returns 400."""
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -2162,7 +2185,7 @@ class TestOpenRouterKey:
 
     def test_set_key_empty_returns_400_without_network_call(
         self, client, clean_openrouter_key
-    ):
+    ) -> None:
         """Verifica o comportamento de set key empty returns 400 without network call."""
         with patch("httpx.AsyncClient") as mock_httpx:
             resp = client.post(
@@ -2171,7 +2194,9 @@ class TestOpenRouterKey:
         assert resp.status_code == 400
         mock_httpx.assert_not_called()
 
-    def test_clear_key_removes_env(self, client, clean_openrouter_key, tmp_path):
+    def test_clear_key_removes_env(
+        self, client, clean_openrouter_key, tmp_path
+    ) -> None:
         """Verifica o comportamento de clear key removes env."""
         os.environ["OPENROUTER_API_KEY"] = "sk-or-v1-should-be-removed"
         with patch(
@@ -2231,7 +2256,7 @@ class TestOpenRouterCatalog:
         finally:
             app.dependency_overrides.pop(_get_http_client, None)
 
-    def test_catalog_returns_models(self, app, client):
+    def test_catalog_returns_models(self, app, client) -> None:
         """Verifica o comportamento de catalog returns models."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -2260,7 +2285,7 @@ class TestOpenRouterCatalog:
         ids = [m["id"] for m in resp.json()["models"]]
         assert ids == ["openai/gpt-4o", "anthropic/claude-3.5-sonnet"]
 
-    def test_catalog_filters_by_q(self, app, client):
+    def test_catalog_filters_by_q(self, app, client) -> None:
         """Verifica o comportamento de catalog filters by q."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -2287,7 +2312,7 @@ class TestOpenRouterCatalog:
         ids = [m["id"] for m in resp.json()["models"]]
         assert ids == ["anthropic/claude-3.5-sonnet"]
 
-    def test_catalog_network_error_cai_no_fallback_e_nao_500(self, app, client):
+    def test_catalog_network_error_cai_no_fallback_e_nao_500(self, app, client) -> None:
         """Erro de rede nunca vira 500 — e, desde o cliente nativo, também
         não vira lista vazia: cai na lista embutida (ver
         `OPENROUTER_FALLBACK_MODELS`), senão o seletor de modelo aparece sem
@@ -2304,7 +2329,7 @@ class TestOpenRouterCatalog:
 
     def test_catalog_stale_sentinel_survives_low_monotonic_clock(
         self, app, client, monkeypatch
-    ):
+    ) -> None:
         """Bug real reproduzido só em CI (Linux, VM efêmera recém-bootada),
         nunca localmente: `time.monotonic()` não conta a partir de zero —
         reflete o uptime da máquina. Numa VM com menos de
@@ -2334,7 +2359,7 @@ class TestOpenRouterCatalog:
 
 
 class TestOpenRouterRegisteredModels:
-    def test_register_list_and_delete(self, client):
+    def test_register_list_and_delete(self, client) -> None:
         """Verifica o comportamento de register list and delete."""
         create = client.post(
             "/provider-routing/openrouter/registered", json={"tag": "openai/gpt-4o"}
@@ -2352,14 +2377,14 @@ class TestOpenRouterRegisteredModels:
         listing_after = client.get("/provider-routing/openrouter/registered")
         assert all(m["id"] != model_id for m in listing_after.json())
 
-    def test_register_empty_tag_returns_400(self, client):
+    def test_register_empty_tag_returns_400(self, client) -> None:
         """Verifica o comportamento de register empty tag returns 400."""
         resp = client.post(
             "/provider-routing/openrouter/registered", json={"tag": "   "}
         )
         assert resp.status_code == 400
 
-    def test_register_duplicate_tag_returns_409(self, client):
+    def test_register_duplicate_tag_returns_409(self, client) -> None:
         """Verifica o comportamento de register duplicate tag returns 409."""
         client.post(
             "/provider-routing/openrouter/registered", json={"tag": "dup/model"}
@@ -2388,7 +2413,7 @@ class TestCatalogoOpenRouterComFallback:
         pr._catalog_cache["models"] = []
 
     @pytest.mark.asyncio
-    async def test_rede_ok_devolve_o_catalogo_real(self):
+    async def test_rede_ok_devolve_o_catalogo_real(self) -> None:
         """Verifica o comportamento de rede ok devolve o catalogo real."""
         from unittest.mock import AsyncMock, MagicMock
 
@@ -2416,7 +2441,7 @@ class TestCatalogoOpenRouterComFallback:
         assert [m.id for m in resultado.models] == ["algum/modelo-novo"]
 
     @pytest.mark.asyncio
-    async def test_rede_fora_com_cache_vazio_cai_na_lista_embutida(self):
+    async def test_rede_fora_com_cache_vazio_cai_na_lista_embutida(self) -> None:
         """Erro/borda: é o caso que hoje devolve `models=[]`."""
         from unittest.mock import AsyncMock, MagicMock
 
@@ -2437,7 +2462,7 @@ class TestCatalogoOpenRouterComFallback:
         }
 
     @pytest.mark.asyncio
-    async def test_busca_filtra_tambem_no_fallback(self):
+    async def test_busca_filtra_tambem_no_fallback(self) -> None:
         """Verifica o comportamento de busca filtra tambem no fallback."""
         from unittest.mock import AsyncMock, MagicMock
 
@@ -2453,7 +2478,7 @@ class TestCatalogoOpenRouterComFallback:
         assert all("anthropic" in m.id.lower() for m in resultado.models)
 
     @pytest.mark.asyncio
-    async def test_fallback_nao_sobrescreve_cache_valido(self):
+    async def test_fallback_nao_sobrescreve_cache_valido(self) -> None:
         """Erro/borda: uma falha momentânea não pode substituir o catálogo
         real já em cache pela lista curta embutida."""
         from unittest.mock import AsyncMock, MagicMock
@@ -2476,7 +2501,7 @@ class TestCatalogoOpenRouterComFallback:
         assert [m.id for m in resultado.models] == ["cacheado/modelo"]
 
     @pytest.mark.asyncio
-    async def test_catalogo_extrai_input_modalities_por_modelo(self):
+    async def test_catalogo_extrai_input_modalities_por_modelo(self) -> None:
         """`input_modalities` varia por modelo — não é um campo fixo do
         provider, é o que permite checar vision por modelo em vez de por
         provider inteiro."""
@@ -2526,7 +2551,7 @@ class TestOpenRouterModelSupportsImage:
         pr._catalog_cache["models"] = []
 
     @pytest.mark.asyncio
-    async def test_modelo_com_image_no_catalogo_retorna_true(self):
+    async def test_modelo_com_image_no_catalogo_retorna_true(self) -> None:
         """Verifica o comportamento de modelo com image no catalogo retorna true."""
         from backend.api.handlers import provider_routing as pr
         from backend.api.handlers.provider_routing import (
@@ -2545,7 +2570,7 @@ class TestOpenRouterModelSupportsImage:
         assert await openrouter_model_supports_image("openai/gpt-4o") is True
 
     @pytest.mark.asyncio
-    async def test_modelo_com_modalidade_image_com_espacos_retorna_true(self):
+    async def test_modelo_com_modalidade_image_com_espacos_retorna_true(self) -> None:
         """Verifica o comportamento de modelo com modalidade image com espacos retorna true."""
         from backend.api.handlers import provider_routing as pr
         from backend.api.handlers.provider_routing import (
@@ -2570,7 +2595,7 @@ class TestOpenRouterModelSupportsImage:
         )
 
     @pytest.mark.asyncio
-    async def test_modelo_sem_image_no_catalogo_retorna_false(self):
+    async def test_modelo_sem_image_no_catalogo_retorna_false(self) -> None:
         """Erro/borda central deste bug: nem todo modelo do OpenRouter
         processa imagem — o catálogo é quem decide, não o provider."""
         from backend.api.handlers import provider_routing as pr
@@ -2592,7 +2617,7 @@ class TestOpenRouterModelSupportsImage:
         assert await openrouter_model_supports_image("deepseek/deepseek-r1") is False
 
     @pytest.mark.asyncio
-    async def test_modelo_ausente_do_catalogo_falha_aberto(self, monkeypatch):
+    async def test_modelo_ausente_do_catalogo_falha_aberto(self, monkeypatch) -> None:
         """Modelo não encontrado (id incomum, catálogo indisponível) não
         pode bloquear preventivamente — fail-open deixa a chamada real ao
         provider decidir."""
@@ -2611,7 +2636,7 @@ class TestOpenRouterModelSupportsImage:
         assert await openrouter_model_supports_image("id/inexistente") is True
 
     @pytest.mark.asyncio
-    async def test_cache_vazio_tenta_popular_antes_de_checar(self, monkeypatch):
+    async def test_cache_vazio_tenta_popular_antes_de_checar(self, monkeypatch) -> None:
         """Verifica o comportamento de cache vazio tenta popular antes de checar."""
         from backend.api.handlers import provider_routing as pr
         from backend.api.handlers.provider_routing import (
@@ -2620,7 +2645,7 @@ class TestOpenRouterModelSupportsImage:
 
         self._reset_cache()
 
-        async def _fake_ensure(client):
+        async def _fake_ensure(client) -> None:
             """Executa a operação  fake ensure."""
             pr._catalog_cache["models"] = [
                 pr.OpenRouterModelInfo(
@@ -2637,7 +2662,9 @@ class TestOpenRouterModelSupportsImage:
 
 
 class TestNineRouterConfig:
-    def test_status_not_configured_by_default(self, client, clean_nine_router_config):
+    def test_status_not_configured_by_default(
+        self, client, clean_nine_router_config
+    ) -> None:
         """Verifica o comportamento de status not configured by default."""
         resp = client.get("/provider-routing/nine-router/status")
         assert resp.status_code == 200
@@ -2647,7 +2674,7 @@ class TestNineRouterConfig:
 
     def test_set_config_persists_both_fields(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de set config persists both fields."""
         with patch(
             "backend.api.handlers.provider_routing._env_file",
@@ -2671,7 +2698,7 @@ class TestNineRouterConfig:
 
     def test_set_config_empty_base_url_returns_400(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de set config empty base url returns 400."""
         with patch(
             "backend.api.handlers.provider_routing._env_file",
@@ -2686,7 +2713,7 @@ class TestNineRouterConfig:
 
     def test_set_config_empty_api_key_returns_400(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de set config empty api key returns 400."""
         with patch(
             "backend.api.handlers.provider_routing._env_file",
@@ -2701,7 +2728,7 @@ class TestNineRouterConfig:
 
     def test_clear_config_removes_both(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de clear config removes both."""
         with patch(
             "backend.api.handlers.provider_routing._env_file",
@@ -2721,7 +2748,7 @@ class TestNineRouterConfig:
 class TestNineRouterDiscovery:
     def test_not_configured_returns_reachable_false_not_500(
         self, client, clean_nine_router_config
-    ):
+    ) -> None:
         """Verifica o comportamento de not configured returns reachable false not 500."""
         resp = client.get("/provider-routing/nine-router/models")
         assert resp.status_code == 200
@@ -2731,7 +2758,7 @@ class TestNineRouterDiscovery:
 
     def test_host_unreachable_returns_reachable_false_not_500(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de host unreachable returns reachable false not 500."""
         with patch(
             "backend.api.handlers.provider_routing._env_file",
@@ -2757,7 +2784,7 @@ class TestNineRouterDiscovery:
 
     def test_host_reachable_returns_models(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """Verifica o comportamento de host reachable returns models."""
         with patch(
             "backend.api.handlers.provider_routing._env_file",
@@ -2794,7 +2821,7 @@ class TestNineRouterDiscovery:
 
     def test_only_chat_models_are_listed_with_their_provider(
         self, client, clean_nine_router_config, tmp_path
-    ):
+    ) -> None:
         """O OmniRoute lista imagem, áudio e embedding junto: só chat sai, e o
         provider de origem acompanha cada modelo. Pede `kind=chat` ao roteador."""
         with patch(
@@ -2838,7 +2865,7 @@ class TestNineRouterDiscovery:
 @pytest.mark.asyncio
 async def test_nine_router_model_without_modalities_is_unknown(
     clean_nine_router_config,
-):
+) -> None:
     """Catálogo sem metadados não deve bloquear imagem como se fosse texto-only."""
     from backend.api.handlers import provider_routing as pr
     from backend.settings import CapabilityState, settings
@@ -2865,7 +2892,7 @@ async def test_nine_router_model_without_modalities_is_unknown(
 @pytest.mark.asyncio
 async def test_nine_router_explicit_text_modality_is_unsupported(
     clean_nine_router_config,
-):
+) -> None:
     """Uma declaração explícita de texto continua identificando modelo sem visão."""
     from backend.api.handlers import provider_routing as pr
     from backend.settings import CapabilityState, settings
@@ -2892,7 +2919,7 @@ async def test_nine_router_explicit_text_modality_is_unsupported(
 
 
 class TestNineRouterRegisteredModels:
-    def test_register_list_and_delete(self, client):
+    def test_register_list_and_delete(self, client) -> None:
         """Verifica o comportamento de register list and delete."""
         create = client.post(
             "/provider-routing/nine-router/registered",
@@ -2911,14 +2938,14 @@ class TestNineRouterRegisteredModels:
         listing_after = client.get("/provider-routing/nine-router/registered")
         assert all(m["id"] != model_id for m in listing_after.json())
 
-    def test_register_empty_tag_returns_400(self, client):
+    def test_register_empty_tag_returns_400(self, client) -> None:
         """Verifica o comportamento de register empty tag returns 400."""
         resp = client.post(
             "/provider-routing/nine-router/registered", json={"tag": "   "}
         )
         assert resp.status_code == 400
 
-    def test_register_duplicate_tag_returns_409(self, client):
+    def test_register_duplicate_tag_returns_409(self, client) -> None:
         """Verifica o comportamento de register duplicate tag returns 409."""
         client.post(
             "/provider-routing/nine-router/registered", json={"tag": "dup/nine-model"}
@@ -2930,7 +2957,7 @@ class TestNineRouterRegisteredModels:
 
 
 class TestLlamaCppConfiguration:
-    def test_managed_mode_requires_ready_sidecar(self, client, monkeypatch):
+    def test_managed_mode_requires_ready_sidecar(self, client, monkeypatch) -> None:
         """Verifica o comportamento de managed mode requires ready sidecar."""
         monkeypatch.delenv("LLAMACPP_MODE", raising=False)
         monkeypatch.setattr(
@@ -2944,7 +2971,7 @@ class TestLlamaCppConfiguration:
 
     def test_external_mode_is_persisted_without_copying_credentials(
         self, client, clean_llamacpp_config, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de external mode is persisted without copying credentials."""
         monkeypatch.setattr(
             "backend.api.handlers.provider_routing._env_file",
@@ -2987,7 +3014,9 @@ class TestLlamaCppConfiguration:
         assert "LLAMACPP_MODEL" not in os.environ
 
     @pytest.mark.asyncio
-    async def test_runtime_status_reads_installed_manifest(self, tmp_path, monkeypatch):
+    async def test_runtime_status_reads_installed_manifest(
+        self, tmp_path, monkeypatch
+    ) -> None:
         """Verifica o comportamento de runtime status reads installed manifest."""
         from backend.settings import settings
 
@@ -3019,7 +3048,7 @@ class TestLlamaCppConfiguration:
     @pytest.mark.asyncio
     async def test_runtime_status_distinguishes_external_mode_without_managed_files(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de runtime status distinguishes external mode without managed files."""
         from backend.api.handlers.provider_routing import llamacpp_runtime_status
         from backend.settings import settings
@@ -3041,7 +3070,7 @@ class TestLlamaCppConfiguration:
     @pytest.mark.asyncio
     async def test_runtime_status_marks_persisted_unknown_process(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de runtime status marks persisted unknown process."""
         from backend.api.handlers.provider_routing import llamacpp_runtime_status
         from backend.settings import settings
@@ -3065,7 +3094,7 @@ class TestLlamaCppConfiguration:
     @pytest.mark.asyncio
     async def test_runtime_status_detects_system_llama_server(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         from backend.api.handlers.provider_routing import llamacpp_runtime_status
         from backend.settings import settings
 
@@ -3085,7 +3114,7 @@ class TestLlamaCppConfiguration:
         assert status["external"] is True
 
     @pytest.mark.asyncio
-    async def test_runtime_removal_rejects_active_sidecar(self, monkeypatch):
+    async def test_runtime_removal_rejects_active_sidecar(self, monkeypatch) -> None:
         """Verifica o comportamento de runtime removal rejects active sidecar."""
         monkeypatch.setattr(
             "backend.services.llamacpp_sidecar.llamacpp_status",
@@ -3098,7 +3127,7 @@ class TestLlamaCppConfiguration:
     @pytest.mark.asyncio
     async def test_runtime_rollback_activates_registered_version(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de runtime rollback activates registered version."""
         from backend.api.handlers.provider_routing import rollback_llamacpp_runtime
         from backend.settings import settings
@@ -3122,7 +3151,7 @@ class TestLlamaCppConfiguration:
     @pytest.mark.asyncio
     async def test_runtime_version_removal_keeps_active_version(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de runtime version removal keeps active version."""
         from backend.api.handlers.provider_routing import (
             remove_llamacpp_runtime_version,
@@ -3146,7 +3175,7 @@ class TestLlamaCppConfiguration:
     @pytest.mark.asyncio
     async def test_runtime_cleanup_retains_active_and_newest_inactive_versions(
         self, tmp_path, monkeypatch
-    ):
+    ) -> None:
         """Verifica o comportamento de runtime cleanup retains active and newest inactive versions."""
         from backend.api.handlers.provider_routing import (
             LlamaCppRetentionRequest,
@@ -3191,7 +3220,7 @@ class TestLlamaCppConfiguration:
         assert not (versions / oldest).exists()
 
     @pytest.mark.asyncio
-    async def test_runtime_transitions_are_serialized(self):
+    async def test_runtime_transitions_are_serialized(self) -> None:
         """Verifica o comportamento de runtime transitions are serialized."""
         from backend.api.handlers.provider_routing import _runtime_transition
 
@@ -3212,7 +3241,7 @@ class TestLlamaCppConfiguration:
         )
 
     @pytest.mark.asyncio
-    async def test_runtime_validation_requires_llama_server(self):
+    async def test_runtime_validation_requires_llama_server(self) -> None:
         """Verifica o comportamento de runtime validation requires llama server."""
         from backend.api.handlers.provider_routing import _validate_runtime_executable
 
@@ -3271,7 +3300,7 @@ def test_decision_model_status_with_empty_local_model(
 
 
 @pytest.mark.asyncio
-async def test_decision_model_readiness_openrouter_sem_chave(monkeypatch):
+async def test_decision_model_readiness_openrouter_sem_chave(monkeypatch) -> None:
     """O OpenRouter usa a chave do próprio OpenRouter; sem ela nada é sondado."""
     from backend.api.handlers import provider_routing
 
@@ -3299,7 +3328,7 @@ async def test_decision_model_readiness_openrouter_sem_chave(monkeypatch):
 @pytest.mark.asyncio
 async def test_decision_model_readiness_openrouter_com_chave_sonda_o_provider(
     monkeypatch, decision_model_settings
-):
+) -> None:
     from backend.api.handlers import provider_routing
 
     config = decision_model_settings.model_copy(

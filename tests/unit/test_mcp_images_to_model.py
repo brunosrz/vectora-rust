@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -15,6 +16,7 @@ from backend.services.tool_media import tool_image_blocks
 from backend.settings import settings
 from backend.tools.context import ToolContext
 from backend.tools.mcp import VectoraMCPClient, _render_call_result
+from tests.json_values import as_object
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 16
 _DUMMY_SERVER = str(
@@ -40,7 +42,7 @@ def _image(data: bytes = PNG) -> SimpleNamespace:
 
 
 def test_imagens_viram_assets_e_nao_entram_em_base64(home: Path) -> None:
-    result = SimpleNamespace(
+    result = MagicMock(
         content=[
             SimpleNamespace(type="text", text="duas capturas"),
             _image(),
@@ -60,7 +62,7 @@ def test_imagens_viram_assets_e_nao_entram_em_base64(home: Path) -> None:
 
 
 def test_sem_contexto_audio_e_recurso_viram_nota() -> None:
-    result = SimpleNamespace(
+    result = MagicMock(
         content=[
             _image(),
             SimpleNamespace(type="audio", data="AAAA", mimeType="audio/wav"),
@@ -80,7 +82,7 @@ def test_sem_contexto_audio_e_recurso_viram_nota() -> None:
 
 
 def test_erro_da_tool_nao_anexa_imagem(home: Path) -> None:
-    result = SimpleNamespace(content=[_image()], isError=True)
+    result = MagicMock(content=[_image()], isError=True)
     rendered = _render_call_result(result, _ctx())
     assert rendered.startswith("Erro da tool MCP:")
     assert tool_image_blocks(rendered) == []
@@ -116,7 +118,7 @@ async def test_tool_de_plugin_repassa_o_contexto(
 
     received: list[object] = []
 
-    async def fake_call(self, tool_name, arguments, ctx=None):
+    async def fake_call(self, tool_name, arguments, ctx=None) -> str:
         received.append((tool_name, arguments, ctx))
         return "ok"
 
@@ -132,15 +134,14 @@ async def test_tool_de_plugin_repassa_o_contexto(
     )
     monkeypatch.setattr(plugins.tool_policy, "is_allowed", lambda *_a: True)
 
-    tool = SimpleNamespace(
-        name="capturar",
+    tool = MagicMock(
         description="",
         input_schema={"type": "object", "properties": {"url": {"type": "string"}}},
     )
+    tool.name = "capturar"
     spec = plugins._remote_tool_spec("srv", {"transport": "stdio"}, tool, "u1", "w1")
     ctx = _ctx()
     assert await spec.ainvoke({"url": "https://x"}, ctx) == "ok"
     assert received == [("capturar", {"url": "https://x"}, ctx)]
-    assert "__vectora_tool_context" not in spec.openai_schema()["function"][
-        "parameters"
-    ].get("properties", {})
+    parameters = spec.openai_schema()["function"]["parameters"]
+    assert "__vectora_tool_context" not in as_object(parameters.get("properties", {}))

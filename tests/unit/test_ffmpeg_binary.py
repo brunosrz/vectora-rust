@@ -11,7 +11,7 @@ import backend.services.ffmpeg_binary as mod
 class TestResolveFfmpeg:
     def test_prioriza_bundle_congelado_sobre_path_e_resources(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Ordem: bundle congelado → PATH → resources/. Um binário
         no bundle vence mesmo com PATH e resources também tendo um."""
         bundle_dir = tmp_path / "bundle"
@@ -29,7 +29,7 @@ class TestResolveFfmpeg:
 
         assert mod.resolve_ffmpeg() == str(bundle_bin)
 
-    def test_sem_bundle_usa_path_do_sistema(self, monkeypatch, tmp_path):
+    def test_sem_bundle_usa_path_do_sistema(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setattr(mod, "_frozen_bundle_bases", list)
         monkeypatch.setattr(mod, "_resources_dir", lambda: tmp_path / "resources")
         monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
@@ -38,7 +38,7 @@ class TestResolveFfmpeg:
 
     def test_sem_bundle_e_sem_path_cai_pro_vectora_resources(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         resources_dir = tmp_path / "resources"
         resources_dir.mkdir()
         ffprobe_bin = resources_dir / mod._exe_name("ffprobe")
@@ -52,7 +52,7 @@ class TestResolveFfmpeg:
 
     def test_nada_encontrado_em_lugar_nenhum_devolve_none_sem_lancar(
         self, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Erro/borda: sem bundle, sem PATH e sem `resources/` —
         devolve `None` sem lançar. O chamador (`media_native.py`) degrada
         a feature (erro tipado pro LLM), nunca derruba o backend

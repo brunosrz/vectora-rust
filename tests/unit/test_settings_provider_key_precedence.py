@@ -13,10 +13,10 @@ from backend.settings import PROVIDER_API_KEY_ENV, Settings
 
 
 class TestProviderApiKeyEnvRegistry:
-    def test_tavily_registrada_no_dict_de_precedencia(self):
+    def test_tavily_registrada_no_dict_de_precedencia(self) -> None:
         assert PROVIDER_API_KEY_ENV["tavily"] == "TAVILY_API_KEY"
 
-    def test_todas_as_chaves_conhecidas_ainda_presentes_regressao(self):
+    def test_todas_as_chaves_conhecidas_ainda_presentes_regressao(self) -> None:
         assert PROVIDER_API_KEY_ENV["google-genai"] == "GOOGLE_API_KEY"
         assert PROVIDER_API_KEY_ENV["openai"] == "OPENAI_API_KEY"
         assert PROVIDER_API_KEY_ENV["anthropic"] == "ANTHROPIC_API_KEY"
@@ -49,7 +49,7 @@ def _isolated_env_hierarchy(tmp_path, monkeypatch):
 class TestTavilyKeyPrecedence:
     def test_nine_router_key_user_env_wins_over_project_env(
         self, _isolated_env_hierarchy
-    ):
+    ) -> None:
         vectora_home, project_dir = _isolated_env_hierarchy
         (vectora_home / ".env").write_text(
             "NINE_ROUTER_API_KEY=user-nine-key\n", encoding="utf-8"
@@ -64,7 +64,7 @@ class TestTavilyKeyPrecedence:
 
     def test_nine_router_model_restored_from_runtime_settings(
         self, _isolated_env_hierarchy, monkeypatch
-    ):
+    ) -> None:
         import backend.settings as settings_mod
         from backend.workspace.runtime_settings import runtime_settings
 
@@ -87,7 +87,9 @@ class TestTavilyKeyPrecedence:
         assert os.environ["LLM_PROVIDER"] == "nine_router"
         assert os.environ["NINE_ROUTER_MODEL"] == "cx/gpt-5.6-luna"
 
-    def test_env_de_projeto_nao_vence_env_do_usuario(self, _isolated_env_hierarchy):
+    def test_env_de_projeto_nao_vence_env_do_usuario(
+        self, _isolated_env_hierarchy
+    ) -> None:
         vectora_home, project_dir = _isolated_env_hierarchy
         (vectora_home / ".env").write_text("TAVILY_API_KEY=tvly-user-value\n")
         (project_dir / ".env").write_text("TAVILY_API_KEY=tvly-project-leftover\n")
@@ -98,7 +100,7 @@ class TestTavilyKeyPrecedence:
 
     def test_regressao_google_api_key_continua_restaurada(
         self, _isolated_env_hierarchy
-    ):
+    ) -> None:
         vectora_home, project_dir = _isolated_env_hierarchy
         (vectora_home / ".env").write_text("GOOGLE_API_KEY=AIza-user-value\n")
         (project_dir / ".env").write_text("GOOGLE_API_KEY=AIza-project-leftover\n")
@@ -107,7 +109,9 @@ class TestTavilyKeyPrecedence:
 
         assert os.environ["GOOGLE_API_KEY"] == "AIza-user-value"
 
-    def test_sem_env_de_usuario_projeto_prevalece_borda(self, _isolated_env_hierarchy):
+    def test_sem_env_de_usuario_projeto_prevalece_borda(
+        self, _isolated_env_hierarchy
+    ) -> None:
         _vectora_home, project_dir = _isolated_env_hierarchy
         (project_dir / ".env").write_text("TAVILY_API_KEY=tvly-only-project\n")
 

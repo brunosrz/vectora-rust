@@ -83,7 +83,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app = FastAPI()
     app.include_router(router)
 
-    def attach_user(request):
+    def attach_user(request) -> None:
         request.state.user = SimpleNamespace(id="user-123")
 
     app.middleware("http")(lambda req, call_next: (attach_user(req), call_next(req))[1])

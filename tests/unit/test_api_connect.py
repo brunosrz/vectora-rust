@@ -31,7 +31,7 @@ def _req(user_id: str | None = "u1") -> Request:
 
 
 @pytest.fixture(autouse=True)
-def _isolated_runtime_settings(tmp_path, monkeypatch):
+def _isolated_runtime_settings(tmp_path, monkeypatch) -> None:
     from backend.workspace import runtime_settings as rs_module
 
     fresh = RuntimeSettings(path=tmp_path / "settings.json")
@@ -54,7 +54,7 @@ def _sem_sync_de_verdade(monkeypatch):
 
 
 class TestGetStatus:
-    async def test_lista_as_4_plataformas_com_estado_correto(self, monkeypatch):
+    async def test_lista_as_4_plataformas_com_estado_correto(self, monkeypatch) -> None:
         monkeypatch.setenv("VECTORA_LICENSE_BYPASS", "1")
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:abc")
         for var in (
@@ -75,7 +75,7 @@ class TestGetStatus:
         }
         assert out["discord"]["configured"] is False
 
-    async def test_sem_autenticacao_levanta_401(self):
+    async def test_sem_autenticacao_levanta_401(self) -> None:
         with pytest.raises(HTTPException) as exc_info:
             await get_status(_req(None))
         assert exc_info.value.status_code == 401
@@ -84,7 +84,7 @@ class TestGetStatus:
 class TestSetPlatformEnabled:
     async def test_liga_plataforma_configurada_e_reconcilia(
         self, monkeypatch, _sem_sync_de_verdade
-    ):
+    ) -> None:
         monkeypatch.setenv("VECTORA_LICENSE_BYPASS", "1")
         monkeypatch.setenv("DISCORD_BOT_TOKEN", "tok")
 
@@ -98,7 +98,7 @@ class TestSetPlatformEnabled:
 
     async def test_liga_plataforma_sem_credencial_persiste_sem_erro(
         self, monkeypatch, _sem_sync_de_verdade
-    ):
+    ) -> None:
         monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
         monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
 
@@ -112,7 +112,7 @@ class TestSetPlatformEnabled:
         assert manager.is_enabled("slack") is True
         assert "slack" not in manager.configured_platforms()
 
-    async def test_plataforma_desconhecida_404(self, _sem_sync_de_verdade):
+    async def test_plataforma_desconhecida_404(self, _sem_sync_de_verdade) -> None:
         with pytest.raises(HTTPException) as exc_info:
             await set_platform_enabled(
                 "myspace", SetEnabledRequest(enabled=True), _req()
@@ -120,7 +120,7 @@ class TestSetPlatformEnabled:
         assert exc_info.value.status_code == 404
         assert len(_sem_sync_de_verdade) == 0
 
-    async def test_sem_autenticacao_levanta_401(self, _sem_sync_de_verdade):
+    async def test_sem_autenticacao_levanta_401(self, _sem_sync_de_verdade) -> None:
         with pytest.raises(HTTPException) as exc_info:
             await set_platform_enabled(
                 "discord", SetEnabledRequest(enabled=True), _req(None)

@@ -139,7 +139,7 @@ def _patch_native_engine(
 class TestRunAgentForThread:
     async def test_roda_o_turno_e_devolve_o_texto_final(
         self, native_session_store, monkeypatch
-    ):
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("Olá! Como posso ajudar?")]])
         _patch_native_engine(
             monkeypatch, session_store=native_session_store, chat_client=client
@@ -174,7 +174,7 @@ class TestRunAgentForThread:
 
     async def test_segunda_mensagem_na_mesma_thread_reusa_o_historico(
         self, native_session_store, monkeypatch
-    ):
+    ) -> None:
         """Cada chamada relê o histórico persistido — a 2ª mensagem do mesmo
         `thread_id` não recria o system prompt nem perde o turno anterior."""
         _patch_native_engine(
@@ -203,7 +203,7 @@ class TestRunAgentForThread:
 
     async def test_tool_destrutiva_nunca_pausa_em_hitl_mensageria_externa(
         self, native_session_store, monkeypatch
-    ):
+    ) -> None:
         """`permission_mode` fixo em "auto" — o interlocutor externo não tem
         UI de aprovar/rejeitar, então uma tool destrutiva roda direto em vez
         de deixar o turno preso esperando aprovação que nunca chega."""
@@ -254,7 +254,7 @@ class TestRunAgentForThread:
 
     async def test_conector_nao_executa_tool_quando_modelo_exige_aprovacao(
         self, native_session_store, monkeypatch
-    ):
+    ) -> None:
         from backend.engine import conversation_loop
         from backend.engine.hitl import _risk_assessment_key
         from backend.tools.registry import TOOL_REGISTRY, ToolExtras, vtool
@@ -303,7 +303,7 @@ class TestRunAgentForThread:
             }
             return ctx
 
-        async def _require_human(_harness, *, tool_name, ctx, args, **_kwargs):
+        async def _require_human(_harness, *, tool_name, ctx, args, **_kwargs) -> bool:
             key = _risk_assessment_key(tool_name, args)
             ctx._extra.setdefault("systemone_decisions", {})[key] = {
                 "decision": "requires_human",
@@ -337,7 +337,7 @@ class TestRunAgentForThread:
 
     async def test_delegacao_a_uma_soul_roda_sem_pausar_em_hitl(
         self, native_session_store, monkeypatch
-    ):
+    ) -> None:
         """Gap real (revisão de 2026-08-30): nenhum teste deste arquivo
         exercitava `native_agent.subagent_catalog` não-vazio — em produção
         `run_agent_for_thread` só injeta `SubagentDeps` (com
@@ -393,7 +393,7 @@ class TestRunAgentForThread:
 
     async def test_falha_no_chat_client_propaga_pro_handle_incoming_message(
         self, native_session_store, monkeypatch
-    ):
+    ) -> None:
         """Erro/borda: run_agent_for_thread NÃO trata a exceção — é
         `handle_incoming_message` (backend/services/gateway/messaging.py)
         quem converte falha em resposta amigável, então o interlocutor
@@ -411,7 +411,7 @@ class TestRunAgentForThread:
 class TestProcessIncoming:
     async def test_fluxo_completo_resolve_thread_roda_agente_e_devolve_resposta(
         self, native_session_store, monkeypatch, tmp_path
-    ):
+    ) -> None:
         """Fluxo ponta a ponta de uma mensagem de plataforma externa: resolve
         (cria) o mapeamento thread, roda o agente via `run_agent_for_thread`
         e devolve a resposta pronta pra plataforma reenviar."""

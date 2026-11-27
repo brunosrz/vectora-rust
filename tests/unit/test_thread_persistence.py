@@ -209,7 +209,7 @@ class TestGetDbConcurrency:
     @pytest.mark.asyncio
     async def test_concurrent_calls_share_single_connection(
         self, tmp_path, monkeypatch: pytest.MonkeyPatch
-    ):
+    ) -> None:
         import asyncio
 
         import backend.api.handlers.threads as t_mod
@@ -231,12 +231,12 @@ class TestUpsertSession:
     """A função _upsert_session deve existir em threads.py e fazer UPSERT correto."""
 
     @pytest.mark.asyncio
-    async def test_upsert_session_exists(self):
+    async def test_upsert_session_exists(self) -> None:
         """_upsert_session deve ser importável de vectora.api.handlers.threads."""
         from backend.api.handlers.threads import _upsert_session
 
     @pytest.mark.asyncio
-    async def test_upsert_creates_row(self):
+    async def test_upsert_creates_row(self) -> None:
         """_upsert_session escreve INSERT ... ON CONFLICT no banco."""
         from backend.api.handlers.threads import _upsert_session
 
@@ -252,7 +252,7 @@ class TestUpsertSession:
         assert "ON CONFLICT" in sql_used or "OR REPLACE" in sql_used
 
     @pytest.mark.asyncio
-    async def test_upsert_stores_thread_id(self):
+    async def test_upsert_stores_thread_id(self) -> None:
         """O thread_id passado aparece como parâmetro SQL e é armazenado."""
         from backend.api.handlers.threads import _upsert_session
 
@@ -267,7 +267,7 @@ class TestUpsertSession:
         assert "thread-xyz" in flat
 
     @pytest.mark.asyncio
-    async def test_upsert_with_title_stores_in_extra(self):
+    async def test_upsert_with_title_stores_in_extra(self) -> None:
         """Quando title é fornecido, deve aparecer no JSON do campo extra."""
         from backend.api.handlers.threads import _upsert_session
 
@@ -281,7 +281,7 @@ class TestUpsertSession:
         assert "Minha Conversa" in all_params_str
 
     @pytest.mark.asyncio
-    async def test_upsert_idempotent(self):
+    async def test_upsert_idempotent(self) -> None:
         """Chamar duas vezes com o mesmo thread_id não lança exceção."""
         from backend.api.handlers.threads import _upsert_session
 
@@ -293,7 +293,7 @@ class TestUpsertSession:
             await _upsert_session("thread-dup")  # segunda chamada não deve falhar
 
     @pytest.mark.asyncio
-    async def test_upsert_calls_commit(self):
+    async def test_upsert_calls_commit(self) -> None:
         """_upsert_session deve chamar commit() após executar."""
         from backend.api.handlers.threads import _upsert_session
 
@@ -318,7 +318,7 @@ class TestStreamChatRegistersThread:
     """stream_chat() deve registrar a thread em vectora_sessions via _upsert_session."""
 
     @pytest.mark.asyncio
-    async def test_stream_chat_calls_upsert_with_thread_id(self):
+    async def test_stream_chat_calls_upsert_with_thread_id(self) -> None:
         """stream_chat chama _upsert_session com o thread_id do request."""
         upsert_calls: list[str] = []
 
@@ -366,7 +366,7 @@ class TestStreamChatRegistersThread:
         )
 
     @pytest.mark.asyncio
-    async def test_stream_chat_upserts_when_thread_id_empty(self):
+    async def test_stream_chat_upserts_when_thread_id_empty(self) -> None:
         """Quando thread_id é vazio, stream_chat gera UUID e chama _upsert_session."""
         upsert_calls: list[str] = []
 
@@ -475,7 +475,7 @@ class TestStreamChatRegistersThread:
         )
 
     @pytest.mark.asyncio
-    async def test_stream_chat_does_not_upsert_when_agent_init_fails(self):
+    async def test_stream_chat_does_not_upsert_when_agent_init_fails(self) -> None:
         """Erro/borda: quando `get_native_agent` falha (ex. sem provider
         configurado), nem `_upsert_session` nem `_increment_message_count`
         podem ter rodado — persistir a thread nesse ponto criaria uma sessão
@@ -543,7 +543,7 @@ class TestStreamChatRegistersThread:
     @pytest.mark.asyncio
     async def test_stream_chat_counts_user_message_even_without_assistant_reply(
         self,
-    ):
+    ) -> None:
         """message_count incrementa assim que a mensagem do usuário é enviada
         ao grafo, mesmo que o assistente nunca produza nenhum token (erro de
         auth/quota/timeout do provider, `astream_events` sem nenhum evento) —
@@ -632,7 +632,7 @@ def _restore_app(t_mod, original_get_db, original_db_conn) -> None:
 class TestUpdateThreadEndpoint:
     """Endpoint UpdateThread deve existir e persistir o title no campo extra."""
 
-    def test_update_thread_route_exists(self):
+    def test_update_thread_route_exists(self) -> None:
         """Rota UpdateThread deve estar registrada no app."""
         from fastapi.testclient import TestClient
 
@@ -646,7 +646,7 @@ class TestUpdateThreadEndpoint:
         finally:
             _restore_app(t_mod, orig_get_db, orig_conn)
 
-    def test_update_thread_saves_title(self):
+    def test_update_thread_saves_title(self) -> None:
         """POST /UpdateThread deve salvar o title no campo extra da thread."""
         from fastapi.testclient import TestClient
 
@@ -675,7 +675,7 @@ class TestUpdateThreadEndpoint:
         finally:
             _restore_app(t_mod, orig_get_db, orig_conn)
 
-    def test_update_thread_returns_updated_thread(self):
+    def test_update_thread_returns_updated_thread(self) -> None:
         """UpdateThread deve retornar a Thread com o title atualizado."""
         from fastapi.testclient import TestClient
 
@@ -700,7 +700,7 @@ class TestUpdateThreadEndpoint:
         finally:
             _restore_app(t_mod, orig_get_db, orig_conn)
 
-    def test_update_thread_not_found(self):
+    def test_update_thread_not_found(self) -> None:
         """UpdateThread com thread inexistente deve retornar 404."""
         from fastapi.testclient import TestClient
 
@@ -748,7 +748,7 @@ class TestListThreadsIncludesUpserted:
         finally:
             await pool.close()
 
-    def test_list_threads_empty_initially(self):
+    def test_list_threads_empty_initially(self) -> None:
         """Sem threads criadas, ListThreads retorna lista vazia."""
         from fastapi.testclient import TestClient
 
@@ -767,7 +767,7 @@ class TestListThreadsIncludesUpserted:
             _restore_app(t_mod, orig_get_db, orig_conn)
 
     @pytest.mark.asyncio
-    async def test_upserted_thread_appears_in_list(self, session_store):
+    async def test_upserted_thread_appears_in_list(self, session_store) -> None:
         """Thread com uma troca de mensagem real (`_upsert_session` seguido
         de `_increment_message_count`) aparece em ListThreads. Usa aiosqlite
         real (não FakeDB): FakeDB não aplica o filtro
@@ -808,7 +808,7 @@ class TestListThreadsIncludesUpserted:
     @pytest.mark.asyncio
     async def test_upserted_thread_without_message_omitted_from_list(
         self, session_store
-    ):
+    ) -> None:
         """Par de erro do teste acima — _upsert_session sozinho (sem
         _increment_message_count) não faz a thread aparecer em ListThreads.
         A sessão nativa existe para que a ausência dependa só de
@@ -838,7 +838,7 @@ class TestListThreadsIncludesUpserted:
             await db.close()
 
     @pytest.mark.asyncio
-    async def test_upserted_thread_with_title_in_list(self, session_store):
+    async def test_upserted_thread_with_title_in_list(self, session_store) -> None:
         """Thread com title upsertada e uma mensagem real aparece com o
         title correto em ListThreads."""
         import aiosqlite
@@ -881,32 +881,32 @@ class TestListThreadsIncludesUpserted:
 
 
 class TestNormalizeMode:
-    def test_dev_becomes_code(self):
+    def test_dev_becomes_code(self) -> None:
         from backend.api.handlers.threads import _normalize_mode
 
         assert _normalize_mode("dev") == "code"
 
-    def test_code_stays_code(self):
+    def test_code_stays_code(self) -> None:
         from backend.api.handlers.threads import _normalize_mode
 
         assert _normalize_mode("code") == "code"
 
-    def test_chat_preserved(self):
+    def test_chat_preserved(self) -> None:
         from backend.api.handlers.threads import _normalize_mode
 
         assert _normalize_mode("chat") == "chat"
 
-    def test_none_defaults_to_code(self):
+    def test_none_defaults_to_code(self) -> None:
         from backend.api.handlers.threads import _normalize_mode
 
         assert _normalize_mode(None) == "code"
 
-    def test_empty_defaults_to_code(self):
+    def test_empty_defaults_to_code(self) -> None:
         from backend.api.handlers.threads import _normalize_mode
 
         assert _normalize_mode("") == "code"
 
-    def test_unknown_defaults_to_code(self):
+    def test_unknown_defaults_to_code(self) -> None:
         from backend.api.handlers.threads import _normalize_mode
 
         assert _normalize_mode("qualquer") == "code"
@@ -917,32 +917,32 @@ def _row(extra: dict) -> tuple:
 
 
 class TestRowToThreadMode:
-    def test_legacy_dev_read_as_code(self):
+    def test_legacy_dev_read_as_code(self) -> None:
         from backend.api.handlers.threads import _row_to_thread
 
         t = _row_to_thread(_row({"mode": "dev", "title": "X"}))
         assert t.mode == "code"
         assert t.title == "X"
 
-    def test_chat_mode_preserved(self):
+    def test_chat_mode_preserved(self) -> None:
         from backend.api.handlers.threads import _row_to_thread
 
         t = _row_to_thread(_row({"mode": "chat"}))
         assert t.mode == "chat"
 
-    def test_code_mode_preserved(self):
+    def test_code_mode_preserved(self) -> None:
         from backend.api.handlers.threads import _row_to_thread
 
         t = _row_to_thread(_row({"mode": "code"}))
         assert t.mode == "code"
 
-    def test_missing_mode_defaults_code(self):
+    def test_missing_mode_defaults_code(self) -> None:
         from backend.api.handlers.threads import _row_to_thread
 
         t = _row_to_thread(_row({"title": "sem modo"}))
         assert t.mode == "code"
 
-    def test_malformed_extra_defaults_code(self):
+    def test_malformed_extra_defaults_code(self) -> None:
         from backend.api.handlers.threads import _row_to_thread
 
         bad_row = ("tid", "human", "2026-01-01", "2026-01-02", 0, "NOTJSON{")
@@ -968,7 +968,7 @@ class TestModeColumn:
         return db
 
     @pytest.mark.asyncio
-    async def test_migrate_adds_column_and_backfills_dev_to_code(self):
+    async def test_migrate_adds_column_and_backfills_dev_to_code(self) -> None:
         import aiosqlite
 
         from backend.api.handlers.threads import _migrate_mode_column
@@ -1004,7 +1004,7 @@ class TestModeColumn:
         assert rows == {"t-dev": "code", "t-chat": "chat", "t-none": "code"}
 
     @pytest.mark.asyncio
-    async def test_migrate_is_idempotent(self):
+    async def test_migrate_is_idempotent(self) -> None:
         from backend.api.handlers.threads import _migrate_mode_column
 
         db = await self._fresh_db()
@@ -1016,7 +1016,7 @@ class TestModeColumn:
         assert cols.count("mode") == 1
 
     @pytest.mark.asyncio
-    async def test_upsert_writes_mode_column_and_list_filters(self):
+    async def test_upsert_writes_mode_column_and_list_filters(self) -> None:
         """_upsert_session sozinho registra metadados (workspace/mode), mas
         só uma troca de mensagem real (_increment_message_count, chamado por
         stream_chat a cada turno) faz a thread aparecer em ListThreads —
@@ -1045,7 +1045,7 @@ class TestModeColumn:
         assert only_chat.threads[0].mode == "chat"
 
     @pytest.mark.asyncio
-    async def test_upsert_without_message_never_lists(self):
+    async def test_upsert_without_message_never_lists(self) -> None:
         """Par de erro do teste acima — sem _increment_message_count (nenhuma
         mensagem trocada), a thread nunca aparece em ListThreads."""
         from backend.api.handlers import threads as th
@@ -1060,7 +1060,7 @@ class TestModeColumn:
         assert {t.id for t in out.threads} == set()
 
     @pytest.mark.asyncio
-    async def test_upsert_normalizes_dev_to_code_in_column(self):
+    async def test_upsert_normalizes_dev_to_code_in_column(self) -> None:
         from backend.api.handlers import threads as th
 
         db = await self._fresh_db()
@@ -1092,7 +1092,7 @@ class TestPinnedColumn:
         return db
 
     @pytest.mark.asyncio
-    async def test_migrate_adds_column_on_old_schema(self):
+    async def test_migrate_adds_column_on_old_schema(self) -> None:
         import aiosqlite
 
         from backend.api.handlers.threads import _migrate_pinned_column
@@ -1124,7 +1124,7 @@ class TestPinnedColumn:
         assert row[0] == 0
 
     @pytest.mark.asyncio
-    async def test_migrate_pinned_is_idempotent(self):
+    async def test_migrate_pinned_is_idempotent(self) -> None:
         from backend.api.handlers.threads import _migrate_pinned_column
 
         db = await self._fresh_db()
@@ -1136,7 +1136,7 @@ class TestPinnedColumn:
         assert cols.count("pinned") == 1
 
     @pytest.mark.asyncio
-    async def test_list_threads_orders_pinned_before_last_activity(self):
+    async def test_list_threads_orders_pinned_before_last_activity(self) -> None:
         from backend.api.handlers import threads as th
         from backend.api.schemas import ListThreadsRequest, UpdateThreadRequest
 
@@ -1161,7 +1161,7 @@ class TestPinnedColumn:
         assert set(ids[1:]) == {"older-not-pinned", "newest-not-pinned"}
 
     @pytest.mark.asyncio
-    async def test_update_thread_pin_only_does_not_touch_title(self):
+    async def test_update_thread_pin_only_does_not_touch_title(self) -> None:
         """Erro/borda: fixar uma sessão não deve resetar o título já gravado
         (title vem `None` no request quando só se quer fixar)."""
         from backend.api.handlers import threads as th
@@ -1180,7 +1180,7 @@ class TestPinnedColumn:
         assert result.pinned is True
 
     @pytest.mark.asyncio
-    async def test_increment_remember_turn_count_upserts_in_extra(self):
+    async def test_increment_remember_turn_count_upserts_in_extra(self) -> None:
         from backend.api.handlers import threads as th
 
         db = await self._fresh_db()
@@ -1193,7 +1193,7 @@ class TestPinnedColumn:
         assert second == 2
 
     @pytest.mark.asyncio
-    async def test_remember_pending_default_false_for_unknown_thread(self):
+    async def test_remember_pending_default_false_for_unknown_thread(self) -> None:
         from backend.api.handlers import threads as th
 
         db = await self._fresh_db()
@@ -1204,7 +1204,7 @@ class TestPinnedColumn:
         assert pending is False
 
     @pytest.mark.asyncio
-    async def test_set_and_get_remember_pending_round_trips(self):
+    async def test_set_and_get_remember_pending_round_trips(self) -> None:
         from backend.api.handlers import threads as th
 
         db = await self._fresh_db()
@@ -1219,7 +1219,7 @@ class TestPinnedColumn:
         assert pending_false is False
 
     @pytest.mark.asyncio
-    async def test_increment_remember_turn_count_preserves_existing_extra(self):
+    async def test_increment_remember_turn_count_preserves_existing_extra(self) -> None:
         """Erro/borda: incrementar o contador não pode apagar outros campos
         já gravados em extra (title, pins etc.)."""
         from backend.api.handlers import threads as th
@@ -1242,7 +1242,7 @@ class TestPinnedColumn:
         assert extra["remember_turn_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_update_thread_nonexistent_returns_404_when_pinning(self):
+    async def test_update_thread_nonexistent_returns_404_when_pinning(self) -> None:
         from fastapi import HTTPException
 
         from backend.api.handlers import threads as th

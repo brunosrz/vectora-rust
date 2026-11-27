@@ -37,7 +37,7 @@ def _docs() -> list[Document]:
 
 class TestCohereRerank:
     @pytest.mark.asyncio
-    async def test_reordena_por_relevance_score(self):
+    async def test_reordena_por_relevance_score(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -56,7 +56,7 @@ class TestCohereRerank:
         assert saida[0].metadata["relevance_score"] == 0.9
 
     @pytest.mark.asyncio
-    async def test_lista_vazia_nao_chama_api(self):
+    async def test_lista_vazia_nao_chama_api(self) -> None:
         chamou = False
 
         def handler(_req):
@@ -71,7 +71,7 @@ class TestCohereRerank:
         assert chamou is False
 
     @pytest.mark.asyncio
-    async def test_results_vazio_degrada_para_ordem_original(self):
+    async def test_results_vazio_degrada_para_ordem_original(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"results": []})
 
@@ -82,7 +82,7 @@ class TestCohereRerank:
         assert saida == docs
 
     @pytest.mark.asyncio
-    async def test_index_fora_do_intervalo_e_ignorado(self):
+    async def test_index_fora_do_intervalo_e_ignorado(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -100,7 +100,7 @@ class TestCohereRerank:
         assert [d.page_content for d in saida] == ["doc um"]
 
     @pytest.mark.asyncio
-    async def test_top_n_maior_que_total_de_docs_nao_estoura(self):
+    async def test_top_n_maior_que_total_de_docs_nao_estoura(self) -> None:
         capturado: dict = {}
 
         def handler(req):
@@ -119,7 +119,7 @@ class TestCohereRerank:
 
 class TestVoyageRerank:
     @pytest.mark.asyncio
-    async def test_reordena_por_relevance_score(self):
+    async def test_reordena_por_relevance_score(self) -> None:
         def handler(_req):
             return httpx.Response(
                 200,
@@ -137,7 +137,7 @@ class TestVoyageRerank:
         assert [d.page_content for d in saida] == ["doc dois", "doc um"]
 
     @pytest.mark.asyncio
-    async def test_lista_vazia_nao_chama_api(self):
+    async def test_lista_vazia_nao_chama_api(self) -> None:
         chamou = False
 
         def handler(_req):
@@ -152,7 +152,7 @@ class TestVoyageRerank:
         assert chamou is False
 
     @pytest.mark.asyncio
-    async def test_data_vazio_degrada_para_ordem_original(self):
+    async def test_data_vazio_degrada_para_ordem_original(self) -> None:
         def handler(_req):
             return httpx.Response(200, json={"data": []})
 
@@ -163,7 +163,7 @@ class TestVoyageRerank:
         assert saida == docs
 
     @pytest.mark.asyncio
-    async def test_erro_de_rede_vira_excecao_tipada(self):
+    async def test_erro_de_rede_vira_excecao_tipada(self) -> None:
         from backend.llm.voyage.client import VoyageServerError
 
         def handler(_req):

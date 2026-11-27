@@ -111,14 +111,14 @@ class TestDelegateToSubagent:
         assert resultado.startswith("Delegação não necessária")
         assert client.chamadas == 0
 
-    async def test_registrada_no_tool_registry(self):
+    async def test_registrada_no_tool_registry(self) -> None:
         spec = TOOL_REGISTRY.get("delegate_to_subagent")
         assert spec is not None
         assert spec.needs_ctx is True
 
     async def test_delegacao_bem_sucedida_devolve_texto_do_subagente(
         self, session_store
-    ):
+    ) -> None:
         client = _ScriptedChatClient([[_texto_chunk("respondido pela SOUL")]])
         deps = SubagentDeps(
             catalog={"coder": _spec("coder")},
@@ -138,7 +138,7 @@ class TestDelegateToSubagent:
 
     async def test_soul_inexistente_e_timeout_devolvem_erro_tipado_sem_propagar(
         self, session_store
-    ):
+    ) -> None:
         """Erro/borda (2 casos, mesmo teste): `subagent_type` fora do
         catálogo devolve erro tipado sem tocar no chat client; SOUL que
         existe mas nunca progride (timeout via liveness) também devolve
@@ -178,7 +178,7 @@ class TestDelegateToSubagent:
         assert resultado_timeout.startswith("Subagente")
         assert "cancelado por inatividade" in resultado_timeout
 
-    async def test_sem_dependencias_injetadas_devolve_erro_tipado(self):
+    async def test_sem_dependencias_injetadas_devolve_erro_tipado(self) -> None:
         handler = _handler()
 
         resultado = await handler(
@@ -199,7 +199,7 @@ class TestShouldRequireApprovalObrigatorio:
 
     def test_subagent_deps_sem_should_require_approval_estoura_typeerror(
         self, session_store
-    ):
+    ) -> None:
         with pytest.raises(TypeError, match="should_require_approval"):
             SubagentDeps(  # type: ignore[call-arg]  # ty: ignore[missing-argument]
                 catalog={"coder": _spec("coder")},

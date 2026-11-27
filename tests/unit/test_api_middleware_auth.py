@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 
 class TestIsPublicRoute:
-    def test_auth_prefix_is_public(self):
+    def test_auth_prefix_is_public(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/auth/signin") is True
@@ -28,46 +28,46 @@ class TestIsPublicRoute:
         assert _is_public_route("/auth/has-users") is True
         assert _is_public_route("/auth/refresh") is True
 
-    def test_health_is_public(self):
+    def test_health_is_public(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/health") is True
 
-    def test_docs_is_public(self):
+    def test_docs_is_public(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/docs") is True
         assert _is_public_route("/openapi.json") is True
 
-    def test_static_files_are_public(self):
+    def test_static_files_are_public(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/static/app.js") is True
         assert _is_public_route("/favicon.ico") is True
         assert _is_public_route("/assets/logo.png") is True
 
-    def test_chat_endpoints_are_private(self):
+    def test_chat_endpoints_are_private(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/vectora.chat.v1.ChatService/StreamChat") is False
         assert _is_public_route("/vectora.chat.v1.ThreadService/ListThreads") is False
 
-    def test_metrics_is_private(self):
+    def test_metrics_is_private(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/metrics") is False
 
-    def test_provider_routing_is_private(self):
+    def test_provider_routing_is_private(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/provider-routing/llama-cpp/status") is False
 
-    def test_update_changelog_is_private(self):
+    def test_update_changelog_is_private(self) -> None:
         from backend.api.middleware.auth import _is_public_route
 
         assert _is_public_route("/api/updates/changelog") is False
 
-    def test_sessions_background_tasks_are_private(self):
+    def test_sessions_background_tasks_are_private(self) -> None:
         """`/sessions` está em `_API_PREFIXES`, então rotas de tarefas em
         segundo plano (`/sessions/{thread_id}/background/*`, ver
         backend/api/handlers/background.py) exigem token em modo servidor —
@@ -92,7 +92,7 @@ class TestIsPublicRoute:
         assert _is_public_route("/runs/run-1") is False
         assert _is_public_route("/runs/run-1/timeline") is False
 
-    def test_root_path_is_public_frontend(self):
+    def test_root_path_is_public_frontend(self) -> None:
         # Paths fora dos prefixos de API são proxy para o Next.js e
         # portanto públicos do ponto de vista do middleware Python —
         # o frontend cuida da sua própria autenticação via cookie.
@@ -118,31 +118,31 @@ def _isolated_runtime_settings(tmp_path, monkeypatch):
 
 
 class TestAuthEnabled:
-    def test_true_by_default(self, monkeypatch, _isolated_runtime_settings):
+    def test_true_by_default(self, monkeypatch, _isolated_runtime_settings) -> None:
         from backend.api.middleware import auth as m
 
         monkeypatch.delenv("VECTORA_AUTH_REQUIRED", raising=False)
         assert m._auth_enabled() is True
 
-    def test_false_when_set_false(self, monkeypatch):
+    def test_false_when_set_false(self, monkeypatch) -> None:
         from backend.api.middleware import auth as m
 
         monkeypatch.setenv("VECTORA_AUTH_REQUIRED", "false")
         assert m._auth_enabled() is False
 
-    def test_false_when_set_0(self, monkeypatch):
+    def test_false_when_set_0(self, monkeypatch) -> None:
         from backend.api.middleware import auth as m
 
         monkeypatch.setenv("VECTORA_AUTH_REQUIRED", "0")
         assert m._auth_enabled() is False
 
-    def test_true_when_set_true(self, monkeypatch):
+    def test_true_when_set_true(self, monkeypatch) -> None:
         from backend.api.middleware import auth as m
 
         monkeypatch.setenv("VECTORA_AUTH_REQUIRED", "true")
         assert m._auth_enabled() is True
 
-    def test_case_insensitive(self, monkeypatch):
+    def test_case_insensitive(self, monkeypatch) -> None:
         from backend.api.middleware import auth as m
 
         monkeypatch.setenv("VECTORA_AUTH_REQUIRED", "FALSE")
@@ -150,7 +150,7 @@ class TestAuthEnabled:
 
     def test_sem_env_var_cai_no_runtime_settings(
         self, monkeypatch, _isolated_runtime_settings
-    ):
+    ) -> None:
         """Sem VECTORA_AUTH_REQUIRED no ambiente, o valor persistido pelo
         wizard (setup-local) em app_settings é a fonte de verdade — não mais
         o .env."""
@@ -162,7 +162,7 @@ class TestAuthEnabled:
 
     def test_env_var_tem_prioridade_sobre_runtime_settings(
         self, monkeypatch, _isolated_runtime_settings
-    ):
+    ) -> None:
         """Env var é override de operador (Docker/CI/testes) — ganha mesmo
         se app_settings diz o contrário."""
         from backend.api.middleware import auth as m
@@ -178,7 +178,9 @@ class TestAuthEnabled:
 
 
 class TestGetVirtualLocalUser:
-    def test_sem_nome_configurado_usa_fallback(self, _isolated_runtime_settings):
+    def test_sem_nome_configurado_usa_fallback(
+        self, _isolated_runtime_settings
+    ) -> None:
         from backend.api.middleware.auth import _get_virtual_local_user
 
         user = _get_virtual_local_user()
@@ -186,7 +188,9 @@ class TestGetVirtualLocalUser:
         assert user.id == "local"
         assert user.role == "root"
 
-    def test_usa_nome_persistido_em_runtime_settings(self, _isolated_runtime_settings):
+    def test_usa_nome_persistido_em_runtime_settings(
+        self, _isolated_runtime_settings
+    ) -> None:
         from backend.api.middleware.auth import _get_virtual_local_user
 
         _isolated_runtime_settings.set_local_user("Bruno", "Vectora")
@@ -194,7 +198,9 @@ class TestGetVirtualLocalUser:
         assert user.name == "Bruno"
         assert user.username == "bruno"
 
-    def test_usa_username_persistido_quando_presente(self, _isolated_runtime_settings):
+    def test_usa_username_persistido_quando_presente(
+        self, _isolated_runtime_settings
+    ) -> None:
         """Username escolhido no onboarding tem prioridade sobre o slugify
         do nome."""
         from backend.api.middleware.auth import _get_virtual_local_user
@@ -205,7 +211,9 @@ class TestGetVirtualLocalUser:
         user = _get_virtual_local_user()
         assert user.username == "brunosoares"
 
-    def test_sem_username_cai_no_slugify_do_nome(self, _isolated_runtime_settings):
+    def test_sem_username_cai_no_slugify_do_nome(
+        self, _isolated_runtime_settings
+    ) -> None:
         from backend.api.middleware.auth import _get_virtual_local_user
 
         _isolated_runtime_settings.set_local_user("Ada Lovelace", "")
@@ -256,7 +264,7 @@ def auth_client(tmp_path, monkeypatch):
     # Limpeza
     import asyncio
 
-    async def _close():
+    async def _close() -> None:
         if auth_mod._db_conn is not None:
             await auth_mod._db_conn.close()
             auth_mod._db_conn = None
@@ -267,15 +275,15 @@ def auth_client(tmp_path, monkeypatch):
 
 
 class TestAuthMiddlewareIntegration:
-    def test_public_route_passes_without_token(self, auth_client):
+    def test_public_route_passes_without_token(self, auth_client) -> None:
         r = auth_client.get("/health")
         assert r.status_code == 200
 
-    def test_auth_route_passes_without_token(self, auth_client):
+    def test_auth_route_passes_without_token(self, auth_client) -> None:
         r = auth_client.get("/auth/has-users")
         assert r.status_code == 200
 
-    def test_private_route_without_token_returns_401(self, auth_client):
+    def test_private_route_without_token_returns_401(self, auth_client) -> None:
         r = auth_client.get("/auth/me")
         assert r.status_code == 401
 
@@ -283,17 +291,17 @@ class TestAuthMiddlewareIntegration:
         r = auth_client.post("/feedback", json={"kind": "bug", "description": "falha"})
         assert r.status_code == 401
 
-    def test_update_changelog_without_token_returns_401(self, auth_client):
+    def test_update_changelog_without_token_returns_401(self, auth_client) -> None:
         r = auth_client.get("/api/updates/changelog")
         assert r.status_code == 401
 
-    def test_private_route_with_invalid_bearer_returns_401(self, auth_client):
+    def test_private_route_with_invalid_bearer_returns_401(self, auth_client) -> None:
         r = auth_client.get(
             "/auth/me", headers={"Authorization": "Bearer token-invalido"}
         )
         assert r.status_code == 401
 
-    def test_private_route_with_valid_token_passes(self, auth_client):
+    def test_private_route_with_valid_token_passes(self, auth_client) -> None:
         # Cria usuário e obtém token
         r_signup = auth_client.post(
             "/auth/signup",
@@ -306,7 +314,7 @@ class TestAuthMiddlewareIntegration:
         assert r.status_code == 200
         assert r.json()["email"] == "mw@test.com"
 
-    def test_tool_usage_requires_authentication(self, auth_client):
+    def test_tool_usage_requires_authentication(self, auth_client) -> None:
         response = auth_client.get("/tools/usage")
 
         assert response.status_code == 401
@@ -327,7 +335,7 @@ class TestAuthMiddlewareIntegration:
 
     def test_tool_usage_contract_is_user_scoped_and_redacted(
         self, auth_client, monkeypatch
-    ):
+    ) -> None:
         """The HTTP contract exposes only per-user counts for available tools."""
         signup = auth_client.post(
             "/auth/signup",
@@ -405,7 +413,7 @@ class TestAuthMiddlewareIntegration:
             "usage": {"file_read": 0, "terminal": 0},
         }
 
-    def test_private_route_with_cookie_token_passes(self, auth_client):
+    def test_private_route_with_cookie_token_passes(self, auth_client) -> None:
         # Signup para ter cookies definidos
         r = auth_client.post(
             "/auth/signup",
@@ -422,7 +430,7 @@ class TestAuthMiddlewareIntegration:
         r_me = auth_client.get("/auth/me")
         assert r_me.status_code == 200
 
-    def test_private_route_with_valid_service_token_passes(self, auth_client):
+    def test_private_route_with_valid_service_token_passes(self, auth_client) -> None:
         """Erro/borda (feliz + inválido no mesmo teste): um
         token de serviço válido (`vst_...`) autentica como um JWT normal
         autenticaria; revogado é rejeitado com 401, igual a um JWT
@@ -444,7 +452,7 @@ class TestAuthMiddlewareIntegration:
         assert r.status_code == 200
         assert r.json()["id"].startswith("service:")
 
-        async def _revogar(token_id: str):
+        async def _revogar(token_id: str) -> None:
             db = await auth_mod._get_db()
             await token_auth.revoke_service_token(db, token_id)
 
@@ -455,7 +463,7 @@ class TestAuthMiddlewareIntegration:
         )
         assert r_revogado.status_code == 401
 
-    def test_service_token_scopes_are_preserved_and_enforced(self, auth_client):
+    def test_service_token_scopes_are_preserved_and_enforced(self, auth_client) -> None:
         import asyncio
 
         import backend.rbac.auth as auth_mod
@@ -487,7 +495,9 @@ class TestAuthMiddlewareIntegration:
         assert response.status_code == 200
         assert response.json()["id"].startswith("service:")
 
-    def test_service_token_unknown_route_is_denied_by_default(self, auth_client):
+    def test_service_token_unknown_route_is_denied_by_default(
+        self, auth_client
+    ) -> None:
         import asyncio
 
         import backend.rbac.auth as auth_mod

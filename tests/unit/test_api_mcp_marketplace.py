@@ -144,13 +144,13 @@ async def test_list_registry_keeps_official_curator_flag(
 
 
 class TestFilterRegistry:
-    def test_sem_filtro_devolve_tudo(self):
+    def test_sem_filtro_devolve_tudo(self) -> None:
         connectors = [
             MCPConnector(id="a", name="Alpha", description="d1", category="web")
         ]
         assert _filter_registry(connectors, q=None, category=None) == connectors
 
-    def test_filtra_nome_descricao_e_categoria(self):
+    def test_filtra_nome_descricao_e_categoria(self) -> None:
         connectors = [
             MCPConnector(
                 id="a", name="Brave Search", description="web", category="web"
@@ -166,13 +166,13 @@ class TestFilterRegistry:
 
 
 @pytest.mark.asyncio
-async def test_get_registry_aplica_filtro_de_query(_catalog):
+async def test_get_registry_aplica_filtro_de_query(_catalog) -> None:
     result = await get_registry(q="brave")
     assert result == []
 
 
 @pytest.mark.asyncio
-async def test_install_resolves_only_catalog_entry(_functional_store):
+async def test_install_resolves_only_catalog_entry(_functional_store) -> None:
     result = await install_mcp(InstallRequest(mcp_id="alpha", confirm_unverified=True))
     assert result["status"] == "installed"
     assert any(
@@ -181,14 +181,14 @@ async def test_install_resolves_only_catalog_entry(_functional_store):
 
 
 @pytest.mark.asyncio
-async def test_install_unknown_connector_returns_error(_functional_store):
+async def test_install_unknown_connector_returns_error(_functional_store) -> None:
     result = await install_mcp(InstallRequest(mcp_id="missing"))
     assert result["status"] == "error"
     assert _functional_store.list_servers("local") == []
 
 
 @pytest.mark.asyncio
-async def test_uninstall_removes_from_functional_store(_functional_store):
+async def test_uninstall_removes_from_functional_store(_functional_store) -> None:
     await install_mcp(InstallRequest(mcp_id="alpha", confirm_unverified=True))
     removed = await uninstall_mcp(UninstallRequest(mcp_id="alpha"))
     assert removed["status"] == "removed"
@@ -198,7 +198,7 @@ async def test_uninstall_removes_from_functional_store(_functional_store):
     }
 
 
-def test_connector_to_server_supports_http_transport():
+def test_connector_to_server_supports_http_transport() -> None:
     server = _connector_to_server(
         MCPConnector(
             id="remote",
@@ -212,7 +212,7 @@ def test_connector_to_server_supports_http_transport():
     assert server.url == "https://example.com/mcp"
 
 
-def test_connector_to_server_com_install_cmd_vazio():
+def test_connector_to_server_com_install_cmd_vazio() -> None:
     server = _connector_to_server(
         MCPConnector(id="custom", name="Custom", description="x")
     )
@@ -220,7 +220,7 @@ def test_connector_to_server_com_install_cmd_vazio():
     assert server.args == []
 
 
-def test_req_user_id_extrai_do_request_state_ou_usa_fallback_local():
+def test_req_user_id_extrai_do_request_state_ou_usa_fallback_local() -> None:
     authenticated = SimpleNamespace(
         state=SimpleNamespace(user=SimpleNamespace(id="uuid-123"))
     )
@@ -232,7 +232,7 @@ def test_req_user_id_extrai_do_request_state_ou_usa_fallback_local():
 @pytest.mark.asyncio
 async def test_install_uninstall_tratam_excecao_do_store(
     _functional_store, monkeypatch
-):
+) -> None:
     def boom_add(*args, **kwargs):
         raise RuntimeError("disco cheio")
 
@@ -256,7 +256,7 @@ async def test_install_uninstall_tratam_excecao_do_store(
 @pytest.mark.parametrize("code", ["blocked", "policy_unavailable"])
 async def test_install_audita_negacao_da_allowlist(
     _functional_store, monkeypatch, code
-):
+) -> None:
     from backend.api.handlers import mcp_marketplace
     from backend.services.mcp_policy import McpPolicyDecision
 

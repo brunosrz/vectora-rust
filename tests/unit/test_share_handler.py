@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,11 +32,11 @@ def client():
 
 
 class TestShareGetNotFound:
-    def test_unknown_token_returns_404(self, client):
+    def test_unknown_token_returns_404(self, client) -> None:
         resp = client.get("/threads/share/token-que-nao-existe")
         assert resp.status_code == 404
 
-    def test_404_body_has_detail(self, client):
+    def test_404_body_has_detail(self, client) -> None:
         resp = client.get("/threads/share/token-invalido-xyz")
         body = resp.json()
         assert "detail" in body
@@ -58,17 +59,17 @@ class TestShareGetNotFound:
         assert "key with spaces" not in sanitized
 
     @pytest.mark.asyncio
-    async def test_auditoria_obrigatoria_propaga_falha(self):
-        class BrokenDb:
-            async def execute(self, *_args):
-                raise RuntimeError("audit indisponível")
+    async def test_auditoria_obrigatoria_propaga_falha(self) -> None:
+        broken_db = MagicMock(
+            execute=AsyncMock(side_effect=RuntimeError("audit indisponível"))
+        )
 
         with pytest.raises(RuntimeError, match="audit indisponível"):
-            await _write_audit(BrokenDb(), "user", "share_create", strict=True)
+            await _write_audit(broken_db, "user", "share_create", strict=True)
 
 
 class TestShareCreate:
-    def test_create_share_returns_token_and_url(self, client):
+    def test_create_share_returns_token_and_url(self, client) -> None:
         resp = client.post(
             "/threads/share",
             json={"thread_id": "test-thread-abc", "ttl_hours": 1},
@@ -77,7 +78,7 @@ class TestShareCreate:
         assert resp.status_code == 404
         assert resp.status_code != 405
 
-    def test_create_share_response_schema(self, client):
+    def test_create_share_response_schema(self, client) -> None:
         resp = client.post(
             "/threads/share",
             json={"thread_id": "schema-test-thread", "ttl_hours": 2},
@@ -91,7 +92,7 @@ class TestShareCreate:
     @pytest.mark.asyncio
     async def test_create_share_returns_complete_schema_for_owned_session(
         self, monkeypatch
-    ):
+    ) -> None:
         class FakeDb:
             async def execute(self, *_args):
                 return None
@@ -134,7 +135,9 @@ class TestShareCreate:
         assert result.permission == "read"
 
     @pytest.mark.asyncio
-    async def test_criacao_falha_se_auditoria_obrigatoria_falhar(self, monkeypatch):
+    async def test_criacao_falha_se_auditoria_obrigatoria_falhar(
+        self, monkeypatch
+    ) -> None:
         class FakeDb:
             async def execute(self, *_args):
                 return None
@@ -209,7 +212,7 @@ class TestShareDelete:
         return request
 
     @pytest.mark.asyncio
-    async def test_revoga_pelo_criador_e_persiste_auditoria(self, monkeypatch):
+    async def test_revoga_pelo_criador_e_persiste_auditoria(self, monkeypatch) -> None:
         db = await self._database()
         await db.execute(
             """CREATE TABLE audit (
@@ -244,7 +247,7 @@ class TestShareDelete:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_rejeita_usuario_que_nao_criou_o_link(self, monkeypatch):
+    async def test_rejeita_usuario_que_nao_criou_o_link(self, monkeypatch) -> None:
         db = await self._database()
         monkeypatch.setattr(share_handler, "_get_db", lambda: _resolved(db))
         monkeypatch.setattr(share_handler, "_ensure_share_table", _noop)
@@ -261,7 +264,9 @@ class TestShareDelete:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_sem_usuario_revoga_o_link_criado_como_local(self, monkeypatch):
+    async def test_sem_usuario_revoga_o_link_criado_como_local(
+        self, monkeypatch
+    ) -> None:
         """No modo local sem login, o link criado como `local` precisa poder ser revogado."""
         db = await self._database()
         await db.execute("UPDATE shared_threads SET created_by = 'local'")
@@ -276,7 +281,7 @@ class TestShareDelete:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_restaura_link_se_auditoria_falhar(self, monkeypatch):
+    async def test_restaura_link_se_auditoria_falhar(self, monkeypatch) -> None:
         db = await self._database()
         monkeypatch.setattr(share_handler, "_get_db", lambda: _resolved(db))
         monkeypatch.setattr(share_handler, "_ensure_share_table", _noop)
@@ -392,7 +397,7 @@ class TestShareList:
     @pytest.mark.asyncio
     async def test_lista_so_os_links_validos_da_conversa_do_mais_novo_ao_mais_antigo(
         self, monkeypatch
-    ):
+    ) -> None:
         db = await self._database()
         self._wire(monkeypatch, db)
 
@@ -407,7 +412,7 @@ class TestShareList:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_conversa_sem_links_devolve_lista_vazia(self, monkeypatch):
+    async def test_conversa_sem_links_devolve_lista_vazia(self, monkeypatch) -> None:
         db = await self._database()
         await db.execute("DELETE FROM shared_threads WHERE thread_id = 'thread-1'")
         await db.commit()
@@ -421,7 +426,7 @@ class TestShareList:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_admin_lista_links_de_conversa_alheia(self, monkeypatch):
+    async def test_admin_lista_links_de_conversa_alheia(self, monkeypatch) -> None:
         db = await self._database()
         self._wire(monkeypatch, db)
 
@@ -433,7 +438,9 @@ class TestShareList:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_outro_usuario_nao_lista_os_links_da_conversa(self, monkeypatch):
+    async def test_outro_usuario_nao_lista_os_links_da_conversa(
+        self, monkeypatch
+    ) -> None:
         db = await self._database()
         self._wire(monkeypatch, db)
 
@@ -446,7 +453,7 @@ class TestShareList:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_conversa_inexistente_responde_404(self, monkeypatch):
+    async def test_conversa_inexistente_responde_404(self, monkeypatch) -> None:
         db = await self._database()
         self._wire(monkeypatch, db, owner=None)
 
@@ -459,7 +466,9 @@ class TestShareList:
         await db.close()
 
     @pytest.mark.asyncio
-    async def test_sem_usuario_lista_so_conversa_do_usuario_local(self, monkeypatch):
+    async def test_sem_usuario_lista_so_conversa_do_usuario_local(
+        self, monkeypatch
+    ) -> None:
         db = await self._database()
         self._wire(monkeypatch, db, owner="local")
 

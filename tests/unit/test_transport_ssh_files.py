@@ -14,7 +14,7 @@ def transport() -> SshTransport:
     return SshTransport(remote_host="user@example", ssh_key_id=None, user_id="user")
 
 
-async def test_ssh_read_surfaces_missing_file(transport, monkeypatch):
+async def test_ssh_read_surfaces_missing_file(transport, monkeypatch) -> None:
     monkeypatch.setattr(
         transport,
         "run",
@@ -25,7 +25,7 @@ async def test_ssh_read_surfaces_missing_file(transport, monkeypatch):
         await transport.read_file("/workspaces/project/missing.txt")
 
 
-async def test_ssh_read_preserves_binary_bytes(transport, monkeypatch):
+async def test_ssh_read_preserves_binary_bytes(transport, monkeypatch) -> None:
     content = b"\x00\xffbinary"
     monkeypatch.setattr(
         transport,
@@ -41,7 +41,7 @@ async def test_ssh_read_preserves_binary_bytes(transport, monkeypatch):
 @pytest.mark.parametrize("operation", ["list_dir", "read_file", "write_file"])
 async def test_ssh_filesystem_operations_surface_failure(
     transport, monkeypatch, operation
-):
+) -> None:
     monkeypatch.setattr(
         transport,
         "run",

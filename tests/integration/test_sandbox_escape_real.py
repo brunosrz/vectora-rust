@@ -34,7 +34,7 @@ pytestmark = [
 
 
 @pytest.mark.asyncio
-async def test_leitura_dentro_do_workspace_funciona_fora_falha(tmp_path):
+async def test_leitura_dentro_do_workspace_funciona_fora_falha(tmp_path) -> None:
     """Happy: o que está no workspace é legível. Erro: `/etc/passwd` está
     fora de `rw_paths` e a leitura precisa falhar de verdade — se passar,
     o bind mount não está contendo nada."""
@@ -57,7 +57,7 @@ async def test_leitura_dentro_do_workspace_funciona_fora_falha(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_escrita_fora_do_workspace_falha(tmp_path):
+async def test_escrita_fora_do_workspace_falha(tmp_path) -> None:
     """Escrever num path não declarado em `rw_paths` precisa falhar — o
     workspace segue gravável (é o ponto do sandbox, não uma prisão total)."""
     policy = SandboxPolicy(enabled=True, rw_paths=(str(tmp_path),))
@@ -80,7 +80,7 @@ async def test_escrita_fora_do_workspace_falha(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_fork_bomb_e_contida_sem_travar_o_processo_de_teste(tmp_path):
+async def test_fork_bomb_e_contida_sem_travar_o_processo_de_teste(tmp_path) -> None:
     """`RLIMIT_NPROC` precisa cortar a explosão de processos. Timeout curto:
     se a contenção falhar, o teste termina por timeout em vez de deixar a
     máquina do CI sem PIDs livres."""
